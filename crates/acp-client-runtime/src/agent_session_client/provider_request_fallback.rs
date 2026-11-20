@@ -1,6 +1,8 @@
 //! Connection-level answer for agent requests that no implemented handler owns.
 
+use agent_client_protocol::schema::v1::RequestId;
 use agent_client_protocol::{Agent, ConnectionTo, Dispatch, Error, HandleDispatchFrom, Handled};
+use session_event_model::managed_interaction_refusal::ManagedInteractionRefusal;
 use std::{collections::HashSet, sync::Arc};
 use tokio::sync::RwLock;
 
@@ -27,11 +29,17 @@ impl ProviderKnownSessions {
 
 pub(super) struct ProviderRequestSessionGuard {
     known_sessions: ProviderKnownSessions,
+    managed_refusal: bool,
+    claimed_callbacks: HashSet<RequestId>,
 }
 
 impl ProviderRequestSessionGuard {
-    pub(super) fn new(known_sessions: ProviderKnownSessions) -> Self {
-        Self { known_sessions }
+    pub(super) fn new(known_sessions: ProviderKnownSessions, managed_refusal: bool) -> Self {
+        Self {
+            known_sessions,
+            managed_refusal,
+            claimed_callbacks: HashSet::new(),
+        }
     }
 }
 
@@ -42,6 +50,14 @@ impl HandleDispatchFrom<Agent> for ProviderRequestSessionGuard {
         _connection: ConnectionTo<Agent>,
     ) -> Result<Handled<Dispatch>, Error> {
         if let Dispatch::Request(request, responder) = message {
+            // Retain the IDs for this connection's lifetime. Expiring an ID
+            // on turn settlement would let a late replay claim the next turn.
+            if self.managed_refusal
+                && ManagedInteractionRefusal::owns_acp_callback(request.method())
+                && !self.claimed_callbacks.insert(responder.id().clone())
+            {
+                return Ok(Handled::Yes);
+            }
             let session_id = request
                 .params()
                 .get("sessionId")

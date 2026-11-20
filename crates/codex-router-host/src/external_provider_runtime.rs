@@ -6,9 +6,7 @@ use std::{path::PathBuf, sync::Arc};
 
 use acp_client_runtime::AgentSessionClient;
 pub(crate) use acp_client_runtime::ProviderPromptDispatchObservation;
-use collaboration_protocol::{
-    CodexGeneration, OperationId, ProviderIdentity, ProviderPromptStopReason, SessionRef,
-};
+use collaboration_protocol::{OperationId, ProviderPromptStopReason};
 use collaboration_runtime::ProviderSessionEventHub;
 use message_board::SessionEndpointRef;
 use tokio_util::sync::CancellationToken;
@@ -35,11 +33,7 @@ pub use acp_client_runtime::{
 
 #[derive(Clone, Debug)]
 pub struct ExternalProviderApprovalContext {
-    pub requester: ProviderIdentity,
-    pub approver: ProviderIdentity,
-    pub target: SessionRef,
     pub operation_id: OperationId,
-    pub binding_generation: CodexGeneration,
     pub binding_retirement: CancellationToken,
 }
 
@@ -513,7 +507,7 @@ impl ExternalProviderRuntime {
         self.prompt_with_approval_context(
             provider_session_id.clone(),
             prompt,
-            test_approval_context(&provider_session_id, None),
+            test_approval_context(None),
         )
         .await
     }
@@ -587,7 +581,7 @@ impl ExternalProviderRuntime {
             acp_client_runtime::ProviderTurnInput::Prompt(
                 session_event_model::ProviderSubmission::plain(text_contents(prompt)?),
             ),
-            test_approval_context(&provider_session_id, operation_id),
+            test_approval_context(operation_id),
             dispatch,
         )
         .await
@@ -603,25 +597,9 @@ fn text_contents(
 }
 
 #[cfg(test)]
-fn test_approval_context(
-    provider_session_id: &str,
-    operation_id: Option<OperationId>,
-) -> ExternalProviderApprovalContext {
-    let service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
-    let target: SessionRef = serde_json::from_value(serde_json::json!({
-        "endpoint": {"serviceId": service_id, "endpointId": "cursor-local"},
-        "sessionId": provider_session_id,
-    }))
-    .expect("test provider target");
+fn test_approval_context(operation_id: Option<OperationId>) -> ExternalProviderApprovalContext {
     ExternalProviderApprovalContext {
-        requester: target.clone().into(),
-        approver: target.clone().into(),
-        target,
         operation_id: operation_id.unwrap_or_else(OperationId::generate),
-        binding_generation: serde_json::from_value(serde_json::json!({
-            "serviceEpoch": service_id, "generation": 1
-        }))
-        .expect("test generation"),
         binding_retirement: CancellationToken::new(),
     }
 }

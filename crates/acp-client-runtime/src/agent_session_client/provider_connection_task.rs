@@ -184,7 +184,10 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             }));
             let final_interaction_port = Arc::clone(&callback_interaction_port);
             let connection = Client.builder().name("codex-router-host")
-                .with_handler(ProviderRequestSessionGuard::new(request_known_sessions))
+                .with_handler(ProviderRequestSessionGuard::new(
+                    request_known_sessions,
+                    callback_interaction_port.managed_refusal().is_some(),
+                ))
                 .with_handler(ToolCallOwnershipHandler::new(Arc::clone(&tool_registry)))
                 .on_receive_request(
                     async move |request: RequestPermissionRequest, responder, connection| {

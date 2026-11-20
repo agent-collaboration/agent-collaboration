@@ -45,9 +45,9 @@ enum ConversationCommand {
     )]
     Create(CreateArguments),
     /// Run an ACP prompt and wait up to the caller deadline. A detached Codex turn
-    /// returns `running` with exit code 0 and a follow-up command. For an empty conversation returned by
-    /// `conversation create`, submit its first input with `message send`; alternatively use
-    /// `conversation prompt --new`. Permission requests are never automatically approved.
+    /// returns `running` with exit code 0 and a follow-up command. Use `conversation prompt --new`
+    /// to create a conversation and submit its first input in one command. To prompt an existing
+    /// conversation, pass its SessionRef JSON with `--to`. Permission requests are refused.
     Prompt(PromptArguments),
     /// Load an existing conversation binding and wait for its settlement.
     Load(LoadArguments),

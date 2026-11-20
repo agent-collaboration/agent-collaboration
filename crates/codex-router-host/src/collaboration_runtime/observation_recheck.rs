@@ -26,17 +26,6 @@ pub(crate) enum ObserverAttempt {
     Rejected,
 }
 
-/// What an observer attempt is told about the attempts before it.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct ObserverRetry {
-    /// Any attempt after the first: observation was unavailable, so the attempt re-checks
-    /// once it has connected.
-    pub(crate) is_retry: bool,
-    /// Failed attempts since the last one that restored coverage; the first failure of a
-    /// run records lost coverage and warns once.
-    pub(crate) failures_so_far: u32,
-}
-
 /// Runs the native observer until its generation retires, restarting it on the
 /// observation backoff after it stops or cannot connect. Only an attempt that restored
 /// coverage resets the backoff.
@@ -45,15 +34,14 @@ pub(crate) async fn observe_with_restart<TAttempt, TFuture>(
     clock: Arc<dyn RuntimeClock>,
     mut attempt: TAttempt,
 ) where
-    TAttempt: FnMut(ObserverRetry) -> TFuture,
+    TAttempt: FnMut(u32) -> TFuture,
     TFuture: std::future::Future<Output = ObserverAttempt>,
 {
-    let mut is_retry = false;
     let mut failures: u32 = 0;
     loop {
         let outcome = tokio::select! {
             () = retired.cancelled() => return,
-            outcome = attempt(ObserverRetry { is_retry, failures_so_far: failures }) => outcome,
+            outcome = attempt(failures) => outcome,
         };
         match outcome {
             ObserverAttempt::Ran => failures = 0,
@@ -74,7 +62,6 @@ pub(crate) async fn observe_with_restart<TAttempt, TFuture>(
             failures,
             "observer restarts after its backoff"
         );
-        is_retry = true;
         tokio::select! {
             () = retired.cancelled() => return,
             () = clock.sleep_for(delay) => {}

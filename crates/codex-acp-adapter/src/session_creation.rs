@@ -452,6 +452,10 @@ impl AcpSessionBinding {
         !self.materialized
     }
     #[must_use]
+    pub fn has_scratch_lease(&self) -> bool {
+        self.created_profile.is_some()
+    }
+    #[must_use]
     pub fn generation(&self) -> &CodexGeneration {
         &self.generation
     }

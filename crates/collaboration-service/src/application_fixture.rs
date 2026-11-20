@@ -8,7 +8,6 @@ pub struct ApplicationFixture {
     pub(crate) installation_peer: Option<collaboration_protocol::InstallationPeerId>,
     pub(crate) machine_identity: collaboration_contracts::MachineIdentity,
     pub(crate) service_epoch: UuidIdentity,
-    pub(crate) display_names: collaboration_runtime::SessionDisplayNameCache,
     pub(crate) directory: EndpointDirectory,
     pub(crate) journal: Option<std::sync::Arc<lifecycle_observation::LifecycleStore>>,
     pub(crate) native_backend: Option<collaboration_runtime::NativeControlBackend>,
@@ -119,10 +118,6 @@ impl ApplicationFixture {
         Ok(self)
     }
 
-    #[must_use]
-    pub fn session_display_name_cache(&self) -> collaboration_runtime::SessionDisplayNameCache {
-        self.display_names.clone()
-    }
     /// Registers a bounded inventory without inferring endpoint liveness.
     pub fn with_endpoints(self, endpoints: Vec<EndpointDescription>) -> Result<Self, String> {
         self.directory
@@ -156,7 +151,6 @@ impl ApplicationFixture {
             machine_identity,
             service_epoch: UuidIdentity::try_from(service_epoch.to_owned())
                 .map_err(|error| error.to_string())?,
-            display_names: collaboration_runtime::SessionDisplayNameCache::default(),
             journal: None,
             native_backend: None,
             provider_operations: None,
@@ -190,7 +184,6 @@ impl ApplicationFixture {
             self.router_identity(),
             self.directory.clone(),
             self.native_backend.clone(),
-            self.display_names.clone(),
             // As in the Host, the Codex recorder also keeps create-time mode reports.
             self.codex_conversation_recorder.clone().map(|recorder| {
                 recorder as std::sync::Arc<dyn collaboration_runtime::CodexPermissionModes>
@@ -200,7 +193,6 @@ impl ApplicationFixture {
             self.router_identity(),
             self.directory.clone(),
             self.native_backend.clone(),
-            self.display_names.clone(),
             self.journal.clone(),
         );
         let provider_inventory = crate::ProviderSessionInventory::new(
@@ -208,7 +200,6 @@ impl ApplicationFixture {
             self.directory.clone(),
             self.provider_operations.clone(),
             self.provider_session_hub.clone(),
-            self.display_names.clone(),
             self.claude_code_sessions.clone(),
             self.claude_background_jobs.clone(),
         );

@@ -13,7 +13,12 @@ pub enum PromptEvent {
     Terminal(Value),
     /// The connection dispatcher must translate and correlate this callback; never auto-approve.
     NativeCallback(Value),
-    InteractionRefused(ManagedInteractionRefusal),
+    InteractionRefused {
+        id: Value,
+        response: Value,
+        refusal: ManagedInteractionRefusal,
+        interrupt_turn: bool,
+    },
     /// Other native items remain available to the tool/plan projection owner.
     NativeNotification(Value),
 }
@@ -173,27 +178,30 @@ impl PendingAcpPrompt {
             && let Some(method) = message.get("method").and_then(Value::as_str)
         {
             let refusal = ManagedInteractionRefusal::ApprovalsUnavailableOnBuild;
-            let response = match method {
-                "item/commandExecution/requestApproval" => refusal.codex_command(),
-                "item/fileChange/requestApproval" => refusal.codex_file_change(),
-                "item/permissions/requestApproval" => refusal.codex_permissions(),
-                "item/tool/requestUserInput" => refusal.codex_user_input(),
-                _ => return Ok(Some(PromptEvent::NativeCallback(message))),
+            let Some(response) = refusal.codex_response(method) else {
+                return Ok(Some(PromptEvent::NativeCallback(message)));
             };
             let params = message
                 .get("params")
                 .ok_or(PromptExecutionError::Projection)?;
+            let turn_id = params.get("turnId").and_then(Value::as_str);
+            let matched_turn = turn_id.is_some() && turn_id == self.settlement.turn_id();
+            // Codex may emit an MCP elicitation with no active turn at its
+            // source. Refuse that request on its own ID without cancelling a
+            // turn that happened to start by the time we received it.
+            let standalone = method == "mcpServer/elicitation/request" && turn_id.is_none();
             if self.settlement.is_settled()
                 || params.get("threadId").and_then(Value::as_str) != Some(self.session.session_id())
-                || params.get("turnId").and_then(Value::as_str) != self.settlement.turn_id()
+                || !(matched_turn || standalone)
             {
                 return Ok(None);
             }
-            self.session
-                .connection
-                .submit_callback_response(id.clone(), response)
-                .await?;
-            return Ok(Some(PromptEvent::InteractionRefused(refusal)));
+            return Ok(Some(PromptEvent::InteractionRefused {
+                id: id.clone(),
+                response,
+                refusal,
+                interrupt_turn: matched_turn,
+            }));
         }
         if !self.settlement.is_settled()
             && let Some(turn_id) = self.settlement.turn_id()
@@ -325,6 +333,17 @@ impl PendingAcpPrompt {
     }
     pub async fn cancel(&mut self) -> Option<Value> {
         self.cancel_prompt(false).await
+    }
+
+    pub(crate) async fn write_callback_refusal(
+        &mut self,
+        id: Value,
+        response: Value,
+    ) -> Result<(), NativeConnectionError> {
+        self.session
+            .connection
+            .submit_callback_response(id, response)
+            .await
     }
 
     pub(crate) async fn cancel_after_refusal(&mut self) -> Option<Value> {

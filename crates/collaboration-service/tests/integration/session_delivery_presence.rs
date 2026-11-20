@@ -339,7 +339,7 @@ async fn may_load_refuses_not_loaded_codex_thread_without_resuming_it()
         let read = receive_native_frame(&mut socket).await?;
         if read.get("method").and_then(Value::as_str) != Some("thread/read") {
             return Err::<(), Box<dyn std::error::Error + Send + Sync>>(
-                "message send did not inspect thread status".into(),
+                "native delivery did not inspect thread status".into(),
             );
         }
         let read_id = required_json_field(&read, "id")?;

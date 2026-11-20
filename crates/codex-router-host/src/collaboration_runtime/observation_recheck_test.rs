@@ -21,12 +21,12 @@ async fn advance(clock: &ManualClock, by: Duration) {
 }
 
 /// Each attempt's start time, in injected elapsed seconds, and what it was told.
-type AttemptLog = Arc<std::sync::Mutex<Vec<(u64, super::ObserverRetry)>>>;
+type AttemptLog = Arc<std::sync::Mutex<Vec<(u64, u32)>>>;
 
 async fn run_observer(
     outcomes: Vec<super::ObserverAttempt>,
     retire_after: Duration,
-) -> Vec<(u64, super::ObserverRetry)> {
+) -> Vec<(u64, u32)> {
     let clock = clock();
     let started = clock.monotonic_now();
     let log = AttemptLog::default();
@@ -67,13 +67,6 @@ async fn run_observer(
     log.lock().unwrap().clone()
 }
 
-fn retry(is_retry: bool, failures_so_far: u32) -> super::ObserverRetry {
-    super::ObserverRetry {
-        is_retry,
-        failures_so_far,
-    }
-}
-
 #[test]
 fn the_observer_restarts_on_the_backoff_and_a_run_resets_it() {
     without_native_time(async {
@@ -89,17 +82,7 @@ fn the_observer_restarts_on_the_backoff_and_a_run_resets_it() {
             Duration::from_secs(20),
         )
         .await;
-        assert_eq!(
-            attempts,
-            [
-                (0, retry(false, 0)),
-                (1, retry(true, 1)),
-                (3, retry(true, 2)),
-                (7, retry(true, 3)),
-                (8, retry(true, 0)),
-                (9, retry(true, 1)),
-            ]
-        );
+        assert_eq!(attempts, [(0, 0), (1, 1), (3, 2), (7, 3), (8, 0), (9, 1),]);
     });
 }
 
@@ -111,6 +94,6 @@ fn a_rejected_scope_stops_the_observer_for_good() {
             Duration::from_secs(60),
         )
         .await;
-        assert_eq!(attempts, [(0, retry(false, 0))]);
+        assert_eq!(attempts, [(0, 0)]);
     });
 }

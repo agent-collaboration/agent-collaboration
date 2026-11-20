@@ -140,7 +140,6 @@ impl CollaborationRuntime {
         )
         .map_err(io::Error::other)?;
         let endpoint_directory = collaboration_runtime::EndpointDirectory::new(service_id.clone());
-        let display_names = collaboration_runtime::SessionDisplayNameCache::default();
         let provider_store = match collaboration_runtime::ProviderOperationStore::open(
             &inputs.directory.join("provider-operations.sqlite"),
         )
@@ -246,7 +245,6 @@ impl CollaborationRuntime {
                     identity.clone(),
                     endpoint_directory.clone(),
                     Some(native_backend.clone()),
-                    display_names.clone(),
                     codex_recorder.clone().map(|recorder| {
                         recorder as std::sync::Arc<dyn collaboration_runtime::CodexPermissionModes>
                     }),
@@ -255,7 +253,6 @@ impl CollaborationRuntime {
                 identity.clone(),
                 endpoint_directory.clone(),
                 Some(native_backend.clone()),
-                display_names.clone(),
                 journal.clone(),
             );
             let provider_inventory = collaboration_service::ProviderSessionInventory::new(
@@ -265,7 +262,6 @@ impl CollaborationRuntime {
                 provider_session_hub
                     .clone()
                     .map(|hub| hub as std::sync::Arc<dyn collaboration_contracts::SessionEventHub>),
-                display_names.clone(),
                 Some(claude_code_sessions.clone()),
                 Some(claude_background_jobs.clone()),
             );

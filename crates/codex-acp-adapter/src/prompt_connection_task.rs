@@ -101,9 +101,8 @@ pub async fn run_prompt_task(mut inputs: PromptTaskInputs) -> PromptTaskCompleti
         }
     };
     loop {
-        // The in-flight native step is held across a frontend detach: an
-        // approval wait, or the write of its decision, must still reach native
-        // (R6). Only Cancel and retirement end it.
+        // A frontend detach leaves the in-flight native read intact. Once it
+        // yields a refusal, the actor owns the write outside this select.
         let step = {
             let next = pending.next_event(&mut catalog);
             tokio::pin!(next);
@@ -164,7 +163,23 @@ pub async fn run_prompt_task(mut inputs: PromptTaskInputs) -> PromptTaskCompleti
                     terminal: (!frontend_detached).then_some(frame),
                 };
             }
-            Ok(Some(PromptEvent::InteractionRefused(refusal))) => {
+            Ok(Some(PromptEvent::InteractionRefused {
+                id,
+                response,
+                refusal,
+                interrupt_turn,
+            })) => {
+                if let Err(error) = pending.write_callback_refusal(id, response).await {
+                    return PromptTaskCompletion {
+                        cancellation_barrier: Some(pending.cancellation_barrier()),
+                        binding: None,
+                        terminal: (!frontend_detached)
+                            .then(|| failure(&inputs.request_id, &error.to_string())),
+                    };
+                }
+                if !interrupt_turn {
+                    continue;
+                }
                 let mut terminal = pending.cancel_after_refusal().await;
                 if let Some(metadata) = terminal
                     .as_mut()

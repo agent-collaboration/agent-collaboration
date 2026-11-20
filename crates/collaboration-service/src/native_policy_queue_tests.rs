@@ -1,6 +1,6 @@
 //! Queue reconciliation on the native delivery route: a real `deliver` whose queue reply is
 //! lost, then `reconcile_attempt` against the native queue. Native replies and schema are
-//! stand-ins; the route, its evidence and the broker's approval routes are real.
+//! stand-ins. The route and its evidence are real.
 use super::*;
 use agent_automation::{AttemptId, PreparationEffect};
 use collaboration_contracts::{

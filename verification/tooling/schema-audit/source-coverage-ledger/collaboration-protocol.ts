@@ -1,7 +1,7 @@
 import type { LedgerSection } from "../schema-audit-types.ts";
 // Left out by name only: 3 colocated unit-test files (*_test.rs, *_tests.rs):
 // message_send_result_tests.rs (declared message_send_result.rs:35-37), push_line_parse_tests.rs
-// (push_line_parse.rs:44-46) and push_line_tests.rs (lib.rs:119-121). No file in this crate
+// in push_line_parse_tests.rs. No file in this crate
 // performs I/O, so it has no send sites.
 
 export const section: LedgerSection = {
@@ -120,7 +120,7 @@ export const section: LedgerSection = {
     {
       file: "crates/collaboration-protocol/src/lib.rs",
       disposition: { kind: "none" },
-      note: "Module list and re-exports; it also re-exports the central board_sync_protocol::{FleetLinkRecord, FleetLinkState} (L20) and collaboration_mail_protocol::{MailDigest, MailItemId} (L339) through this facade. The test module push_line_tests is declared #[cfg(test)] at L119-L121.",
+      note: "Module list and re-exports; it also re-exports the central board_sync_protocol::{FleetLinkRecord, FleetLinkState} (L20) and collaboration_mail_protocol::{MailDigest, MailItemId} (L339) through this facade.",
     },
     {
       file: "crates/collaboration-protocol/src/lifecycle_observation.rs",
@@ -218,17 +218,12 @@ export const section: LedgerSection = {
     {
       file: "crates/collaboration-protocol/src/push_line.rs",
       disposition: { kind: "defines", owners: ["router-vocabulary"] },
-      note: "The push line text format a recipient agent reads: MachineLabel L18 (hand JsonSchema L60), MachineId L72, PushId L104, RouterLink L135 with RouterLink::parse L149 and Display L172 (router://<machine>/push/<id>), PushKind L185, PushOrigin L198, PushHeaderFacts L211, MAX_PUSH_LINE_BYTES L9; includes push_line_render.rs (L305) and push_line_parse.rs (L309) as path modules.",
+      note: "Read-side vocabulary for historical deliveries. MachineLabel, MachineId, PushId, RouterLink and PushKind describe the bounded lines consumed by push_line_parse.rs.",
     },
     {
       file: "crates/collaboration-protocol/src/push_line_parse.rs",
       disposition: { kind: "reads", owners: ["router-vocabulary"] },
-      note: "parse_push_line L5 recognises Router deliveries in agent-visible text (string splitting on ' · ', ' @', ' 📖 Load full message → '); tests declared #[cfg(test)] at L44-L46.",
-    },
-    {
-      file: "crates/collaboration-protocol/src/push_line_render.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "render_push_line L342 renders a PushLineInput to the push line text (DisplayLimits::render L56 builds the emoji headers, preview and link; largest_fitting_prefix L310 clips to the byte budget); parse_push_line_header L367 classifies a header back to PushKind by its emoji prefix.",
+      note: "parse_push_line checks the complete historical delivery, its header and its link. parse_push_line_header also accepts display-only titles. escape_push_line_field keeps machine-label delimiters out of CLI output.",
     },
     {
       file: "crates/collaboration-protocol/src/router_executable_relation.rs",

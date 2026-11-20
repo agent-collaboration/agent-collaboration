@@ -125,7 +125,7 @@ impl CodexAppServerDeliveryRoute {
         };
         let checked_out = self
             .holder
-            .checkout(&String::from(request.target.session_id.clone()));
+            .checkout_for_delivery(&String::from(request.target.session_id.clone()));
         let (response, held_idle_submission) = match checked_out {
             HeldBindingCheckout::Ready(mut binding) => {
                 let mut checkout = crate::unmaterialized_thread_holder::HeldBindingCleanup::new(

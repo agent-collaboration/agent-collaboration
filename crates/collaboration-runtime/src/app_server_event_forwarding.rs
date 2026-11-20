@@ -129,13 +129,12 @@ impl AppServerEventForwarding {
         self.working_directories.insert(session, cwd);
     }
 
-    pub(crate) fn reset_session(&mut self, session: &SessionRef) -> Vec<Value> {
+    pub(crate) fn reset_session(&mut self, session: &SessionRef) {
         self.turn_ids.remove(session);
         self.items
             .retain(|(item_session, _), _| item_session != session);
         let thread_id = thread_alias(session);
         self.user_receipts.complete_turn(&thread_id);
-        Vec::new()
     }
 
     pub(crate) fn project(&mut self, session: &SessionRef, event: &HubEvent) -> Vec<Value> {

@@ -422,23 +422,12 @@ export const rows: InventoryRow[] = [
     disposition: "boundary-encoding",
   },
   {
-    file: `${P}push_line_render.rs`,
-    line: 342,
-    owner: "router-vocabulary",
-    kind: "history-renderer",
-    defines:
-      "render_push_line: renders a push record to the push line text (emoji headers in DisplayLimits::render L56) with clipping and a load link",
-    usedBy: [{ part: "N4" }, { crate: "agent-collaboration" }],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${P}push_line_render.rs`,
-    line: 367,
+    file: `${P}push_line_parse.rs`,
+    line: 65,
     owner: "router-vocabulary",
     kind: "content-parser",
     defines:
-      "parse_push_line_header: classifies a push line header back to PushKind by the emoji prefixes render writes (L377-L392)",
+      "parse_push_line_header: classifies historical push line headers by their emoji prefixes",
     usedBy: [
       { crate: "agent-collaboration" },
       { crate: "agent-session-inventory" },

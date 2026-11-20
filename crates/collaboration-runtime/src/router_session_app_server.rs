@@ -309,9 +309,7 @@ pub async fn serve_router_session_app_server_connection(
                         subscription.abort();
                     }
                     attached_sessions.remove(&session);
-                    for notification in forwarding.reset_session(&session) {
-                        websocket.send(Message::Text(notification.to_string().into())).await?;
-                    }
+                    forwarding.reset_session(&session);
                     match context.events.attach(session.clone()).await {
                         Ok(attachment) => {
                             let (subscription, epoch, sequence) = attach_session_events(

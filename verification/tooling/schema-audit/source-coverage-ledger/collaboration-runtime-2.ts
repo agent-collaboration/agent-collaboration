@@ -174,11 +174,6 @@ export const section: LedgerSection = {
       note: "delivery client selection for every Router push (mail, wakes, interaction notices): route claims to DeliveryRejection or not_submitted (:49-193), Queue becomes Steer without route support (:206-210), deliver through the chosen route (:212), evidence to SessionReachability (:238-242), RoutePresence to TargetPresence (:268-320)",
     },
     {
-      file: `${R}session_display_name_cache.rs`,
-      disposition: { kind: "none" },
-      note: "display name cache",
-    },
-    {
       file: `${R}stored_delivery_receipt.rs`,
       disposition: { kind: "defines", owners: ["router-vocabulary"] },
       note: "reads stored native receipt JSON (:5); storage format",

@@ -2,8 +2,14 @@ use super::*;
 use acp_scripted_fixture::AcpFixtureScript;
 use serde_json::{Value, json};
 
-fn interaction_script(method: &str, params: Value, refusal: Value) -> AcpFixtureScript {
-    AcpFixtureScript::new()
+fn interaction_script(
+    method: &str,
+    params: Value,
+    refusal: Value,
+    replay: bool,
+) -> AcpFixtureScript {
+    let callback = json!({"jsonrpc":"2.0","id":"callback","method":method,"params":params});
+    let mut script = AcpFixtureScript::new()
         .expect_request("initialize", "initialize", json!({"protocolVersion":1}))
         .respond(
             "initialize",
@@ -21,13 +27,21 @@ fn interaction_script(method: &str, params: Value, refusal: Value) -> AcpFixture
                 "kind":"other","status":"pending"
             }
         }}))
-        .send(json!({"jsonrpc":"2.0","id":"callback","method":method,"params":params}))
+        .send(callback.clone())
         .expect_message(json!({"jsonrpc":"2.0","id":"callback","result":refusal}))
         .expect_message(
             json!({"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"session-a"}}),
-        )
+        );
+    if replay {
+        script = replay_then_sync(script, &callback, "first-sync");
+    }
+    script = script
         .respond("first", json!({"stopReason":"cancelled"}))
-        .expect_request("next", "session/prompt", json!({"sessionId":"session-a"}))
+        .expect_request("next", "session/prompt", json!({"sessionId":"session-a"}));
+    if replay {
+        script = replay_then_sync(script, &callback, "next-sync");
+    }
+    script
         .send(json!({"jsonrpc":"2.0","method":"session/update","params":{
             "sessionId":"session-a","update":{
                 "sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"next reply"}
@@ -36,8 +50,17 @@ fn interaction_script(method: &str, params: Value, refusal: Value) -> AcpFixture
         .respond("next", json!({"stopReason":"end_turn"}))
 }
 
-#[tokio::test]
-async fn managed_acp_callbacks_refuse_before_cancel_and_next_prompt_succeeds() {
+fn replay_then_sync(script: AcpFixtureScript, callback: &Value, sync_id: &str) -> AcpFixtureScript {
+    // The reply to the following request keeps each replay on its own side
+    // of the first turn's terminal, with no elapsed-time assumption.
+    script
+        .send(callback.clone())
+        .send(json!({"jsonrpc":"2.0","id":sync_id,"method":"fixture/sync","params":{}}))
+        .expect_message(json!({"jsonrpc":"2.0","id":sync_id,
+            "error":{"code":-32601,"message":"Method not found"}}))
+}
+
+async fn exercise_managed_acp_callbacks(replay: bool) {
     for (method, params, refusal) in [
         (
             "session/request_permission",
@@ -67,7 +90,7 @@ async fn managed_acp_callbacks_refuse_before_cancel_and_next_prompt_succeeds() {
     ] {
         tokio::time::timeout(Duration::from_secs(10), async {
             let runtime = ExternalProviderRuntime::initialize(
-                interaction_script(method, params, refusal).launch(),
+                interaction_script(method, params, refusal, replay).launch(),
                 Arc::new(acp_provider_adapters::StandardAcpBehavior),
             )
             .await
@@ -104,4 +127,14 @@ async fn managed_acp_callbacks_refuse_before_cancel_and_next_prompt_succeeds() {
         .await
         .unwrap_or_else(|error| panic!("{method} did not settle: {error}"));
     }
+}
+
+#[tokio::test]
+async fn managed_acp_callbacks_refuse_before_cancel_and_next_prompt_succeeds() {
+    exercise_managed_acp_callbacks(false).await;
+}
+
+#[tokio::test]
+async fn managed_acp_replay_cannot_reply_twice_or_cancel_the_next_operation() {
+    exercise_managed_acp_callbacks(true).await;
 }

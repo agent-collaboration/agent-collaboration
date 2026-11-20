@@ -220,7 +220,7 @@ fn record_prompt_event(case: &mut TapCase, event: &PromptEvent) {
             ),
             value.clone(),
         ),
-        PromptEvent::InteractionRefused(_) => {
+        PromptEvent::InteractionRefused { .. } => {
             panic!("unexpected refusal in a non-interaction case")
         }
         PromptEvent::NativeCallback(value) => case.produced_with(

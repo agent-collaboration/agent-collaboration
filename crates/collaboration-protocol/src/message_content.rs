@@ -43,23 +43,6 @@ impl MessageText {
 
 pub use collaboration_mail_protocol::{SessionDisplayName, SessionDisplayNameError};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-pub enum SessionDisplayNameLookupError {
-    #[error("session display name lookup is unavailable")]
-    Unavailable,
-}
-
-/// A best-effort, nonblocking lookup for labels the Router already knows.
-///
-/// Implementations must use a cache or another nonblocking source. Returning an
-/// error, or no name, selects the endpoint's stable fallback identity instead.
-pub trait SessionDisplayNameLookup: Send + Sync {
-    fn display_name_for(
-        &self,
-        session: &SessionRef,
-    ) -> Result<Option<SessionDisplayName>, SessionDisplayNameLookupError>;
-}
-
 impl JsonSchema for MessageText {
     fn schema_name() -> Cow<'static, str> {
         "MessageText".into()
@@ -115,86 +98,6 @@ pub struct RenderedMessage {
     pub text: String,
     pub kind: MessageInputKind,
     pub representation: MessageRepresentation,
-}
-
-/// Formats one session as the emoji-prefixed identity used in message headers and reply output.
-pub fn session_identity(session: &SessionRef, display_name: Option<&SessionDisplayName>) -> String {
-    let endpoint_id = String::from(session.endpoint.endpoint_id.clone());
-    let fallback_emoji = endpoint_default_emoji(&endpoint_id);
-    match display_name {
-        Some(name) => match leading_emoji(name.as_str()) {
-            Some((emoji, label)) if !label.is_empty() => format!("{emoji} {label}"),
-            Some((emoji, _)) => format!("{emoji} {}", fallback_session_label(session)),
-            None => format!("{fallback_emoji} {}", name.as_str()),
-        },
-        None => format!("{fallback_emoji} {}", fallback_session_label(session)),
-    }
-}
-
-fn fallback_session_label(session: &SessionRef) -> String {
-    let endpoint_id = String::from(session.endpoint.endpoint_id.clone());
-    let session_id = String::from(session.session_id.clone());
-    let short_session_id: String = session_id.chars().take(8).collect();
-    format!("{endpoint_id}/{short_session_id}")
-}
-
-fn endpoint_default_emoji(endpoint_id: &str) -> &'static str {
-    match endpoint_id {
-        "codex" | "codex-local" => "🤖",
-        "claude" | "claude-local" => "✳️",
-        "cursor" | "cursor-local" => "▶️",
-        _ => "💬",
-    }
-}
-
-fn leading_emoji(name: &str) -> Option<(&str, &str)> {
-    let mut characters = name.char_indices();
-    let (_, first) = characters.next()?;
-    if !is_emoji_codepoint(first) {
-        return None;
-    }
-
-    let mut emoji_end = first.len_utf8();
-    let mut join_next = false;
-    for (index, character) in characters {
-        if join_next {
-            if !is_emoji_codepoint(character) {
-                break;
-            }
-            emoji_end = index + character.len_utf8();
-            join_next = false;
-            continue;
-        }
-        if is_emoji_extension(character) {
-            emoji_end = index + character.len_utf8();
-        } else if character == '\u{200d}' {
-            emoji_end = index + character.len_utf8();
-            join_next = true;
-        } else {
-            break;
-        }
-    }
-
-    let emoji = name.get(..emoji_end)?;
-    let label = name.get(emoji_end..)?.trim_start();
-    Some((emoji, label))
-}
-
-fn is_emoji_extension(character: char) -> bool {
-    matches!(
-        character as u32,
-        0xfe0e..=0xfe0f | 0x1f3fb..=0x1f3ff | 0xe0020..=0xe007f
-    )
-}
-
-fn is_emoji_codepoint(character: char) -> bool {
-    matches!(
-        character,
-        '©' | '®' | '‼' | '⁉' | '™' | 'ℹ' | '↔'..='↙' | '↩'..='↪' | '⌚'..='⌛'
-            | '⌨' | '⏏' | '⏩'..='⏺' | 'Ⓜ' | '▪'..='▶' | '◀' | '◻'..='◾' | '☀'..='☄'
-            | '☎'..='♟' | '♠'..='♿' | '⚀'..='⚿' | '⛀'..='⛿' | '✀'..='➿' | '⬀'..='⬛'
-            | '⬜'..='⬟' | '⭐' | '⭕' | '〰' | '〽' | '㊗' | '㊙' | '🀀'..='🫿'
-    )
 }
 
 #[cfg(test)]

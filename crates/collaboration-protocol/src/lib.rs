@@ -83,9 +83,6 @@ pub use native_delivery_failure::{
 mod delivery_route_evidence;
 mod message_content;
 mod push_line;
-#[cfg(test)]
-#[path = "push_line_tests.rs"]
-mod push_line_tests;
 mod session_delivery_outcome;
 pub use delivery_rejection::{
     DeliveryNextAction, DeliveryPeerClaim, DeliveryRejection, DeliveryRejectionReason,
@@ -101,7 +98,6 @@ mod native_session_catalog;
 pub use message_content::{
     AcceptedResumeEffect, MessageContent, MessageDelivery, MessageInputKind, MessageRepresentation,
     MessageText, MessageTextError, RenderedMessage, SessionDisplayName, SessionDisplayNameError,
-    SessionDisplayNameLookup, SessionDisplayNameLookupError, session_identity,
 };
 pub use native_control_contract::{
     NativeInputDisposition, NativeInputOperation, NativeSendAcceptance, NativeSendParams,
@@ -113,9 +109,8 @@ pub use native_session_catalog::{
 };
 pub use push_line::{
     MAX_MACHINE_LABEL_SCALARS, MAX_PUSH_LINE_BYTES, MachineId, MachineLabel, MachineLabelError,
-    ParsedPushLine, ParsedPushLineHeader, PushHeaderFacts, PushId, PushIdError, PushKind,
-    PushLineError, PushLineInput, PushOrigin, RouterLink, escape_push_line_field, parse_push_line,
-    parse_push_line_header, render_push_line,
+    ParsedPushLine, ParsedPushLineHeader, PushId, PushIdError, PushKind, RouterLink,
+    escape_push_line_field, parse_push_line, parse_push_line_header,
 };
 mod endpoint_inventory;
 pub use endpoint_inventory::EndpointInventory;

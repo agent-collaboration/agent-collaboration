@@ -1,27 +1,16 @@
 //! Native settings and status snapshots projected from existing Session facts.
 use serde_json::{Value, json};
-use session_event_model::{InteractionKind, SessionSettings, SessionState};
+use session_event_model::{SessionSettings, SessionState};
 use std::path::Path;
 
 pub(crate) fn render_thread_status(state: &SessionState) -> Value {
     match state {
         SessionState::Unloaded | SessionState::Closed => json!({"type":"notLoaded"}),
         SessionState::Idle => json!({"type":"idle"}),
-        SessionState::Running => json!({"type":"active","activeFlags":[]}),
-        SessionState::AuthenticationRequired => json!({"type":"systemError"}),
-        SessionState::RequiresAction { pending } => {
-            let mut active_flags = Vec::new();
-            for interaction in pending.iter() {
-                let flag = match interaction.kind() {
-                    InteractionKind::Approval => "waitingOnApproval",
-                    InteractionKind::Question => "waitingOnUserInput",
-                };
-                if !active_flags.contains(&flag) {
-                    active_flags.push(flag);
-                }
-            }
-            json!({"type":"active","activeFlags":active_flags})
+        SessionState::Running | SessionState::RequiresAction { .. } => {
+            json!({"type":"active","activeFlags":[]})
         }
+        SessionState::AuthenticationRequired => json!({"type":"systemError"}),
     }
 }
 

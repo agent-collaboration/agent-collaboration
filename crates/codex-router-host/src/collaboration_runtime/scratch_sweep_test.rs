@@ -8,6 +8,9 @@ use std::{
 };
 use tokio::sync::{Notify, mpsc};
 
+#[path = "scratch_reconnect_test.rs"]
+mod reconnect;
+
 const DAY: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// One look a sleeping sweep took at the clock: the deadline it waits for, the

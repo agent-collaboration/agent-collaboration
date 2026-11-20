@@ -16,8 +16,7 @@ pub struct NativeSessionControl {
     identity: collaboration_contracts::RouterIdentity,
     directory: collaboration_runtime::EndpointDirectory,
     native_backend: Option<collaboration_runtime::NativeControlBackend>,
-    display_names: collaboration_runtime::SessionDisplayNameCache,
-    /// Codex sessions' create-time permission-mode reports, for show.
+    /// Codex sessions' create-time permission-mode reports, for inspection.
     permission_modes: Option<std::sync::Arc<dyn collaboration_runtime::CodexPermissionModes>>,
 }
 
@@ -26,14 +25,12 @@ impl NativeSessionControl {
         identity: collaboration_contracts::RouterIdentity,
         directory: collaboration_runtime::EndpointDirectory,
         native_backend: Option<collaboration_runtime::NativeControlBackend>,
-        display_names: collaboration_runtime::SessionDisplayNameCache,
         permission_modes: Option<std::sync::Arc<dyn collaboration_runtime::CodexPermissionModes>>,
     ) -> Self {
         Self {
             identity,
             directory,
             native_backend,
-            display_names,
             permission_modes,
         }
     }
@@ -216,7 +213,6 @@ impl NativeSessionControl {
                 effective: name.to_owned(),
             });
         }
-        self.display_names.remember(request.target.clone(), name);
         Ok(NativeRenameResult {
             target: request.target,
             name: name.to_owned(),

@@ -64,9 +64,7 @@ pub use service_identity_storage::{
 mod manifest_publication;
 pub use manifest_publication::ManifestPublication;
 mod native_control_backend;
-mod session_display_name_cache;
 pub use native_control_backend::NativeControlBackend;
-pub use session_display_name_cache::SessionDisplayNameCache;
 mod codex_app_server_delivery_route;
 mod codex_queue_reconciliation;
 mod message_effect_state;
