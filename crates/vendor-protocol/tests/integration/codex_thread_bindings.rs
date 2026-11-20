@@ -7,6 +7,9 @@ use vendor_protocol::codex::{
     TurnItemsView,
 };
 
+#[path = "codex_thread_bindings/opaque_numbers.rs"]
+mod opaque_numbers;
+
 fn thread_fixture() -> Value {
     json!({
         "cliVersion": "0.166.0",
@@ -329,7 +332,7 @@ fn branch_local_image_alternatives_keep_valid_and_unvalidated_wire_values_separa
     );
     assert_eq!(image.result, Some(StringAlternative::Valid(String::new())));
     image.file_id = None;
-    image.result = Some(StringAlternative::Malformed(Value::Null));
+    image.result = Some(serde_json::from_str("null").expect("malformed alternative"));
     assert!(
         serde_json::to_value(&decoded).is_err(),
         "constructed payload needs a valid alternative"

@@ -52,7 +52,7 @@ function rustType(shape: ValueShape): string {
     case "branchString":
       return "super::StringAlternative";
     case "opaque":
-      return "serde_json::Value";
+      return "super::OpaqueJson";
   }
 }
 
@@ -306,8 +306,8 @@ function renderWrapped(
   const openVariants = wrapped.open
     ? [
         "UnknownString(String),",
-        "UnknownObject(serde_json::Map<String, serde_json::Value>),",
-        "MalformedKnownObject(serde_json::Map<String, serde_json::Value>),",
+        "UnknownObject(super::OpaqueJsonObject),",
+        "MalformedKnownObject(super::OpaqueJsonObject),",
       ]
     : [];
   return [
@@ -337,22 +337,28 @@ function renderOpenWrapped(
     "",
     `impl<'de> Deserialize<'de> for ${name} {`,
     "fn deserialize<Decoder: serde::Deserializer<'de>>(decoder: Decoder) -> Result<Self, Decoder::Error> {",
-    "match serde_json::Value::deserialize(decoder)? {",
-    "serde_json::Value::String(tag) => Ok(match tag.as_str() {",
+    "let wire = super::OpaqueJson::deserialize(decoder)?;",
+    "match wire.as_json().as_bytes().first() {",
+    "Some(b'\"') => {",
+    "let tag: String = serde_json::from_str(wire.as_json()).map_err(serde::de::Error::custom)?;",
+    "Ok(match tag.as_str() {",
     ...wrapped.tags.map((tag) => `"${tag}" => Self::Known(${tagName}::${variantIdentifier(tag)}),`),
     "_ => Self::UnknownString(tag),",
-    "}),",
-    "serde_json::Value::Object(fields) => {",
+    "})",
+    "},",
+    "Some(b'{') => {",
+    "let object = super::OpaqueJsonObject::try_from(wire).map_err(serde::de::Error::custom)?;",
+    "let fields: std::collections::BTreeMap<String, serde::de::IgnoredAny> =",
+    "serde_json::from_str(object.as_json()).map_err(serde::de::Error::custom)?;",
     ...wrapped.branches.flatMap((branch) => [
       `if fields.contains_key("${branch.key}") {`,
-      "let value = serde_json::Value::Object(fields.clone());",
-      `return Ok(match serde_json::from_value::<${branch.name}>(value) {`,
+      `return Ok(match serde_json::from_str::<${branch.name}>(object.as_json()) {`,
       `Ok(payload) => Self::${variantIdentifier(branch.key)}(payload),`,
-      "Err(_) => Self::MalformedKnownObject(fields),",
+      "Err(_) => Self::MalformedKnownObject(object),",
       "});",
       "}",
     ]),
-    "Ok(Self::UnknownObject(fields))",
+    "Ok(Self::UnknownObject(object))",
     "},",
     '_ => Err(serde::de::Error::custom("expected a string or object")),',
     "}",
@@ -401,11 +407,22 @@ function renderDefinition(context: DefaultContext): string {
     case "textOrSequence":
       return [
         ...docs,
-        derives,
+        "#[derive(Clone, Debug, Eq, PartialEq, Serialize)]",
         "#[serde(untagged)]",
         `pub enum ${name} {`,
         "Text(String),",
         `Items(Vec<${rustType(definition.item)}>),`,
+        "}",
+        "",
+        `impl<'de> Deserialize<'de> for ${name} {`,
+        "fn deserialize<Decoder: serde::Deserializer<'de>>(decoder: Decoder) -> Result<Self, Decoder::Error> {",
+        "let wire = super::OpaqueJson::deserialize(decoder)?;",
+        "match wire.as_json().as_bytes().first() {",
+        "Some(b'\"') => serde_json::from_str(wire.as_json()).map(Self::Text).map_err(serde::de::Error::custom),",
+        "Some(b'[') => serde_json::from_str(wire.as_json()).map(Self::Items).map_err(serde::de::Error::custom),",
+        '_ => Err(serde::de::Error::custom("expected a string or array")),',
+        "}",
+        "}",
         "}",
       ].join("\n");
   }

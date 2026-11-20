@@ -415,93 +415,104 @@ pub enum CodexErrorInfo {
     ResponseTooManyFailedAttempts(ResponseTooManyFailedAttemptsCodexErrorInfo),
     ActiveTurnNotSteerable(ActiveTurnNotSteerableCodexErrorInfo),
     UnknownString(String),
-    UnknownObject(serde_json::Map<String, serde_json::Value>),
-    MalformedKnownObject(serde_json::Map<String, serde_json::Value>),
+    UnknownObject(super::OpaqueJsonObject),
+    MalformedKnownObject(super::OpaqueJsonObject),
 }
 
 impl<'de> Deserialize<'de> for CodexErrorInfo {
     fn deserialize<Decoder: serde::Deserializer<'de>>(
         decoder: Decoder,
     ) -> Result<Self, Decoder::Error> {
-        match serde_json::Value::deserialize(decoder)? {
-            serde_json::Value::String(tag) => Ok(match tag.as_str() {
-                "contextWindowExceeded" => Self::Known(CodexErrorInfoTag::ContextWindowExceeded),
-                "sessionBudgetExceeded" => Self::Known(CodexErrorInfoTag::SessionBudgetExceeded),
-                "usageLimitExceeded" => Self::Known(CodexErrorInfoTag::UsageLimitExceeded),
-                "rateLimitExceeded" => Self::Known(CodexErrorInfoTag::RateLimitExceeded),
-                "flexUnavailable" => Self::Known(CodexErrorInfoTag::FlexUnavailable),
-                "serverOverloaded" => Self::Known(CodexErrorInfoTag::ServerOverloaded),
-                "modelNotFound" => Self::Known(CodexErrorInfoTag::ModelNotFound),
-                "policyCapacityUnavailable" => {
-                    Self::Known(CodexErrorInfoTag::PolicyCapacityUnavailable)
-                }
-                "cyberPolicy" => Self::Known(CodexErrorInfoTag::CyberPolicy),
-                "misalignmentPolicyViolation" => {
-                    Self::Known(CodexErrorInfoTag::MisalignmentPolicyViolation)
-                }
-                "tooManyDenials" => Self::Known(CodexErrorInfoTag::TooManyDenials),
-                "internalServerError" => Self::Known(CodexErrorInfoTag::InternalServerError),
-                "unauthorized" => Self::Known(CodexErrorInfoTag::Unauthorized),
-                "badRequest" => Self::Known(CodexErrorInfoTag::BadRequest),
-                "threadRollbackFailed" => Self::Known(CodexErrorInfoTag::ThreadRollbackFailed),
-                "sandboxError" => Self::Known(CodexErrorInfoTag::SandboxError),
-                "other" => Self::Known(CodexErrorInfoTag::Other),
-                _ => Self::UnknownString(tag),
-            }),
-            serde_json::Value::Object(fields) => {
+        let wire = super::OpaqueJson::deserialize(decoder)?;
+        match wire.as_json().as_bytes().first() {
+            Some(b'"') => {
+                let tag: String =
+                    serde_json::from_str(wire.as_json()).map_err(serde::de::Error::custom)?;
+                Ok(match tag.as_str() {
+                    "contextWindowExceeded" => {
+                        Self::Known(CodexErrorInfoTag::ContextWindowExceeded)
+                    }
+                    "sessionBudgetExceeded" => {
+                        Self::Known(CodexErrorInfoTag::SessionBudgetExceeded)
+                    }
+                    "usageLimitExceeded" => Self::Known(CodexErrorInfoTag::UsageLimitExceeded),
+                    "rateLimitExceeded" => Self::Known(CodexErrorInfoTag::RateLimitExceeded),
+                    "flexUnavailable" => Self::Known(CodexErrorInfoTag::FlexUnavailable),
+                    "serverOverloaded" => Self::Known(CodexErrorInfoTag::ServerOverloaded),
+                    "modelNotFound" => Self::Known(CodexErrorInfoTag::ModelNotFound),
+                    "policyCapacityUnavailable" => {
+                        Self::Known(CodexErrorInfoTag::PolicyCapacityUnavailable)
+                    }
+                    "cyberPolicy" => Self::Known(CodexErrorInfoTag::CyberPolicy),
+                    "misalignmentPolicyViolation" => {
+                        Self::Known(CodexErrorInfoTag::MisalignmentPolicyViolation)
+                    }
+                    "tooManyDenials" => Self::Known(CodexErrorInfoTag::TooManyDenials),
+                    "internalServerError" => Self::Known(CodexErrorInfoTag::InternalServerError),
+                    "unauthorized" => Self::Known(CodexErrorInfoTag::Unauthorized),
+                    "badRequest" => Self::Known(CodexErrorInfoTag::BadRequest),
+                    "threadRollbackFailed" => Self::Known(CodexErrorInfoTag::ThreadRollbackFailed),
+                    "sandboxError" => Self::Known(CodexErrorInfoTag::SandboxError),
+                    "other" => Self::Known(CodexErrorInfoTag::Other),
+                    _ => Self::UnknownString(tag),
+                })
+            }
+            Some(b'{') => {
+                let object =
+                    super::OpaqueJsonObject::try_from(wire).map_err(serde::de::Error::custom)?;
+                let fields: std::collections::BTreeMap<String, serde::de::IgnoredAny> =
+                    serde_json::from_str(object.as_json()).map_err(serde::de::Error::custom)?;
                 if fields.contains_key("httpConnectionFailed") {
-                    let value = serde_json::Value::Object(fields.clone());
                     return Ok(
-                        match serde_json::from_value::<HttpConnectionFailedCodexErrorInfo>(value) {
+                        match serde_json::from_str::<HttpConnectionFailedCodexErrorInfo>(
+                            object.as_json(),
+                        ) {
                             Ok(payload) => Self::HttpConnectionFailed(payload),
-                            Err(_) => Self::MalformedKnownObject(fields),
+                            Err(_) => Self::MalformedKnownObject(object),
                         },
                     );
                 }
                 if fields.contains_key("responseStreamConnectionFailed") {
-                    let value = serde_json::Value::Object(fields.clone());
                     return Ok(
-                        match serde_json::from_value::<ResponseStreamConnectionFailedCodexErrorInfo>(
-                            value,
+                        match serde_json::from_str::<ResponseStreamConnectionFailedCodexErrorInfo>(
+                            object.as_json(),
                         ) {
                             Ok(payload) => Self::ResponseStreamConnectionFailed(payload),
-                            Err(_) => Self::MalformedKnownObject(fields),
+                            Err(_) => Self::MalformedKnownObject(object),
                         },
                     );
                 }
                 if fields.contains_key("responseStreamDisconnected") {
-                    let value = serde_json::Value::Object(fields.clone());
                     return Ok(
-                        match serde_json::from_value::<ResponseStreamDisconnectedCodexErrorInfo>(
-                            value,
+                        match serde_json::from_str::<ResponseStreamDisconnectedCodexErrorInfo>(
+                            object.as_json(),
                         ) {
                             Ok(payload) => Self::ResponseStreamDisconnected(payload),
-                            Err(_) => Self::MalformedKnownObject(fields),
+                            Err(_) => Self::MalformedKnownObject(object),
                         },
                     );
                 }
                 if fields.contains_key("responseTooManyFailedAttempts") {
-                    let value = serde_json::Value::Object(fields.clone());
                     return Ok(
-                        match serde_json::from_value::<ResponseTooManyFailedAttemptsCodexErrorInfo>(
-                            value,
+                        match serde_json::from_str::<ResponseTooManyFailedAttemptsCodexErrorInfo>(
+                            object.as_json(),
                         ) {
                             Ok(payload) => Self::ResponseTooManyFailedAttempts(payload),
-                            Err(_) => Self::MalformedKnownObject(fields),
+                            Err(_) => Self::MalformedKnownObject(object),
                         },
                     );
                 }
                 if fields.contains_key("activeTurnNotSteerable") {
-                    let value = serde_json::Value::Object(fields.clone());
                     return Ok(
-                        match serde_json::from_value::<ActiveTurnNotSteerableCodexErrorInfo>(value)
-                        {
+                        match serde_json::from_str::<ActiveTurnNotSteerableCodexErrorInfo>(
+                            object.as_json(),
+                        ) {
                             Ok(payload) => Self::ActiveTurnNotSteerable(payload),
-                            Err(_) => Self::MalformedKnownObject(fields),
+                            Err(_) => Self::MalformedKnownObject(object),
                         },
                     );
                 }
-                Ok(Self::UnknownObject(fields))
+                Ok(Self::UnknownObject(object))
             }
             _ => Err(serde::de::Error::custom("expected a string or object")),
         }
@@ -858,14 +869,14 @@ codex_object! {
             skip_serializing_if = "Option::is_none",
             deserialize_with = "super::deserialize_present",
         )]
-        annotations: Option<Option<Vec<serde_json::Value>>>,
+        annotations: Option<Option<Vec<super::OpaqueJson>>>,
         #[serde(
             rename = "logprobs",
             default,
             skip_serializing_if = "Option::is_none",
             deserialize_with = "super::deserialize_present",
         )]
-        logprobs: Option<Option<Vec<serde_json::Value>>>,
+        logprobs: Option<Option<Vec<super::OpaqueJson>>>,
         #[serde(rename = "text")]
         text: String,
     }
@@ -980,11 +991,28 @@ codex_object! {
 }
 
 // #/definitions/v2/FunctionCallOutputBody
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum FunctionCallOutputBody {
     Text(String),
     Items(Vec<FunctionCallOutputContentItem>),
+}
+
+impl<'de> Deserialize<'de> for FunctionCallOutputBody {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let wire = super::OpaqueJson::deserialize(decoder)?;
+        match wire.as_json().as_bytes().first() {
+            Some(b'"') => serde_json::from_str(wire.as_json())
+                .map(Self::Text)
+                .map_err(serde::de::Error::custom),
+            Some(b'[') => serde_json::from_str(wire.as_json())
+                .map(Self::Items)
+                .map_err(serde::de::Error::custom),
+            _ => Err(serde::de::Error::custom("expected a string or array")),
+        }
+    }
 }
 
 // #/definitions/v2/FunctionCallOutputContentItem
@@ -1354,16 +1382,16 @@ codex_object! {
             skip_serializing_if = "Option::is_none",
             deserialize_with = "super::deserialize_present",
         )]
-        _meta: Option<serde_json::Value>,
+        _meta: Option<super::OpaqueJson>,
         #[serde(rename = "content")]
-        content: Vec<serde_json::Value>,
+        content: Vec<super::OpaqueJson>,
         #[serde(
             rename = "structuredContent",
             default,
             skip_serializing_if = "Option::is_none",
             deserialize_with = "super::deserialize_present",
         )]
-        structured_content: Option<serde_json::Value>,
+        structured_content: Option<super::OpaqueJson>,
     }
 }
 
@@ -2083,7 +2111,7 @@ codex_object! {
         #[serde(rename = "role")]
         role: String,
         #[serde(rename = "tools")]
-        tools: Vec<serde_json::Value>,
+        tools: Vec<super::OpaqueJson>,
     }
 }
 
@@ -2294,7 +2322,7 @@ codex_object! {
 codex_object! {
     ToolSearchCallResponseItem {
         #[serde(rename = "arguments")]
-        arguments: serde_json::Value,
+        arguments: super::OpaqueJson,
         #[serde(
             rename = "call_id",
             default,
@@ -2481,7 +2509,7 @@ codex_object! {
         #[serde(rename = "status")]
         status: String,
         #[serde(rename = "tools")]
-        tools: Vec<serde_json::Value>,
+        tools: Vec<super::OpaqueJson>,
     }
 }
 
@@ -3377,7 +3405,7 @@ codex_object! {
 
 // #/definitions/v2/ThreadExtra
 /// Extra app-server data for a thread.
-pub type ThreadExtra = std::collections::BTreeMap<String, serde_json::Value>;
+pub type ThreadExtra = std::collections::BTreeMap<String, super::OpaqueJson>;
 
 // #/definitions/v2/ThreadHistoryMode
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -3907,7 +3935,7 @@ codex_object! {
         )]
         app_context: Option<Option<McpToolCallAppContext>>,
         #[serde(rename = "arguments")]
-        arguments: serde_json::Value,
+        arguments: super::OpaqueJson,
         /// Unix timestamp in milliseconds when the item completed, if recorded.
         #[serde(
             rename = "completedAtMs",
@@ -4004,7 +4032,7 @@ impl McpToolCallThreadItem {
 codex_object! {
     DynamicToolCallThreadItem {
         #[serde(rename = "arguments")]
-        arguments: serde_json::Value,
+        arguments: super::OpaqueJson,
         /// Unix timestamp in milliseconds when the item completed, if recorded.
         #[serde(
             rename = "completedAtMs",
@@ -4239,7 +4267,7 @@ codex_object! {
             skip_serializing_if = "Option::is_none",
             deserialize_with = "super::deserialize_present",
         )]
-        results: Option<Option<Vec<serde_json::Value>>>,
+        results: Option<Option<Vec<super::OpaqueJson>>>,
         /// Unix timestamp in milliseconds when the item started, if recorded.
         #[serde(
             rename = "startedAtMs",
@@ -4260,7 +4288,7 @@ impl WebSearchThreadItem {
 
     /// Effective value using the schema default when the field is absent.
     #[must_use]
-    pub fn results(&self) -> Option<&Vec<serde_json::Value>> {
+    pub fn results(&self) -> Option<&Vec<super::OpaqueJson>> {
         self.results.as_ref().and_then(Option::as_ref)
     }
 
@@ -4727,7 +4755,7 @@ codex_object! {
             skip_serializing_if = "Option::is_none",
             deserialize_with = "super::deserialize_present",
         )]
-        config: Option<Option<std::collections::BTreeMap<String, serde_json::Value>>>,
+        config: Option<Option<std::collections::BTreeMap<String, super::OpaqueJson>>>,
         #[serde(
             rename = "cwd",
             default,

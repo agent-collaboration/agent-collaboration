@@ -2,6 +2,7 @@
 
 use serde::de::{DeserializeOwned, MapAccess, Visitor, value::MapAccessDeserializer};
 use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::value::RawValue;
 use std::{fmt, marker::PhantomData};
 
 mod sealed {
@@ -14,13 +15,80 @@ pub trait CodexRequest: sealed::Sealed + Serialize + DeserializeOwned {
     type Response: Serialize + DeserializeOwned;
 }
 
+/// A validated JSON value in a schema-declared opaque field.
+///
+/// Decode directly from JSON text or bytes and serialize back to JSON to retain the source
+/// numbers. An intermediate `serde_json::Value` may have already rounded them.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(transparent)]
+pub struct OpaqueJson(Box<RawValue>);
+
+impl OpaqueJson {
+    /// The validated JSON representation, including the original number tokens.
+    #[must_use]
+    pub fn as_json(&self) -> &str {
+        self.0.get()
+    }
+}
+
+impl PartialEq for OpaqueJson {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_json() == other.as_json()
+    }
+}
+
+impl Eq for OpaqueJson {}
+
+/// Opaque JSON whose enclosing wire shape must be an object.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(transparent)]
+pub struct OpaqueJsonObject(OpaqueJson);
+
+impl OpaqueJsonObject {
+    #[must_use]
+    pub fn as_json(&self) -> &str {
+        self.0.as_json()
+    }
+}
+
+impl TryFrom<OpaqueJson> for OpaqueJsonObject {
+    type Error = &'static str;
+
+    fn try_from(value: OpaqueJson) -> Result<Self, Self::Error> {
+        if value.as_json().starts_with('{') {
+            Ok(Self(value))
+        } else {
+            Err("expected an opaque JSON object")
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for OpaqueJsonObject {
+    fn deserialize<Decoder: Deserializer<'de>>(decoder: Decoder) -> Result<Self, Decoder::Error> {
+        Self::try_from(OpaqueJson::deserialize(decoder)?).map_err(serde::de::Error::custom)
+    }
+}
+
 /// A supplied string alternative in a payload that requires at least one valid alternative.
 /// A different valid alternative can admit the payload even when this value is malformed.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum StringAlternative {
     Valid(String),
-    Malformed(serde_json::Value),
+    Malformed(OpaqueJson),
+}
+
+impl<'de> Deserialize<'de> for StringAlternative {
+    fn deserialize<Decoder: Deserializer<'de>>(decoder: Decoder) -> Result<Self, Decoder::Error> {
+        let wire = OpaqueJson::deserialize(decoder)?;
+        if wire.as_json().starts_with('"') {
+            serde_json::from_str(wire.as_json())
+                .map(Self::Valid)
+                .map_err(serde::de::Error::custom)
+        } else {
+            Ok(Self::Malformed(wire))
+        }
+    }
 }
 
 impl StringAlternative {
@@ -103,7 +171,8 @@ macro_rules! codex_object {
     };
 }
 
-// Keep the tagged enum's derived field decoder behind the same object-only entrance.
+// Serde's internally tagged decoder buffers fields with deserialize_any, which can round an
+// opaque number before its field decoder runs. Read the tag and typed payload from the JSON.
 macro_rules! codex_tagged_object {
     ($(#[$documentation:meta])* $name:ident {
         $($tag:literal => $variant:ident($payload:ty),)+
@@ -119,13 +188,12 @@ macro_rules! codex_tagged_object {
             fn deserialize<Decoder: serde::Deserializer<'de>>(
                 decoder: Decoder,
             ) -> Result<Self, Decoder::Error> {
-                #[derive(Deserialize)]
-                #[serde(tag = "type")]
-                enum Tagged {
-                    $(#[serde(rename = $tag)] $variant(Box<$payload>),)+
-                }
-                match super::deserialize_object::<_, Tagged>(decoder)? {
-                    $(Tagged::$variant(payload) => Ok(Self::$variant(payload)),)+
+                let wire = super::OpaqueJson::deserialize(decoder)?;
+                let tag = super::json_object_tag(wire.as_json()).map_err(serde::de::Error::custom)?;
+                match tag.as_str() {
+                    $($tag => serde_json::from_str::<Box<$payload>>(wire.as_json())
+                        .map(Self::$variant).map_err(serde::de::Error::custom),)+
+                    _ => Err(serde::de::Error::unknown_variant(&tag, &[$($tag),+])),
                 }
             }
         }
@@ -134,6 +202,18 @@ macro_rules! codex_tagged_object {
 
 mod generated;
 pub use generated::*;
+
+fn json_object_tag(wire: &str) -> serde_json::Result<String> {
+    #[derive(Deserialize)]
+    struct Discriminator {
+        #[serde(rename = "type")]
+        tag: String,
+    }
+
+    let mut decoder = serde_json::Deserializer::from_str(wire);
+    let fields: Discriminator = deserialize_object(&mut decoder)?;
+    Ok(fields.tag)
+}
 
 fn deserialize_object<'de, D, Payload>(deserializer: D) -> Result<Payload, D::Error>
 where
