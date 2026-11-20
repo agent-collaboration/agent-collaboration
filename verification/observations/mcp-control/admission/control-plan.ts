@@ -134,6 +134,7 @@ export const controlPlanSchema = z.strictObject({
       savedMode: z.string().min(1),
       closePrimer: z.literal(false).optional(),
       observeSilentRestorePrompt: z.literal(true).optional(),
+      cursorCancelLoad: z.enum(["firstPrompt", "afterPrimer"]).optional(),
       restart: z
         .discriminatedUnion("phase", [
           z.strictObject({ phase: z.literal("seed"), record: absolutePath }),
@@ -391,6 +392,7 @@ function checkSessionControlDeclaration(plan: ControlPlan): void {
     throw new Error("only the restart cases declare seed and reopen lifetimes");
   if (control.closePrimer === false && selected[0] !== "unansweredClose")
     throw new Error("only the unanswered-close case declares a metadata-only seed");
+  checkCursorCancelDeclaration(plan, selected[0], control.cursorCancelLoad);
   if (
     control.observeSilentRestorePrompt &&
     (selected[0] !== "savedModeRestart" ||
@@ -455,6 +457,21 @@ function checkSessionControlDeclaration(plan: ControlPlan): void {
   }
 }
 
+function checkCursorCancelDeclaration(
+  plan: ControlPlan,
+  selected: ControlCase | undefined,
+  variant: NonNullable<ControlPlan["sessionControl"]>["cursorCancelLoad"],
+): void {
+  if (
+    variant !== undefined &&
+    (selected !== "unconfirmedCancel" ||
+      plan.peer.kind !== "provider" ||
+      plan.endpointId !== "cursor-local" ||
+      plan.sessionControl?.restore !== "load")
+  )
+    throw new Error("the lost-session observation requires a real Cursor cancel and load");
+}
+
 function checkPrivateSessionControlPaths(paths: readonly string[]): void {
   const uid = process.getuid?.();
   const sharedDebug = join(homedir(), ".codex-router-debug");
@@ -487,15 +504,23 @@ function checkActor(plan: ControlPlan): void {
   }
 }
 
+function casePromptBudget(plan: ControlPlan, name: ControlCase): number {
+  if (name === "unansweredClose" && plan.sessionControl?.closePrimer === false) return 1;
+  if (name === "unconfirmedCancel") {
+    const variant = plan.sessionControl?.cursorCancelLoad;
+    if (variant === "firstPrompt") return 2;
+    if (variant === "afterPrimer") return 4;
+  }
+  return CASE_EFFECTS[name].prompts;
+}
+
 function checkEffectsAndTime(plan: ControlPlan, now: Date): void {
   const needed = plan.cases.reduce(
     (total, name) => ({
       sessions: total.sessions + CASE_EFFECTS[name].sessions,
       prompts:
         total.prompts +
-        (name === "unansweredClose" && plan.sessionControl?.closePrimer === false
-          ? 1
-          : CASE_EFFECTS[name].prompts) +
+        casePromptBudget(plan, name) +
         (name === "savedModeRestart" && plan.sessionControl?.observeSilentRestorePrompt ? 1 : 0),
     }),
     { sessions: 0, prompts: 0 },

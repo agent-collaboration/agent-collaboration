@@ -18,12 +18,14 @@ import {
   control,
   holdWire,
   inspect,
+  isAgentReply,
   negotiated,
   notOffered,
   observed,
   preparePrompt,
   promptFrame,
   reattach,
+  reattachResult,
   requireAdmission,
   requireFailure,
   requireHeldReply,
@@ -192,9 +194,60 @@ async function verifySameLifetimeHold(inputs: CaseInputs, target: SessionRef, fo
     effect: "unknown",
     reconciliation: "notReconcilable",
   });
-  await reattach(inputs, "cancel-restore-after-reconcile", target);
+  const step = "cancel-restore-after-reconcile";
+  const restored = await reattachResult(inputs, step, target);
+  const variant = control(inputs).cursorCancelLoad;
+  if (restored.kind === "missing") {
+    if (variant === undefined) throw new Error(restored.message);
+    if (variant === "firstPrompt") requireCursorLostReply(inputs, target, restored.message);
+    return (
+      "reconcile preserved Unknown and the reload reported the lost session: " + restored.message
+    );
+  }
+  if (variant === "firstPrompt")
+    throw new Error("the first cancelled prompt unexpectedly left a reloadable Cursor Session");
   await restoreDeclaredModel(inputs, target, "cancel-restore-after-reconcile");
   await completePrompt(inputs, "cancel-prompt-after-reconcile", target);
+  return "uncertainty blocked a new prompt until explicit reconciliation; the original effect stayed unknown";
+}
+
+function requireCursorLostReply(inputs: CaseInputs, target: SessionRef, message: string): void {
+  const wire = wireEntries(inputs);
+  const request = wire.find(
+    (entry) =>
+      entry.direction === "hostToAgent" &&
+      entry.method === "session/load" &&
+      entry.sessionId === target.sessionId &&
+      entry.disposition === "forwarded",
+  );
+  const reply = wire.find(
+    (entry) =>
+      request !== undefined &&
+      entry.sequence > request.sequence &&
+      isAgentReply("session/load")(entry) &&
+      entry.frame?.id === request.frame?.id &&
+      entry.sessionId === target.sessionId &&
+      entry.disposition === "forwarded",
+  );
+  const error = z
+    .looseObject({
+      code: z.literal(-32602),
+      data: z.looseObject({ message: z.literal('Session "' + target.sessionId + '" not found') }),
+    })
+    .safeParse(reply?.frame?.error);
+  record(inputs.context, {
+    step: "cancel-lost-session-witness",
+    target,
+    request,
+    reply,
+    caller: message,
+  });
+  if (
+    !error.success ||
+    !message.includes("provider code -32602") ||
+    /invalid parameters/i.test(message)
+  )
+    throw new Error("the caller did not preserve Cursor's -32602 lost-session evidence");
 }
 
 async function requestCancellation(
@@ -261,6 +314,8 @@ export async function unconfirmedCancelCase(inputs: CaseInputs): Promise<CaseRes
   if (!(await negotiated(inputs))[control(inputs).restore])
     return notOffered(NAME, "restore method");
   const target = await createSession(inputs, "cancel-create", control(inputs).savedMode);
+  if (control(inputs).cursorCancelLoad === "afterPrimer")
+    await completePrompt(inputs, "cancel-primer", target);
   const before = await baseline(inputs, "cancel-baseline", target);
   const prompt = await preparePrompt(inputs, target, "cancel-prompt");
   const recovery = await holdAndClose(inputs, target, prompt, before.result.generation);
@@ -273,12 +328,8 @@ export async function unconfirmedCancelCase(inputs: CaseInputs): Promise<CaseRes
         reason: "the real harness had already ended the prompt before cancel crossed the pipe",
       },
     };
-  await verifySameLifetimeHold(inputs, target, prompt.operationId);
-  return observed(
-    NAME,
-    target,
-    "uncertainty blocked a new prompt until explicit reconciliation; the original effect stayed unknown",
-  );
+  const detail = await verifySameLifetimeHold(inputs, target, prompt.operationId);
+  return observed(NAME, target, detail);
 }
 
 async function holdAndClose(

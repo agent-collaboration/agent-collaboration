@@ -71,7 +71,11 @@ const routePlanSchema = z.strictObject({
   deadline: z.iso.datetime(),
   journey: z.discriminatedUnion("kind", [
     z.strictObject({ kind: z.literal("preflight") }),
-    z.strictObject({ kind: z.enum(["unansweredReopen", "unansweredClose", "unconfirmedCancel"]) }),
+    z.strictObject({ kind: z.enum(["unansweredReopen", "unansweredClose"]) }),
+    z.strictObject({
+      kind: z.literal("unconfirmedCancel"),
+      cursorCancelLoad: z.enum(["firstPrompt", "afterPrimer"]).optional(),
+    }),
     z.strictObject({ kind: z.literal("savedModeSeed") }),
     z.strictObject({
       kind: z.literal("savedModeReopen"),
@@ -310,6 +314,14 @@ function makeControlPlan(
         ? "cancelRestart"
         : plan.journey.kind;
   const actor = localActor();
+  const cursorCancelLoad =
+    plan.journey.kind === "unconfirmedCancel" ? plan.journey.cursorCancelLoad : undefined;
+  const maxPrompts =
+    cursorCancelLoad === "afterPrimer"
+      ? 4
+      : caseName === "unconfirmedCancel" && cursorCancelLoad === undefined
+        ? 3
+        : 2;
   return controlPlanSchema.parse({
     repository: plan.repository,
     sourceHead: plan.sourceHead,
@@ -337,7 +349,7 @@ function makeControlPlan(
     cases: [caseName],
     promptText: "Reply with READY. Do not use tools.",
     holdText: null,
-    effects: { maxSessions: 2, maxPrompts: caseName === "unconfirmedCancel" ? 3 : 2 },
+    effects: { maxSessions: 2, maxPrompts },
     deadline: plan.deadline,
     evidence,
     schemaSource: null,
@@ -346,6 +358,7 @@ function makeControlPlan(
       gateDirectory: capture,
       restore: "load",
       savedMode: plan.cursor?.mode ?? "plan",
+      ...(cursorCancelLoad === undefined ? {} : { cursorCancelLoad }),
       ...(plan.journey.kind === "savedModeReopen" && plan.journey.observeSilentRestorePrompt
         ? { observeSilentRestorePrompt: true }
         : {}),

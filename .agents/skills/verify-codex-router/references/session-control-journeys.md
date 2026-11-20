@@ -10,6 +10,8 @@ For saved mode, use `savedModeSeed` followed by `savedModeReopen`. For Claude's 
 
 For a separately authorized Cursor silence observation, add `observeSilentRestorePrompt: true` to the `savedModeReopen` journey. This records the first post-load prompt's ACP updates and correlated reply within 180 seconds. When the prompt remains pending with no wire activity in that window, the driver cancels the exact operation and submits one successor probe after reading the original outcome. Reserve up to two submissions for this reopen phase and enough time to finish the cancellation and successor reads.
 
+To exercise Cursor's lost-session mapping after an unconfirmed cancel, set `journey.kind: "unconfirmedCancel"` and choose `cursorCancelLoad: "firstPrompt"` or `"afterPrimer"`. The first variant expects a correlated Cursor `-32602` lost-session reply and a typed caller response with that code and new-session guidance. The second completes a primer before cancelling and accepts either explicit lost-session guidance or a successful load followed by one prompt. Allocate two and four public prompt submissions respectively, including the expected refused probes.
+
 For the foreground Host with a private proxy:
 
 1. Get the exact source, signed normal Router artifacts and hashes, authorized debug identities and budget, and an exclusive owner-private root and short native socket path. Claude uses the private proxy and authorized debug pool. Cursor uses its own approved debug identity. Use the approved advertised Haiku or Grok value. The live path requires a qualified package/executable and the prerequisites in the main skill.
