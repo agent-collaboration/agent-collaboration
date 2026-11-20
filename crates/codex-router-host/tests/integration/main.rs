@@ -1,6 +1,8 @@
 //! Original test roots retain their case namespaces.
 
 use collaboration_application_test_support::board_fixture;
+#[path = "../support/host_clock_control.rs"]
+mod host_clock_control;
 #[path = "../support/host_replacement_cleanup.rs"]
 mod host_replacement_cleanup;
 #[path = "../support/operator_client.rs"]
