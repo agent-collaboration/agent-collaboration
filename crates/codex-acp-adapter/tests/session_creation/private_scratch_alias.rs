@@ -246,7 +246,6 @@ async fn assert_private_scratch_binding(
             "createdBy":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001", "endpointId":"codex-local"},"sessionId":"creator"},
             "approver":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001", "endpointId":"codex-local"},"sessionId":"creator"}
         }}}),
-        approval_broker: Arc::new(codex_acp_adapter::RejectingApprovalBroker),
     }).await;
     if result.is_err() {
         // Settle the owned peer even if setup returns before native receives a frame.

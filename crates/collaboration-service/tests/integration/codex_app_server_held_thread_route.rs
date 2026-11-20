@@ -1,6 +1,4 @@
-use crate::native_mail_owner;
 use crate::native_permission_echo;
-use crate::served_api;
 use agent_automation::{RouteEffectEvidence, SubmissionEffect};
 use collaboration_contracts::AttemptEvidenceSink;
 use collaboration_contracts::DeliveryFuture;
@@ -183,8 +181,6 @@ async fn exercise_held_empty_thread(
         gate,
         codex_home: root.clone(),
     };
-    let runtime_clock =
-        std::sync::Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
     let route = Arc::new(CodexAppServerDeliveryRoute::new(
         service_id.clone(),
         directory,
@@ -270,7 +266,6 @@ async fn exercise_held_empty_thread(
             generation,
             schemas: Arc::clone(&schemas),
             stored_sessions: Arc::new(EmptyStoredSessions),
-            approval_broker: Arc::new(codex_acp_adapter::RejectingApprovalBroker),
             holder: holder.clone(),
             recorder: Arc::new(AcceptingConversationRecorder),
             retired: tokio_util::sync::CancellationToken::new(),
@@ -387,66 +382,17 @@ async fn exercise_held_empty_thread(
         Some(&json!(["writableRoots"]))
     );
     let routed: Arc<dyn SessionDeliveryRoute> = route;
-    let delivery_router = Arc::new(collaboration_runtime::SessionDeliveryRouter::new(vec![
-        routed,
-    ]));
-    let delivery: Arc<dyn collaboration_contracts::SessionMessageDelivery> =
-        delivery_router.clone();
-    let presence: Arc<dyn collaboration_contracts::TargetPresenceProbe> = delivery_router;
-    let machine_identity = collaboration_contracts::MachineIdentity::new(
-        service_id.clone(),
-        Some("held-thread-route-test"),
-    )?;
-    let interactions = Arc::new(
-        interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
-    );
-    let subscription_delivery = collaboration_service::SubscriptionDeliveryService::new(
-        collaboration_service::SubscriptionDeliveryServiceProps {
-            push_store: interactions.clone(),
-            delivery: Arc::clone(&delivery),
-            presence: Arc::clone(&presence),
-            machine_identity: machine_identity.clone(),
-            clock: runtime_clock.clone(),
-        },
-    );
-    subscription_delivery.start().await?;
-    let identity = collaboration_service::ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000001",
+    let delivery = collaboration_runtime::SessionDeliveryRouter::new(vec![routed]);
+    let started = collaboration_contracts::SessionMessageDelivery::deliver(
+        &delivery,
+        make_request(MessageDelivery::Auto)?,
+        evidence.as_ref(),
     )
-    .map_err(std::io::Error::other)?
-    .with_endpoints(vec![description])
-    .map_err(std::io::Error::other)?;
-    let (identity, native_mail) = native_mail_owner::start(
-        identity,
-        fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7())?,
-        collaboration_service::MailPushDeliveryProps {
-            interactions,
-            actors: subscription_delivery.clone(),
-            presence,
-            machine: machine_identity,
-            clock: runtime_clock.clone(),
-        },
-    )?;
-    let served = served_api::ServedApi::start(identity)?;
-    let control = served.client("held-thread-message").await?;
-    let started = control
-        .send_message(collaboration_client::MessageSendRequest {
-            item_id: None,
-            target: target.clone(),
-            message: collaboration_client::PublicMessageContent::HumanUser {
-                text: "hello".to_owned().try_into()?,
-            },
-            delivery: MessageDelivery::Auto,
-            generation_guard: None,
-        })
-        .await?;
-    let collaboration_protocol::MessageSendResult::Local(started) = started else {
-        return Err("local held connection returned remote custody".into());
-    };
-    if !matches!(started.receipt.outcome, DeliveryOutcome::Started)
+    .await?
+    .into_receipt();
+    if !matches!(started.outcome, DeliveryOutcome::Started)
         || !matches!(
-            started.receipt.client,
+            started.client,
             Some(DeliveryClientReceipt::CodexAppServer(_))
         )
         || holder.contains("empty-thread")
@@ -454,24 +400,10 @@ async fn exercise_held_empty_thread(
         return Err("first message did not start through the held connection".into());
     }
     assert_eq!(
-        serde_json::to_value(&started.receipt)?.pointer("/client/permissionDifferences"),
+        serde_json::to_value(&started)?.pointer("/client/permissionDifferences"),
         Some(&json!(["writableRoots"]))
     );
-    served.stop().await?;
-    subscription_delivery.shutdown().await;
-    drop(subscription_delivery);
     backend.await??;
-    native_mail.close().await?;
-    for name in [
-        "interaction.sqlite",
-        "interaction.sqlite-wal",
-        "interaction.sqlite-shm",
-    ] {
-        let path = root.join(name);
-        if path.exists() {
-            std::fs::remove_file(path)?;
-        }
-    }
     std::fs::remove_file(socket_path)?;
     std::fs::remove_dir(scratch)?;
     std::fs::remove_dir(scratch_parent)?;

@@ -23,16 +23,6 @@ pub(super) struct CollaborationLifecycle {
     schema_digest: Option<[u8; 32]>,
 }
 impl CollaborationLifecycle {
-    pub(super) fn observe_fleet(&self) -> crate::collaboration_runtime::FleetObservationFuture {
-        match &self.runtime {
-            Some(runtime) => runtime.observe_fleet(),
-            None => Box::pin(async {
-                crate::FleetHostObservation::Unavailable {
-                    message: "collaboration runtime is unavailable".to_owned(),
-                }
-            }),
-        }
-    }
     pub(super) async fn start(
         config: &HostConfig,
         instance: &HostInstance,

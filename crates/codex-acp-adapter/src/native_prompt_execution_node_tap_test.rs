@@ -16,9 +16,8 @@
 //! setup: checked and counted, but not part of the row.
 use super::{PendingAcpPrompt, PromptEvent};
 use crate::{
-    AcpSchemaCatalog, AcpSessionBinding, ApprovalBroker, ApprovalBrokerError, ApprovalRoute,
-    BrokeredApprovalOutcome, BrokeredApprovalRequest, ConversationOperationRecorder,
-    ConversationRecordFuture, ScratchScopeRegister, SessionSetupInputs,
+    AcpSchemaCatalog, AcpSessionBinding, ConversationOperationRecorder, ConversationRecordFuture,
+    ScratchScopeRegister, SessionSetupInputs,
 };
 use codex_native_integration::{
     NativePayloadSchemas, NativeProtocolConnection, NativeSchemaBundle,
@@ -30,12 +29,7 @@ use codex_router_test_support::node_taps::{
 use collaboration_protocol::{CodexGeneration, OperationId, SessionId};
 use fake_codex::{CodexTranscript, CodexWireRecorder, Step, spawn_fake_codex};
 use serde_json::{Value, json};
-use std::{
-    collections::BTreeMap,
-    future::Future,
-    pin::Pin,
-    sync::{Arc, Mutex},
-};
+use std::{collections::BTreeMap, sync::Arc};
 use tokio_tungstenite::{WebSocketStream, tungstenite::protocol::Role};
 
 #[path = "native_prompt_execution_node_tap_fake_codex.rs"]
@@ -74,38 +68,6 @@ impl ConversationOperationRecorder for AcceptingRecorder {
     }
     fn record_failure<'a>(&'a self, _: &'a OperationId, _: bool) -> ConversationRecordFuture<'a> {
         Box::pin(async { Ok(()) })
-    }
-}
-
-/// Records each approval the adapter hands to the broker, then cancels it.
-#[derive(Default)]
-struct RecordingCancellingBroker {
-    requests: Mutex<Vec<BrokeredApprovalRequest>>,
-}
-impl ApprovalBroker for RecordingCancellingBroker {
-    fn register_route(
-        &self,
-        _: ApprovalRoute,
-    ) -> Pin<Box<dyn Future<Output = Result<(), ApprovalBrokerError>> + Send + '_>> {
-        Box::pin(async { Ok(()) })
-    }
-    fn request(
-        &self,
-        request: BrokeredApprovalRequest,
-    ) -> Pin<
-        Box<dyn Future<Output = Result<BrokeredApprovalOutcome, ApprovalBrokerError>> + Send + '_>,
-    > {
-        if let Ok(mut requests) = self.requests.lock() {
-            requests.push(request);
-        }
-        Box::pin(async { Ok(BrokeredApprovalOutcome::Cancelled) })
-    }
-    fn route(
-        &self,
-        _: &str,
-    ) -> Pin<Box<dyn Future<Output = Result<Option<ApprovalRoute>, ApprovalBrokerError>> + Send + '_>>
-    {
-        Box::pin(async { Ok(None) })
     }
 }
 
@@ -151,7 +113,6 @@ fn native_schemas() -> Arc<NativePayloadSchemas> {
 async fn binding_with_codex_script(
     catalog: &mut AcpSchemaCatalog,
     script: Vec<Step>,
-    broker: Arc<dyn ApprovalBroker>,
 ) -> (
     AcpSessionBinding,
     tokio::task::JoinHandle<()>,
@@ -186,7 +147,6 @@ async fn binding_with_codex_script(
             schemas: native_schemas(),
             generation,
             params: json!({"sessionId":"thread-a","cwd":"/work","mcpServers":[],"_meta":{"codex-router/replayHistory":false}}),
-            approval_broker: broker,
         },
     )
     .await
@@ -212,7 +172,6 @@ fn start_turn_steps() -> Vec<Step> {
 fn state_of(prompt: &PendingAcpPrompt) -> NodeStateSnapshot {
     NodeStateSnapshot::new()
         .field("turn_id", prompt.settlement.turn_id().unwrap_or("none"))
-        .field("next_permission", prompt.next_permission)
         .field("blocks_next_prompt", prompt.blocks_next_prompt())
 }
 
@@ -261,6 +220,9 @@ fn record_prompt_event(case: &mut TapCase, event: &PromptEvent) {
             ),
             value.clone(),
         ),
+        PromptEvent::InteractionRefused(_) => {
+            panic!("unexpected refusal in a non-interaction case")
+        }
         PromptEvent::NativeCallback(value) => case.produced_with(
             RecordLayer::TypedOutcome,
             family,
@@ -316,22 +278,17 @@ const RESUMED_SESSION_SETUP_REQUESTS: usize = 1;
 const STARTED_TURN_SETUP_REQUESTS: usize = 3;
 
 /// A turn in flight blocks the next prompt until it settles.
-fn turn_state(turn: &str, permissions: u64, blocks_next_prompt: bool) -> NodeStateSnapshot {
+fn turn_state(turn: &str, _permissions: u64, blocks_next_prompt: bool) -> NodeStateSnapshot {
     NodeStateSnapshot::new()
         .field("turn_id", turn)
-        .field("next_permission", permissions)
         .field("blocks_next_prompt", blocks_next_prompt)
 }
 
 #[tokio::test]
 async fn node_tap_acp_prompt_becomes_codex_thread_read_and_turn_start() {
     let mut catalog = AcpSchemaCatalog::load().unwrap_or_else(|e| panic!("catalog: {e}"));
-    let (binding, fixture, transcript) = binding_with_codex_script(
-        &mut catalog,
-        start_turn_steps(),
-        Arc::new(crate::RejectingApprovalBroker),
-    )
-    .await;
+    let (binding, fixture, transcript) =
+        binding_with_codex_script(&mut catalog, start_turn_steps()).await;
     let mut case = new_case(
         "acp_prompt_to_codex_calls",
         "N8 section: ACP prompt from the carrier -> Codex calls to N10",
@@ -366,12 +323,7 @@ async fn node_tap_codex_agent_message_delta_becomes_acp_message_chunk() {
     let mut catalog = AcpSchemaCatalog::load().unwrap_or_else(|e| panic!("catalog: {e}"));
     let mut script = start_turn_steps();
     script.push(Step::Send(json!({"method":"item/agentMessage/delta","params":{"threadId":"thread-a","turnId":"turn-a","itemId":"message-a","delta":"hi there"}})));
-    let (binding, fixture, transcript) = binding_with_codex_script(
-        &mut catalog,
-        script,
-        Arc::new(crate::RejectingApprovalBroker),
-    )
-    .await;
+    let (binding, fixture, transcript) = binding_with_codex_script(&mut catalog, script).await;
     let mut prompt =
         PendingAcpPrompt::start(binding, &mut catalog, json!(PROMPT_ID), &prompt_params())
             .await
@@ -412,12 +364,7 @@ async fn node_tap_codex_command_item_becomes_acp_tool_call() {
     let mut script = start_turn_steps();
     let started = json!({"method":"item/started","params":{"threadId":"thread-a","turnId":"turn-a","startedAtMs":1,"item":{"type":"commandExecution","id":"tool-a","command":"cargo test","status":"inProgress","commandActions":[],"cwd":"/work"}}});
     script.push(Step::Send(started.clone()));
-    let (binding, fixture, transcript) = binding_with_codex_script(
-        &mut catalog,
-        script,
-        Arc::new(crate::RejectingApprovalBroker),
-    )
-    .await;
+    let (binding, fixture, transcript) = binding_with_codex_script(&mut catalog, script).await;
     let mut prompt =
         PendingAcpPrompt::start(binding, &mut catalog, json!(PROMPT_ID), &prompt_params())
             .await
@@ -453,84 +400,6 @@ async fn node_tap_codex_command_item_becomes_acp_tool_call() {
 }
 
 #[tokio::test]
-async fn node_tap_legacy_codex_approval_goes_to_broker_and_cancel_returns_to_codex() {
-    let mut catalog = AcpSchemaCatalog::load().unwrap_or_else(|e| panic!("catalog: {e}"));
-    let mut script = start_turn_steps();
-    let approval = json!({"id":7,"method":"item/commandExecution/requestApproval","params":{"threadId":"thread-a","turnId":"turn-a","itemId":"tool-a","startedAtMs":1,"command":"cargo test","availableDecisions":["accept","decline"]}});
-    script.push(Step::Send(approval.clone()));
-    script.push(Step::Receive);
-    let broker = Arc::new(RecordingCancellingBroker::default());
-    let (binding, fixture, transcript) =
-        binding_with_codex_script(&mut catalog, script, broker.clone()).await;
-    let mut prompt =
-        PendingAcpPrompt::start(binding, &mut catalog, json!(PROMPT_ID), &prompt_params())
-            .await
-            .unwrap_or_else(|error| panic!("start: {error}"));
-    let mut case = new_case(
-        "legacy_codex_approval_to_broker",
-        "N8 section: legacy approval path; table: Approval request N8 -> N7",
-    );
-    case.state_before(state_of(&prompt));
-    // The setup frames and the scripted Codex message, as the fake saw them so far.
-    let mut codex_wire = CodexWireRecorder::with_setup_requests(STARTED_TURN_SETUP_REQUESTS);
-    codex_wire.record_new(&mut case, &transcript);
-    let event = prompt
-        .next_event(&mut catalog)
-        .await
-        .unwrap_or_else(|error| panic!("event: {error}"))
-        .unwrap_or_else(|| panic!("an event"));
-    case.state_after(state_of(&prompt));
-    drop(prompt);
-    fixture.await.unwrap_or_else(|e| panic!("fixture: {e}"));
-    let requests = broker
-        .requests
-        .lock()
-        .map(|r| r.clone())
-        .unwrap_or_default();
-    for request in &requests {
-        case.produced_with(
-            RecordLayer::TypedOutcome,
-            MessageFamily::ApprovalRequest,
-            EdgeParty::Node(ProtocolNode::N7ApprovalsBroker),
-            request.request["method"].as_str().unwrap_or("unknown"),
-            json!({"debug": format!("{request:#?}")}),
-        );
-    }
-    // Whatever else crossed the socket, the adapter's replies included.
-    codex_wire.record_new(&mut case, &transcript);
-    record_prompt_event(&mut case, &event);
-    let row = CatalogRowExpectation::new()
-        .produces_with(
-            MessageFamily::ApprovalRequest,
-            EdgeParty::Node(ProtocolNode::N7ApprovalsBroker),
-            "session/request_permission",
-            // The whole `BrokeredApprovalRequest` (thread, generation, request) as its `Debug` text.
-            json!({"debug": format!("{:#?}", BrokeredApprovalRequest {
-                thread_id: "thread-a".to_owned(),
-                generation: serde_json::from_value(
-                    json!({"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1}),
-                )
-                .unwrap_or_else(|error| panic!("generation: {error}")),
-                request: json!({"jsonrpc":"2.0","id":"permission:{\"session\":\"thread-a\",\"turn\":\"turn-a\",\"sequence\":0}","method":"session/request_permission","params":{"sessionId":"thread-a","toolCall":{"toolCallId":"tool-a","kind":"execute","title":"Execute command","status":"pending","content":[{"type":"content","content":{"type":"text","text":"Command: cargo test"}}]},"options":[{"optionId":"native-accept","kind":"allow_once","name":"Allow this operation once"},{"optionId":"native-decline","kind":"reject_once","name":"Deny this operation"}]}}),
-            })}),
-        )
-        .produces_with(
-            MessageFamily::CodexMessageFromCodex,
-            EdgeParty::Node(ProtocolNode::N10CodexClient),
-            "response:item/commandExecution/requestApproval",
-            json!({"id":7,"result":{"decision":"cancel"}}),
-        )
-        .produces_with(
-            MessageFamily::AcpServedForCodexSessions,
-            EdgeParty::McpCaller,
-            "native-notification:approvalDecisionSubmitted",
-            json!({"kind":"approvalDecisionSubmitted"}),
-        )
-        .state_after(turn_state("turn-a", 1, true));
-    case.finish(&row).assert_settled();
-}
-
-#[tokio::test]
 async fn node_tap_codex_turn_completed_becomes_acp_prompt_response() {
     let mut catalog = AcpSchemaCatalog::load().unwrap_or_else(|e| panic!("catalog: {e}"));
     let mut script = start_turn_steps();
@@ -540,12 +409,7 @@ async fn node_tap_codex_turn_completed_becomes_acp_prompt_response() {
         "thread/read",
         json!({"thread":{"id":"thread-a","model":"gpt-5.6-sol","reasoningEffort":"medium","createdAt":1}}),
     ));
-    let (binding, fixture, transcript) = binding_with_codex_script(
-        &mut catalog,
-        script,
-        Arc::new(crate::RejectingApprovalBroker),
-    )
-    .await;
+    let (binding, fixture, transcript) = binding_with_codex_script(&mut catalog, script).await;
     let mut prompt =
         PendingAcpPrompt::start(binding, &mut catalog, json!(PROMPT_ID), &prompt_params())
             .await

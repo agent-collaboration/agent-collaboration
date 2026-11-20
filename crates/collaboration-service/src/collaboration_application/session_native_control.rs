@@ -5,7 +5,7 @@ use codex_native_integration::{NativeConnectionError, NativeOperation, NativePro
 use collaboration_protocol::{
     ChannelDescription, CodexGeneration, EndpointDescription, NativeInspectParams,
     NativeInspectResult, NativeInterruptKind, NativeInterruptParams, NativeInterruptResult,
-    NativeRenameParams, NativeRenameResult, RouterAccess, SessionRef, SettingsObservation,
+    NativeRenameParams, NativeRenameResult, SessionRef, SettingsObservation,
     SettingsUnavailableReason,
 };
 use serde_json::{Value, json};
@@ -16,7 +16,6 @@ pub struct NativeSessionControl {
     identity: collaboration_contracts::RouterIdentity,
     directory: collaboration_runtime::EndpointDirectory,
     native_backend: Option<collaboration_runtime::NativeControlBackend>,
-    approval_broker: Option<std::sync::Arc<collaboration_runtime::ServiceInteractionBroker>>,
     display_names: collaboration_runtime::SessionDisplayNameCache,
     /// Codex sessions' create-time permission-mode reports, for show.
     permission_modes: Option<std::sync::Arc<dyn collaboration_runtime::CodexPermissionModes>>,
@@ -27,7 +26,6 @@ impl NativeSessionControl {
         identity: collaboration_contracts::RouterIdentity,
         directory: collaboration_runtime::EndpointDirectory,
         native_backend: Option<collaboration_runtime::NativeControlBackend>,
-        approval_broker: Option<std::sync::Arc<collaboration_runtime::ServiceInteractionBroker>>,
         display_names: collaboration_runtime::SessionDisplayNameCache,
         permission_modes: Option<std::sync::Arc<dyn collaboration_runtime::CodexPermissionModes>>,
     ) -> Self {
@@ -35,7 +33,6 @@ impl NativeSessionControl {
             identity,
             directory,
             native_backend,
-            approval_broker,
             display_names,
             permission_modes,
         }
@@ -58,16 +55,6 @@ impl NativeSessionControl {
                 native_params,
             )
             .await?;
-        let effective_access = match self.approval_broker.as_deref() {
-            Some(routes) => {
-                recorded_access(
-                    routes,
-                    String::from(request.target.session_id.clone()).as_str(),
-                )
-                .await
-            }
-            None => None,
-        };
         let result = call.result.map_err(|failure| {
             classify_native_call_failure(stage, false, &failure.error, failure.native.as_ref())
         })?;
@@ -92,7 +79,7 @@ impl NativeSessionControl {
         let inspection = NativeInspectResult {
             target: request.target,
             generation: call.generation,
-            effective_access,
+            effective_access: None,
             settings_observation: SettingsObservation::Unavailable {
                 reason: SettingsUnavailableReason::ThreadReadOmitsSettings,
             },
@@ -378,20 +365,6 @@ pub(crate) fn valid_session_rename_name(name: &str) -> bool {
     name.trim() == name
         && (1..=120).contains(&scalar_count)
         && collaboration_protocol::SessionDisplayName::try_from(name.to_owned()).is_ok()
-}
-
-/// The access Router recorded for this thread, if the broker holds one.
-async fn recorded_access(
-    routes: &collaboration_runtime::ServiceInteractionBroker,
-    thread_id: &str,
-) -> Option<RouterAccess> {
-    use codex_acp_adapter::ApprovalBroker;
-    routes
-        .route(thread_id)
-        .await
-        .ok()
-        .flatten()
-        .map(|route| route.access)
 }
 
 /// Classifies one failed native call.

@@ -24,7 +24,6 @@ import { section as agentSessionTui1 } from "./source-coverage-ledger/agent-sess
 import { section as agentSessionTui2 } from "./source-coverage-ledger/agent-session-tui-2.ts";
 import { section as automationStorage } from "./source-coverage-ledger/automation-storage.ts";
 import { section as boardCentralTestSupport } from "./source-coverage-ledger/board-central-test-support.ts";
-import { section as boardSyncProtocol } from "./source-coverage-ledger/board-sync-protocol.ts";
 import { section as centralLinkClient } from "./source-coverage-ledger/central-link-client.ts";
 import { section as centralLinkProtocol } from "./source-coverage-ledger/central-link-protocol.ts";
 import { section as centralStorage } from "./source-coverage-ledger/central-storage.ts";
@@ -46,7 +45,6 @@ import { section as codexRouterSecretStore } from "./source-coverage-ledger/code
 import { section as codexRouterSelection } from "./source-coverage-ledger/codex-router-selection.ts";
 import { section as codexRouterState } from "./source-coverage-ledger/codex-router-state.ts";
 import { section as codexRouterTestSupport } from "./source-coverage-ledger/codex-router-test-support.ts";
-import { section as collaborationApplicationTestSupport } from "./source-coverage-ledger/collaboration-application-test-support.ts";
 import { section as collaborationCentralAdminProtocol } from "./source-coverage-ledger/collaboration-central-admin-protocol.ts";
 import { section as collaborationCentralCloudflare } from "./source-coverage-ledger/collaboration-central-cloudflare.ts";
 import { section as collaborationCentralConformance } from "./source-coverage-ledger/collaboration-central-conformance.ts";
@@ -68,7 +66,6 @@ import { section as collaborationService2 } from "./source-coverage-ledger/colla
 import { section as collaborationService3 } from "./source-coverage-ledger/collaboration-service-3.ts";
 import { section as collaborationService4 } from "./source-coverage-ledger/collaboration-service-4.ts";
 import { section as fleetIdentityProtocol } from "./source-coverage-ledger/fleet-identity-protocol.ts";
-import { section as interactionStorage } from "./source-coverage-ledger/interaction-storage.ts";
 import { section as lifecycleObservation } from "./source-coverage-ledger/lifecycle-observation.ts";
 import { section as messageBoard } from "./source-coverage-ledger/message-board.ts";
 import { section as nodeTestFixture } from "./source-coverage-ledger/node-test-fixture.ts";
@@ -107,7 +104,6 @@ export const LEDGER_SECTIONS: readonly LedgerSection[] = [
   agentSessionTui2,
   automationStorage,
   boardCentralTestSupport,
-  boardSyncProtocol,
   centralLinkClient,
   centralLinkProtocol,
   centralStorage,
@@ -129,7 +125,6 @@ export const LEDGER_SECTIONS: readonly LedgerSection[] = [
   codexRouterSelection,
   codexRouterState,
   codexRouterTestSupport,
-  collaborationApplicationTestSupport,
   collaborationCentralAdminProtocol,
   collaborationCentralCloudflare,
   collaborationCentralConformance,
@@ -151,7 +146,6 @@ export const LEDGER_SECTIONS: readonly LedgerSection[] = [
   collaborationService3,
   collaborationService4,
   fleetIdentityProtocol,
-  interactionStorage,
   lifecycleObservation,
   messageBoard,
   nodeTestFixture,

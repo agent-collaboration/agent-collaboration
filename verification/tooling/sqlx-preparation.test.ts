@@ -14,7 +14,6 @@ import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 import { z } from "zod";
 import { prepareSqlxMetadata, sqlitePreparationTargets } from "./prepare-sqlx.ts";
-import { prepareTursoMetadata, tursoPreparationTargets } from "./prepare-sqlx-turso.ts";
 import { describeMetadataDifferences, readQueryMetadata } from "./query-metadata-files.ts";
 import type { CommandRunner } from "./process-command.ts";
 
@@ -23,7 +22,7 @@ const callSchema = z.object({
   environment: z.record(z.string(), z.string()),
 });
 const baselineSchema = z.object({
-  kind: z.enum(["sqlite", "turso"]),
+  kind: z.literal("sqlite"),
   mode: z.string(),
   expected: z.object({
     status: z.number(),
@@ -57,12 +56,9 @@ for (const filename of readdirSync(fixtureDirectory).sort()) {
       errors.push(message);
     });
     try {
-      const targets = entry.kind === "sqlite" ? sqlitePreparationTargets : tursoPreparationTargets;
+      const targets = sqlitePreparationTargets;
       for (const target of targets) {
-        const metadata =
-          entry.kind === "sqlite"
-            ? join(root, ".sqlx")
-            : join(root, "crates", target.packageName, ".sqlx");
+        const metadata = join(root, ".sqlx");
         mkdirSync(metadata, { recursive: true });
         const name =
           entry.mode === "check-pass" ? `query-${target.packageName}.json` : "query-original.json";
@@ -111,18 +107,15 @@ for (const filename of readdirSync(fixtureDirectory).sort()) {
         checkMetadata: entry.mode.startsWith("check"),
         runProcess: runner,
       };
-      const status =
-        entry.kind === "sqlite" ? prepareSqlxMetadata(options) : prepareTursoMetadata(options);
-      const metadata: Record<string, Record<string, string>> = {};
-      for (const target of targets) {
-        const relative = entry.kind === "sqlite" ? ".sqlx" : `crates/${target.packageName}/.sqlx`;
-        metadata[relative] = Object.fromEntries(
-          [...readQueryMetadata(join(root, relative))].map(([name, content]) => [
+      const status = prepareSqlxMetadata(options);
+      const metadata = {
+        ".sqlx": Object.fromEntries(
+          [...readQueryMetadata(join(root, ".sqlx"))].map(([name, content]) => [
             name,
             content.toString("utf8"),
           ]),
-        );
-      }
+        ),
+      };
       assert.deepEqual(
         { status, calls, metadata, stderr: errors.length === 0 ? "" : `${errors.join("\n")}\n` },
         entry.expected,

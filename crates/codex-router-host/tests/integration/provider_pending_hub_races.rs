@@ -1,4 +1,4 @@
-//! Real Host, ACP process, approval broker, and Session hub race proof.
+//! Real Host, scripted ACP process, and Session hub race proof.
 
 use codex_router_host::{
     CollaborationRuntime, CollaborationRuntimeInputs, ExternalProviderLaunchBinding,
@@ -217,34 +217,6 @@ impl Drop for HubEventFollow {
     }
 }
 
-async fn wait_for_pending(
-    client: &CollaborationClient,
-    observer: &mut HubEventFollow,
-) -> TestResult<(String, Vec<Value>)> {
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
-    let mut events = Vec::new();
-    loop {
-        let notification = tokio::time::timeout_at(deadline, observer.next_message())
-            .await
-            .map_err(|_| format!("no pending approval event; observed: {events:?}"))??;
-        let event = notification
-            .get("event")
-            .cloned()
-            .ok_or_else(|| format!("missing hub event: {notification:?}; observed: {events:?}"))?;
-        let pending = event.get("kind").and_then(Value::as_str) == Some("interactionRequested");
-        events.push(event);
-        if pending {
-            let pending = client.list_approvals_with_options(true).await?;
-            let approval = pending
-                .approvals
-                .into_iter()
-                .next()
-                .ok_or("real hub announced pending approval but broker list omitted it")?;
-            break Ok((approval.request_id, events));
-        }
-    }
-}
-
 async fn watch_turn(
     observer: &mut HubEventFollow,
     terminal: &'static str,
@@ -267,27 +239,14 @@ async fn watch_turn(
     }
 }
 
-fn assert_interaction_settles_before_turn_end(events: &[Value]) -> TestResult {
-    let requested = events
-        .iter()
-        .position(|event| event.get("kind").and_then(Value::as_str) == Some("interactionRequested"))
-        .ok_or("real hub omitted interaction request")?;
-    let resolved = events
-        .iter()
-        .position(|event| event.get("kind").and_then(Value::as_str) == Some("interactionResolved"))
-        .ok_or("real hub omitted interaction resolution")?;
-    let ended = events
-        .iter()
-        .position(|event| event.get("kind").and_then(Value::as_str) == Some("turnEnded"))
-        .ok_or("real hub omitted turn end")?;
-    if requested >= resolved || resolved >= ended {
-        return Err(format!("hub event order: {events:?}").into());
-    }
-    if events
-        .iter()
-        .any(|event| event.get("kind").and_then(Value::as_str) == Some("resyncRequired"))
-    {
-        return Err(format!("hub rejected event projection: {events:?}").into());
+fn assert_no_interaction_events(events: &[Value]) -> TestResult {
+    if events.iter().any(|event| {
+        matches!(
+            event["kind"].as_str(),
+            Some("interactionRequested" | "interactionResolved")
+        )
+    }) {
+        return Err("a held provider operation published an interaction".into());
     }
     Ok(())
 }
@@ -347,15 +306,15 @@ async fn wait_for_retired_endpoint(
 }
 
 #[tokio::test]
-async fn provider_exit_resolves_pending_approval_before_lost_turn() -> TestResult {
+async fn provider_exit_projects_lost_turn_and_unloads_session() -> TestResult {
     let root = tempfile::tempdir()?;
     let runtime = start_host(root.path()).await?;
     let client = CollaborationClient::connect(root.path(), "exit-control", "1").await?;
     let (target, actor, approver, generation) = create_session(&client, root.path()).await?;
     let mut observer = HubEventFollow::new(&client, &target);
     let _prompt = prompt(&client, &target, &actor, &approver, &generation)?;
-    let (request_id, initial_events) = wait_for_pending(&client, &mut observer).await?;
-    // The streamed pending event proves this call is attached before the exit.
+    let initial_events = watch_turn(&mut observer, "turnStarted", Vec::new()).await?;
+    // The streamed turn-start event proves this call is attached before the exit.
     if observer.call.is_finished() {
         return Err("observation ended before provider exit".into());
     }
@@ -363,23 +322,13 @@ async fn provider_exit_resolves_pending_approval_before_lost_turn() -> TestResul
     use tokio::io::AsyncWriteExt as _;
     exit.write_all(b"x").await?;
     let events = watch_turn(&mut observer, "turnEnded", initial_events).await?;
-    assert_interaction_settles_before_turn_end(&events)?;
+    assert_no_interaction_events(&events)?;
     let turn_ended = events
         .iter()
         .find(|event| event.get("kind").and_then(Value::as_str) == Some("turnEnded"))
         .ok_or("lost turn missing")?;
     if turn_ended.get("outcome") != Some(&json!({"kind":"lost","reason":"providerRetired"})) {
         return Err(format!("expected provider-retired lost turn: {turn_ended:?}").into());
-    }
-    let settled = client.list_approvals_with_options(false).await?;
-    if !settled.approvals.iter().any(|approval| {
-        approval.request_id == request_id && approval.reason.as_deref() == Some("providerRetired")
-    }) {
-        return Err(format!(
-            "retired approval not visible in detailed list: {:?}",
-            settled.approvals
-        )
-        .into());
     }
     let state = listed_state(&client, &target).await?;
     if state != ProviderSessionState::Unloaded {
@@ -392,14 +341,14 @@ async fn provider_exit_resolves_pending_approval_before_lost_turn() -> TestResul
 
 #[tokio::test]
 async fn observation_resume_after_provider_retirement_is_unavailable() -> TestResult {
-    // Arrange: an attached observer has a cursor at the pending approval.
+    // Arrange: an attached observer has a cursor at the held turn.
     let root = tempfile::tempdir()?;
     let runtime = start_host(root.path()).await?;
     let client = CollaborationClient::connect(root.path(), "retired-observer", "1").await?;
     let (target, actor, approver, generation) = create_session(&client, root.path()).await?;
     let mut observer = HubEventFollow::new(&client, &target);
     let _prompt = prompt(&client, &target, &actor, &approver, &generation)?;
-    let _pending = wait_for_pending(&client, &mut observer).await?;
+    watch_turn(&mut observer, "turnStarted", Vec::new()).await?;
     let request = BoundedObservationRequest {
         target: target.clone(),
         timeout_seconds: 1,
@@ -435,7 +384,7 @@ async fn observation_resume_after_provider_retirement_is_unavailable() -> TestRe
 }
 
 #[tokio::test]
-async fn explicit_cancel_settles_approval_and_keeps_peer_session_usable() -> TestResult {
+async fn explicit_cancel_ends_held_turn_and_keeps_peer_session_usable() -> TestResult {
     let root = tempfile::tempdir()?;
     let runtime = start_host(root.path()).await?;
     let client = CollaborationClient::connect(root.path(), "cancel-control", "1").await?;
@@ -443,7 +392,7 @@ async fn explicit_cancel_settles_approval_and_keeps_peer_session_usable() -> Tes
     let (peer, _, _, _) = create_session(&client, root.path()).await?;
     let mut observer = HubEventFollow::new(&client, &target);
     let (prompt_id, _prompt) = prompt(&client, &target, &actor, &approver, &generation)?;
-    let (request_id, initial_events) = wait_for_pending(&client, &mut observer).await?;
+    let initial_events = watch_turn(&mut observer, "turnStarted", Vec::new()).await?;
     let cancel_id = OperationId::generate();
     submit_provider_cancel(
         &client,
@@ -461,17 +410,7 @@ async fn explicit_cancel_settles_approval_and_keeps_peer_session_usable() -> Tes
     use tokio::io::AsyncWriteExt as _;
     release.write_all(b"c").await?;
     let events = watch_turn(&mut observer, "turnEnded", initial_events).await?;
-    assert_interaction_settles_before_turn_end(&events)?;
-    let settled = client.list_approvals_with_options(false).await?;
-    if !settled.approvals.iter().any(|approval| {
-        approval.request_id == request_id && approval.reason.as_deref() == Some("turnCancelled")
-    }) {
-        return Err(format!(
-            "cancelled approval not visible in detailed list: {:?}",
-            settled.approvals
-        )
-        .into());
-    }
+    assert_no_interaction_events(&events)?;
     let state = listed_state(&client, &target).await?;
     if state != ProviderSessionState::Idle {
         return Err(format!("cancelled Session remained in {state:?}").into());

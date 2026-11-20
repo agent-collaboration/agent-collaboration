@@ -1,20 +1,10 @@
 //! Real debug Host discovery/configuration/owned-thread proof. Never selects a user thread.
 #[path = "debug_host_acceptance/acp_client_proof.rs"]
 mod acp_client_proof;
-#[path = "debug_host_acceptance/acp_permission_proof.rs"]
-mod acp_permission_proof;
 #[path = "debug_host_acceptance/acp_replacement_proof.rs"]
 mod acp_replacement_proof;
-#[path = "debug_host_acceptance/agent_tool_proof.rs"]
-mod agent_tool_proof;
-#[path = "debug_host_acceptance/cli_event_listener.rs"]
-mod cli_event_listener;
-#[path = "debug_host_acceptance/cli_message_proof.rs"]
-mod cli_message_proof;
 #[path = "debug_host_acceptance/lifecycle_reader_proof.rs"]
 mod lifecycle_reader_proof;
-#[path = "debug_host_acceptance/native_delivery_proof.rs"]
-mod native_delivery_proof;
 #[path = "debug_host_acceptance/native_fork_proof.rs"]
 mod native_fork_proof;
 #[path = "debug_host_acceptance/owned_thread_registry.rs"]
@@ -33,13 +23,8 @@ enum MessageProof {
     None,
     Native,
     NativeFork,
-    Cli(PathBuf),
-    Agents(PathBuf),
     Acp(PathBuf),
     AcpCli(PathBuf),
-    AcpPermission(PathBuf),
-    AcpPermissionRace(PathBuf),
-    Delivery(PathBuf),
     AcpReplacement(PathBuf),
     Recovery,
 }
@@ -78,16 +63,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )?),
         Some("--messages") => MessageProof::Native,
         Some("--native-fork") => MessageProof::NativeFork,
-        Some("--delivery") => MessageProof::Delivery(std::fs::canonicalize(
-            std::env::args_os()
-                .nth(3)
-                .ok_or("--delivery requires built agent-collaboration path")?,
-        )?),
-        Some("--cli-messages") => MessageProof::Cli(std::fs::canonicalize(
-            std::env::args_os()
-                .nth(3)
-                .ok_or("--cli-messages requires built agent-collaboration path")?,
-        )?),
         Some("--acp-cli") => MessageProof::AcpCli(std::fs::canonicalize(
             std::env::args_os()
                 .nth(3)
@@ -98,23 +73,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .nth(3)
                 .ok_or("--acp-client requires pinned SDK module path")?,
         )?),
-        Some("--acp-permission") => MessageProof::AcpPermission(std::fs::canonicalize(
-            std::env::args_os()
-                .nth(3)
-                .ok_or("--acp-permission requires pinned SDK module path")?,
-        )?),
-        Some("--acp-permission-race") => MessageProof::AcpPermissionRace(std::fs::canonicalize(
-            std::env::args_os()
-                .nth(3)
-                .ok_or("--acp-permission-race requires pinned SDK module path")?,
-        )?),
-        Some("--agent-messages") => MessageProof::Agents(std::fs::canonicalize(
-            std::env::args_os()
-                .nth(3)
-                .ok_or("--agent-messages requires built agent-collaboration path")?,
-        )?),
         _ => {
-            return Err("expected --messages, --cli-messages PATH or --agent-messages PATH".into());
+            return Err("unrecognized debug acceptance journey".into());
         }
     };
     let home = PathBuf::from(std::env::var_os("HOME").ok_or("HOME unavailable")?);
@@ -173,8 +133,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let outcome = tokio::time::timeout(
         Duration::from_secs(if matches!(messages, MessageProof::Recovery) {
             600
-        } else if matches!(messages, MessageProof::Agents(_)) {
-            360
         } else {
             180
         }),
@@ -315,47 +273,10 @@ async fn probe(
         )
         .await;
     }
-    if let MessageProof::Delivery(executable) = messages {
-        return native_delivery_proof::run_delivery_proof(
-            &mut native,
-            &mut owned,
-            native_delivery_proof::DeliveryProofRequest {
-                executable,
-                directory: &directory,
-                cwd: &cwd,
-            },
-        )
-        .await;
-    }
-    if let MessageProof::AcpPermission(sdk) | MessageProof::AcpPermissionRace(sdk) = messages {
-        return acp_permission_proof::run_permission_proof(
-            &mut native,
-            &mut owned,
-            acp_permission_proof::PermissionProofRequest {
-                directory: &directory,
-                sdk,
-                cwd: &cwd,
-                competing_responder: matches!(messages, MessageProof::AcpPermissionRace(_)),
-            },
-        )
-        .await;
-    }
-    let first = if matches!(messages, MessageProof::Agents(_)) {
-        owned
-            .create_with_socket_access(&mut native, &cwd, &directory.join("control.sock"))
-            .await?
-    } else {
-        owned.create(&mut native, &cwd).await?
-    };
+    let first = owned.create(&mut native, &cwd).await?;
     owned.inspect(&mut native, &first).await?;
     let mut peer = NativeProtocolConnection::connect(&socket).await?;
-    let second = if matches!(messages, MessageProof::Agents(_)) {
-        owned
-            .create_with_socket_access(&mut peer, &cwd, &directory.join("control.sock"))
-            .await?
-    } else {
-        owned.create(&mut peer, &cwd).await?
-    };
+    let second = owned.create(&mut peer, &cwd).await?;
     owned.inspect(&mut peer, &second).await?;
     if matches!(messages, MessageProof::NativeFork) {
         return native_fork_proof::run_owned_fork_proof(&mut native, &mut owned, &first, &cwd)
@@ -388,81 +309,6 @@ async fn probe(
             "{}",
             json!({"kind":"ownedMessageExchangePassed","proof":"two native clients, two turns and client-explicit return; no autonomous agent CLI or TUI recovery claim"})
         );
-    }
-    if let MessageProof::Cli(executable) = messages {
-        let client =
-            CollaborationClient::connect(&directory, "cli-proof", env!("CARGO_PKG_VERSION"))
-                .await?;
-        let inventory = client.list_endpoints().await?;
-        let endpoint = inventory
-            .endpoints
-            .into_iter()
-            .find(|endpoint| String::from(endpoint.endpoint.endpoint_id.clone()) == "codex-local")
-            .ok_or("missing endpoint")?
-            .endpoint;
-        let target = collaboration_protocol::SessionRef {
-            endpoint: endpoint.clone(),
-            session_id: second.clone().try_into()?,
-        };
-        let sender = collaboration_protocol::SessionRef {
-            endpoint,
-            session_id: first.clone().try_into()?,
-        };
-        owned.require_owned(&second)?;
-        let turn = cli_message_proof::submit(cli_message_proof::CliSubmission {
-            executable,
-            directory: &directory,
-            target: &target,
-            sender: &sender,
-            text: "Do not use tools or modify files. Reply with exactly: DEBUG_CLI_REPLY_B",
-        })
-        .await?;
-        let reply = owned.observe_turn(&mut peer, &second, &turn).await?;
-        if reply.trim() != "DEBUG_CLI_REPLY_B" {
-            return Err("CLI target reply mismatch".into());
-        }
-        owned.require_owned(&first)?;
-        let turn = cli_message_proof::submit(cli_message_proof::CliSubmission { executable, directory:&directory, target:&sender, sender:&target, text:"Do not use tools or modify files. A separate thread replied. Reply with exactly: DEBUG_CLI_REPLY_A" }).await?;
-        let reply = owned.observe_turn(&mut native, &first, &turn).await?;
-        if reply.trim() != "DEBUG_CLI_REPLY_A" {
-            return Err("CLI return reply mismatch".into());
-        }
-        println!(
-            "{}",
-            json!({"kind":"ownedCliExchangePassed","proof":"built CLI to the collaboration API, two Luna turns, explicit CLI return; autonomous agent tool use not yet proven"})
-        );
-    }
-    if let MessageProof::Agents(executable) = messages {
-        let client =
-            CollaborationClient::connect(&directory, "agent-proof", env!("CARGO_PKG_VERSION"))
-                .await?;
-        let endpoint = client
-            .list_endpoints()
-            .await?
-            .endpoints
-            .into_iter()
-            .find(|e| String::from(e.endpoint.endpoint_id.clone()) == "codex-local")
-            .ok_or("missing endpoint")?
-            .endpoint;
-        let first_ref = collaboration_protocol::SessionRef {
-            endpoint: endpoint.clone(),
-            session_id: first.clone().try_into()?,
-        };
-        let second_ref = collaboration_protocol::SessionRef {
-            endpoint,
-            session_id: second.clone().try_into()?,
-        };
-        let mut denied = agent_tool_proof::DeniedTargets::bind()?;
-        let task = agent_tool_proof::initial_task(
-            executable,
-            &directory,
-            &first_ref,
-            &second_ref,
-            &mut denied,
-        )?;
-        owned.require_owned(&second)?;
-        let _receipt = owned.submit_text(&mut native, &first, &task).await?;
-        agent_tool_proof::observe(&mut native, &mut peer, &first, &second).await?;
     }
     acp_client_proof::run_client_proof(
         &owned,

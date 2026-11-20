@@ -85,21 +85,6 @@ export const section: LedgerSection = {
       note: "board listeners without a native process; reads service.json with the owning ServiceManifest type (105-106); json! status lines to stdout (122,129) are harness output",
     },
     {
-      file: `${R}board-debug-runtime/fixture_provider.rs`,
-      disposition: { kind: "none" },
-      note: "FixtureProviderLaunch serde (8-13) reads the journey's fixture-provider-acp.json launch file, not a message",
-    },
-    {
-      file: `${R}board-debug-runtime/local_cancel_observation.rs`,
-      disposition: { kind: "none" },
-      note: "test-only stdin query protocol ProjectQuery serde (9-17) and json! reply lines (40-81); debug harness IPC, not one of the four protocols",
-    },
-    {
-      file: `${R}board-debug-runtime/mail_faults.rs`,
-      disposition: { kind: "none" },
-      note: "decodes the debug fault file into interaction_storage::MailStoreTestFault (12-13), its owning type",
-    },
-    {
       file: `${R}board-debug-runtime/shutdown_signals.rs`,
       disposition: { kind: "none" },
       note: "signal registration",
@@ -145,39 +130,14 @@ export const section: LedgerSection = {
       note: "inspect_thread (38,83) sends thread/read {includeTurns:false} and reads thread.model; parses agent-collaboration `conversation prompt --json` record lines sessionReady, sessionUpdate update.sessionUpdate agent_message_chunk update.content.text, promptResult result.stopReason end_turn (130-156); the ACP client in scripts/proof-tools/acp-client-proof.mjs and the CLI do their own sends outside this crate",
     },
     {
-      file: `${R}debug_host_acceptance/acp_permission_proof.rs`,
-      disposition: { kind: "sends", owners: ["codex"] },
-      note: "answers the Codex server request item/commandExecution/requestApproval with {decision:cancel} (153) through submit_callback_response (148); reads params.threadId, command, availableDecisions, itemId by Value::get (119-147) and item/completed item.type commandExecution, item.status declined, item.id (159-176); reads the proof script receipt kind, sessionId, toolCallId (90-94)",
-    },
-    {
       file: `${R}debug_host_acceptance/acp_replacement_proof.rs`,
       disposition: { kind: "sends", owners: ["codex", "mcp"] },
       note: "NativeProtocolConnection::connect (120) sends initialize and initialized; inspect_thread (121) sends thread/read {includeTurns:false} and reads thread.model; CollaborationClient endpoints_list (163) read as typed ChannelDescription::NativeCodex generation; proof script record lines read by kind and sessionId (142-158), harness output",
     },
     {
-      file: `${R}debug_host_acceptance/agent_tool_proof.rs`,
-      disposition: { kind: "converts", owners: ["router-vocabulary", "codex"] },
-      note: "serializes collaboration SessionRef values to JSON text with serde_json::to_string (19-20) and embeds them as CLI --from/--to arguments in the model's task prompt (21-35); reads Codex notifications by Value::get: request id presence (57), item/completed item.type commandExecution, command, exitCode, aggregatedOutput, agentMessage text (58-80)",
-    },
-    {
-      file: `${R}debug_host_acceptance/cli_event_listener.rs`,
-      disposition: { kind: "reads", owners: ["router-vocabulary", "codex"] },
-      note: "hand-parses agent-collaboration `events listen` record lines: listenerReady target.sessionId and generation (44-53), nativeMessage generation, target.sessionId and the wrapped Codex message, callback detection by method+id (79-92); run_json_command reads the CLI result envelope result (122-133)",
-    },
-    {
-      file: `${R}debug_host_acceptance/cli_message_proof.rs`,
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "SessionRef to JSON text for CLI --to/--from arguments (18,20) and serde_json::to_value comparison with the receipt (39); reads the CLI receipt result.target, acceptance.kind nativeInputAccepted, acceptance.turnId and error (30-47)",
-    },
-    {
       file: `${R}debug_host_acceptance/lifecycle_reader_proof.rs`,
       disposition: { kind: "sends", owners: ["mcp"] },
       note: "CollaborationClient tool calls journal_status (21), sessions_list (48), addresses_list (75), journal_read (111,120), decoded into the typed collaboration_protocol shapes; serde_json::to_value of watermark and coverage (79-80) only to compare pages, not a conversion between types",
-    },
-    {
-      file: `${R}debug_host_acceptance/native_delivery_proof.rs`,
-      disposition: { kind: "sends", owners: ["codex", "router-vocabulary"] },
-      note: "sends thread/queue/delete {threadId,queuedSubmissionId} (146), thread/queue/list {threadId,limit} (274), thread/read {threadId,includeTurns:true} (294) and inspect_thread thread/read (138); hand-built SessionRef JSON {endpoint:{serviceId,endpointId},sessionId} (47-50) passed as CLI --from/--to text (223,225) and compared with receipts (244); reads CLI receipts acceptance.kind/turnId/submissionId, generation serviceEpoch/generation, interruptCompleted (61-136, 233-262) and Codex notifications turn/completed turn.id/status, item/completed agentMessage text, item/agentMessage/delta turnId, queue data[].id, thread.turns[].status, status.type (63, 115-127, 139, 174-198, 276-307)",
     },
     {
       file: `${R}debug_host_acceptance/native_fork_proof.rs`,
@@ -245,11 +205,6 @@ export const section: LedgerSection = {
     mcpCall("debug_host_acceptance.rs", 440, "endpoints_list"),
     inspectSend("debug_host_acceptance/acp_client_proof.rs", 38),
     inspectSend("debug_host_acceptance/acp_client_proof.rs", 83),
-    codexSend(
-      "debug_host_acceptance/acp_permission_proof.rs",
-      153,
-      "response to item/commandExecution/requestApproval {decision:cancel}",
-    ),
     ...connectSends("debug_host_acceptance/acp_replacement_proof.rs", 120),
     inspectSend("debug_host_acceptance/acp_replacement_proof.rs", 121),
     mcpCall("debug_host_acceptance/acp_replacement_proof.rs", 163, "endpoints_list"),
@@ -258,22 +213,6 @@ export const section: LedgerSection = {
     mcpCall("debug_host_acceptance/lifecycle_reader_proof.rs", 75, "addresses_list"),
     mcpCall("debug_host_acceptance/lifecycle_reader_proof.rs", 111, "journal_read"),
     mcpCall("debug_host_acceptance/lifecycle_reader_proof.rs", 120, "journal_read"),
-    inspectSend("debug_host_acceptance/native_delivery_proof.rs", 138),
-    codexSend(
-      "debug_host_acceptance/native_delivery_proof.rs",
-      146,
-      "thread/queue/delete {threadId,queuedSubmissionId}",
-    ),
-    codexSend(
-      "debug_host_acceptance/native_delivery_proof.rs",
-      274,
-      "thread/queue/list {threadId,limit}",
-    ),
-    codexSend(
-      "debug_host_acceptance/native_delivery_proof.rs",
-      294,
-      "thread/read {threadId,includeTurns}",
-    ),
     codexSend(
       "debug_host_acceptance/native_fork_proof.rs",
       25,

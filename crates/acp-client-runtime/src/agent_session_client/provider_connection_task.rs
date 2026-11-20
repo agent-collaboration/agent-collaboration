@@ -191,10 +191,11 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                         crate::provider_transport_diagnostics::record_callback_entered(crate::provider_transport_diagnostics::ProviderFrameKind::Permission);
                         #[cfg(any(test, feature = "test-observation"))]
                         callback_permission_request_count.fetch_add(1, Ordering::Relaxed);
-                        let in_folder_allowance = super::in_folder_allowance::active_grant(
+                        let in_folder_allowance = callback_interaction_port.managed_refusal().is_none()
+                            .then(|| super::in_folder_allowance::active_grant(
                             &callback_in_folder_grants,
                             request.session_id.0.as_ref(),
-                        )
+                        )).flatten()
                             .and_then(|grant| grant.allow_once(&request.tool_call, &request.options));
                         if let Some(option_id) = in_folder_allowance {
                             // Inside the session's own folders auto mode needs no question (R4, Q3).

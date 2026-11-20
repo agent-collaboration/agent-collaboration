@@ -35,6 +35,12 @@ pub trait InteractionPort: Send + Sync + 'static {
     type Context: Clone + Send + Sync + 'static;
     type OperationId: Clone + Eq + Hash + Send + Sync + 'static;
 
+    fn managed_refusal(
+        &self,
+    ) -> Option<session_event_model::managed_interaction_refusal::ManagedInteractionRefusal> {
+        None
+    }
+
     fn operation_id(context: &Self::Context) -> Self::OperationId;
 
     fn binding_retirement(context: &Self::Context) -> CancellationToken;

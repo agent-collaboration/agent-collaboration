@@ -24,20 +24,12 @@ pub fn run_sessions_picker_test_harness() -> std::io::Result<()> {
 #[must_use]
 pub fn command_help() -> String {
     let help = format!(
-        "{}\nCollaboration:\n  conversation create --endpoint ID --cwd PATH --access write-restricted|workspace-write [--operation-id UUID] [--mode ID] [--model ID] [--effort LEVEL] [--fork SESSION] [--generation JSON] [--timeout-seconds 300] --json\n  conversation settings set --target ADDRESS --actor ADDRESS --setting mode|model|effort --value ID --json\n  conversation settings accept --target ADDRESS --actor ADDRESS --json\n  conversation prompt --endpoint ID --new|--session ID|--fork ID|--to ADDRESS [--cwd PATH] [--operation-id UUID] [--prompt-operation-id UUID] [--generation JSON] --text-file PATH --json\n  conversation load --target ADDRESS --cwd PATH --access write-restricted|workspace-write [--operation-id UUID] [--generation JSON] --json\n  conversation resume --target ADDRESS --cwd PATH --access write-restricted|workspace-write [--operation-id UUID] [--generation JSON] --json\n  conversation close --target ADDRESS [--operation-id UUID] [--generation JSON] --json\n  conversation cancel --target ADDRESS --target-operation-id UUID [--operation-id UUID] [--generation JSON] --json\n  conversation operation show|wait|reconcile --operation-id UUID --json\n  sessions list --endpoint ID --view stored|loaded|active --cwd PATH|--checkout PATH|--repo PATH|--any [--source interactive|subagents|all] --json\n  events listen --endpoint ID --session ID --attach [--timeout-seconds 60]\n  message send --to ADDRESS --from ADDRESS [--delivery auto|queue|steer] --text TEXT --json\n  message send --human-user --to ADDRESS --text-file PATH --json\n  whoami [--json] (this agent's SessionRef from CODEX_THREAD_ID, CLAUDE_CODE_SESSION_ID or CURSOR_CONVERSATION_ID)\n  endpoints list --json [--service-directory PATH]\n  addresses list --endpoint ID --json [--cursor CURSOR]\n  session inspect --endpoint ID --session ID --json\n  session rename --endpoint ID --session ID --name TEXT --json\n  turn interrupt --endpoint ID --session ID --turn ID --json\n  native --endpoint ID\n  acp --endpoint ID\n  journal status --json\n  journal read --endpoint ID --journal-id UUID --after SEQUENCE --json\n",
+        "{}\nCollaboration:\n  conversation create --endpoint ID --cwd PATH --access write-restricted|workspace-write [--operation-id UUID] [--mode ID] [--model ID] [--effort LEVEL] [--fork SESSION] [--generation JSON] [--timeout-seconds 300] --json\n  conversation settings set --target ADDRESS --actor ADDRESS --setting mode|model|effort --value ID --json\n  conversation settings accept --target ADDRESS --actor ADDRESS --json\n  conversation prompt --endpoint ID --new|--session ID|--fork ID|--to ADDRESS [--cwd PATH] [--operation-id UUID] [--prompt-operation-id UUID] [--generation JSON] --text-file PATH --json\n  conversation load --target ADDRESS --cwd PATH --access write-restricted|workspace-write [--operation-id UUID] [--generation JSON] --json\n  conversation resume --target ADDRESS --cwd PATH --access write-restricted|workspace-write [--operation-id UUID] [--generation JSON] --json\n  conversation close --target ADDRESS [--operation-id UUID] [--generation JSON] --json\n  conversation cancel --target ADDRESS --target-operation-id UUID [--operation-id UUID] [--generation JSON] --json\n  conversation operation show|wait|reconcile --operation-id UUID --json\n  sessions list --endpoint ID --view stored|loaded|active --cwd PATH|--checkout PATH|--repo PATH|--any [--source interactive|subagents|all] --json\n  events listen --endpoint ID --session ID --attach [--timeout-seconds 60]\n  whoami [--json] (this agent's SessionRef from CODEX_THREAD_ID, CLAUDE_CODE_SESSION_ID or CURSOR_CONVERSATION_ID)\n  endpoints list --json [--service-directory PATH]\n  addresses list --endpoint ID --json [--cursor CURSOR]\n  session inspect --endpoint ID --session ID --json\n  session rename --endpoint ID --session ID --name TEXT --json\n  turn interrupt --endpoint ID --session ID --turn ID --json\n  native --endpoint ID\n  acp --endpoint ID\n  journal status --json\n  journal read --endpoint ID --journal-id UUID --after SEQUENCE --json\n",
         agent_session_inventory::sessions::command_help("agent-collaboration")
     );
     help.replace(
         "  events listen --endpoint ID --session ID --attach [--timeout-seconds 60]\n",
-        "  events listen --endpoint ID --session ID --attach [--timeout-seconds 60]\n  events observe --endpoint ID --session ID --attach [--timeout-seconds 60] [--max-events 256] [--max-bytes 262144] [--after-sequence N --epoch N]\n  approval list|decide --help\n  question list|answer --help\n",
-    )
-    .replace(
-        "  message send --to ADDRESS --from ADDRESS",
-        "  message send --to ADDRESS",
-    )
-    .replace(
-        "  whoami [--json]",
-        "  show <PUSH_ID_OR_LINK> [--service-directory PATH] [--json]\n  message inbox [--limit 50] [--service-directory PATH] [--json]\n  message history --with SESSIONREF_JSON [--limit 50] [--service-directory PATH] [--json]\n  message reply <PUSH_ID_OR_LINK> [TEXT] [--text-file PATH] [--json]\n  whoami [--json]",
+        "  events listen --endpoint ID --session ID --attach [--timeout-seconds 60]\n  events observe --endpoint ID --session ID --attach [--timeout-seconds 60] [--max-events 256] [--max-bytes 262144] [--after-sequence N --epoch N]\n",
     )
 }
 
@@ -54,11 +46,7 @@ pub use endpoint_commands::run_endpoint_command;
 mod whoami_command;
 pub use whoami_command::run_whoami_command;
 mod address_book_commands;
-mod approval_commands;
-mod question_commands;
 pub use address_book_commands::run_address_command;
-pub use approval_commands::run_approval_command;
-pub use question_commands::run_question_command;
 
 mod journal_read_commands;
 mod native_stdio_bridge;
@@ -66,10 +54,6 @@ pub use journal_read_commands::run_journal_command;
 pub use native_stdio_bridge::run_native_command;
 mod native_session_commands;
 pub use native_session_commands::run_native_session_command;
-
-mod failure_line;
-mod message_commands;
-pub use message_commands::{run_message_command, run_push_record_show_command};
 
 mod event_commands;
 pub use event_commands::run_event_command;
@@ -91,6 +75,5 @@ pub use acp_stdio_bridge::run_acp_command;
 mod session_contract_tests;
 
 mod automation_argument_feedback;
-mod message_input_arguments;
 mod retired_command_groups;
 pub use retired_command_groups::refuse_retired_command_group;

@@ -6,7 +6,7 @@ use crate::api_test_harness::{
 use crate::request_slot_holder::RequestSlotHolder;
 use reqwest::header::{ACCEPT, CONTENT_TYPE, ORIGIN};
 use serde_json::{Value, json};
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
 fn private_directory() -> tempfile::TempDir {
     use std::os::unix::fs::PermissionsExt as _;
@@ -15,16 +15,6 @@ fn private_directory() -> tempfile::TempDir {
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private directory permissions");
     directory
-}
-
-/// One application clock, held still, so every read stamps the same time.
-fn fixed_clock() -> Arc<router_clock::ManualClock> {
-    Arc::new(
-        router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
-            1_792_432_800_000,
-        ))
-        .expect("fixed application time"),
-    )
 }
 
 fn structured(result: &rmcp::model::CallToolResult) -> Value {
@@ -48,7 +38,6 @@ async fn arguments_that_do_not_decode_get_a_structured_validation_failure_on_bot
     let malformed = [
         ("session_rename", json!({"target": target, "name": null})),
         ("session_rename", json!({"target": target})),
-        ("approval_decide", json!({"requestId": 7})),
         ("events_observe", json!({})),
     ];
 
@@ -191,9 +180,9 @@ async fn the_same_call_returns_the_same_structured_result_on_tcp_and_unix() {
     // Arrange: one installation read on a still application clock.
     let directory = private_directory();
     let application = test_identity()
-        .with_runtime_clock(fixed_clock())
         .with_installation_peer(
-            fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).expect("installation peer"),
+            collaboration_protocol::InstallationPeerId::try_from(uuid::Uuid::now_v7().to_string())
+                .expect("installation peer"),
         )
         .expect("installation peer")
         .build();

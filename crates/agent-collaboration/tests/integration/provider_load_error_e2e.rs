@@ -1,4 +1,4 @@
-//! A real ACP load failure keeps its trace reference through CLI show and the stored push.
+//! A real ACP load failure keeps its redacted trace reference in the direct delivery result.
 
 use codex_router_host::{
     CollaborationRuntime, CollaborationRuntimeInputs, ExternalProviderLaunchBinding,
@@ -10,15 +10,12 @@ use collaboration_protocol::{
 };
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionRecord;
-use serde_json::{Value, json};
-use sqlx::Connection;
-use sqlx_turso::{TursoConnectOptions, TursoConnection};
+use serde_json::Value;
 use std::{
     io::{self, Write},
     os::unix::fs::PermissionsExt as _,
     path::Path,
     sync::{Arc, Mutex},
-    time::Duration,
 };
 use tracing_subscriber::{fmt::MakeWriter, util::SubscriberInitExt};
 
@@ -68,7 +65,7 @@ impl<'writer> MakeWriter<'writer> for CapturedTrace {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
+async fn acp_load_failure_correlation_matches_direct_route_result() {
     let captured_trace = CapturedTrace::default();
     tracing_subscriber::fmt()
         .json()
@@ -125,111 +122,40 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
     };
     record_unloaded_provider_session(root.path(), &target, &caller).await;
 
-    let service_directory = root.path().display().to_string();
-    // An automatic message to the unloaded Session may load it; the provider refuses the load.
-    let target_json = serde_json::to_string(&target).expect("target JSON");
-    let message_send = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
-        .args([
-            "message",
-            "send",
-            "--to",
-            &target_json,
-            "--text",
-            MESSAGE_BODY,
-            "--json",
-            "--service-directory",
-            &service_directory,
-        ])
-        .env("CODEX_THREAD_ID", SENDER_SESSION_ID)
-        .env_remove("CLAUDE_CODE_SESSION_ID")
-        .env_remove("CURSOR_CONVERSATION_ID")
-        .output()
-        .await
-        .expect("send one message through the CLI");
-    let sent: Value = serde_json::from_slice(&message_send.stdout).unwrap_or_else(|error| {
-        panic!(
-            "message JSON: {error}; stderr={}",
-            String::from_utf8_lossy(&message_send.stderr)
-        )
-    });
-    assert_eq!(
-        sent.pointer("/result/record/receipt/outcome/kind"),
-        Some(&json!("rejected")),
-        "{sent}"
-    );
-
-    let interaction_database = root.path().join("interaction.sqlite");
-    let mut connection =
-        TursoConnection::connect_with(&TursoConnectOptions::new().filename(&interaction_database))
-            .await
-            .expect("native interaction database observer");
-    let (push_id, delivery_state, stored_outcome) = tokio::time::timeout(
-        Duration::from_secs(5),
-        async {
-            loop {
-                let row = sqlx::query_as::<_, (String, String, Option<String>)>(
-                    "SELECT push_id, delivery_state, last_outcome_json FROM router_pushes WHERE body = ? ORDER BY created_at DESC LIMIT 1",
-                )
-                .bind(MESSAGE_BODY)
-                .fetch_optional(&mut connection)
-                .await
-                .expect("read stored message push");
-                if let Some((push_id, delivery_state, Some(stored_outcome))) = row
-                    && delivery_state == "rejected"
-                {
-                    break (push_id, delivery_state, stored_outcome);
-                }
-                tokio::task::yield_now().await;
-            }
-        },
-    )
-    .await
-    .expect("message provider failure was stored");
-    connection.close().await.expect("close database connection");
-    assert_eq!(delivery_state, "rejected");
-
-    let client = collaboration_client::CollaborationClient::connect(
-        root.path(),
-        "provider-error-proof",
-        "1",
-    )
-    .await
-    .expect("API client for the stored link");
-    let stored = client
-        .router_show(collaboration_protocol::PushRecordShowParams {
-            caller: target.clone(),
-            reference: push_id,
-        })
-        .await
-        .expect("stored message push inspection");
-    let collaboration_protocol::MessageShowResult::Local(stored) = stored else {
-        panic!("native proof expected a stored local push");
+    use collaboration_contracts::{
+        DeliveryPrecondition, LoadPolicy, SessionMessageDelivery, UnstoredAttemptEvidenceSink,
+        layer_zero::{DeliveryRequest, PreparedPush},
     };
-    let link = stored.link;
-
-    let show = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
-        .args([
-            "show",
-            &link,
-            "--service-directory",
-            &service_directory,
-            "--json",
-        ])
-        .env("CURSOR_CONVERSATION_ID", TARGET_SESSION_ID)
-        .env_remove("CODEX_THREAD_ID")
-        .env_remove("CLAUDE_CODE_SESSION_ID")
-        .output()
-        .await
-        .expect("inspect the failed message push by its inbox link");
-    assert_eq!(show.status.code(), Some(0));
-    let show_json = String::from_utf8(show.stdout).expect("show result is UTF-8");
-    let show_result: Value = serde_json::from_str(&show_json).expect("show result JSON");
-    assert_eq!(show_result.pointer("/result/link"), Some(&json!(link)));
-    assert_eq!(
-        show_result.pointer("/result/record/deliveryState"),
-        Some(&json!("rejected"))
+    let id = uuid::Uuid::now_v7().to_string();
+    let line = format!(
+        "Fixture message · {MESSAGE_BODY} · router://{}/push/{id}",
+        String::from(target.endpoint.service_id.clone())
     );
-
+    let request = DeliveryRequest {
+        payload: PreparedPush {
+            push_id: id.clone().try_into().unwrap(),
+            line: line.try_into().unwrap(),
+            load_policy: LoadPolicy::MayLoad,
+        },
+        target,
+        mode: collaboration_protocol::MessageDelivery::Auto,
+        precondition: DeliveryPrecondition::Unpinned,
+        correlation: id.try_into().unwrap(),
+        attempt: agent_automation::AttemptId::generate(),
+    };
+    let receipt = runtime
+        .session_delivery()
+        .expect("composed Host routes")
+        .deliver(request, &UnstoredAttemptEvidenceSink)
+        .await
+        .expect("delivery result")
+        .into_receipt();
+    let collaboration_protocol::DeliveryOutcome::Rejected(rejection) = receipt.outcome else {
+        panic!("expected rejected load, got {:?}", receipt.outcome);
+    };
+    let detail = rejection
+        .detail
+        .expect("public detail for provider refusal");
     let log_event = captured_trace
         .rendered()
         .lines()
@@ -257,17 +183,9 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
             .get_version_num(),
         7
     );
-    assert!(stored_outcome.contains(&format!("provider code {PROVIDER_ERROR_CODE}")));
-    assert!(stored_outcome.contains(correlation_id));
-    assert!(!stored_outcome.contains(PRIVATE_PROVIDER_MARKER));
-    assert!(!show_json.contains(PRIVATE_PROVIDER_MARKER));
-    assert_eq!(show_json.lines().count(), 1, "{show_json}");
-    let shown_detail = show_result
-        .pointer("/result/record/lastOutcome/outcome/detail")
-        .and_then(Value::as_str)
-        .expect("stored provider failure detail");
-    assert!(shown_detail.contains(&format!("provider code {PROVIDER_ERROR_CODE}")));
-    assert!(shown_detail.contains(correlation_id));
+    assert!(detail.contains(&format!("provider code {PROVIDER_ERROR_CODE}")));
+    assert!(detail.contains(correlation_id));
+    assert!(!detail.contains(PRIVATE_PROVIDER_MARKER));
 
     runtime.shutdown().await.expect("Host shutdown");
 }

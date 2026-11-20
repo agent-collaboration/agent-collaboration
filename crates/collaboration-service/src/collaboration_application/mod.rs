@@ -6,16 +6,12 @@
 //! these methods and encode what comes back; no operation logic lives in a transport.
 //!
 //! Each family owns only the capabilities its constructor receives.
-//! [`CollaborationApplication`] shares the constructed families and lends callers their APIs: messages (`message_operations`);
-//! conversations (`conversation_operations`); approvals and
-//! questions (`interaction_operations`); sessions, the journal and the address book
-//! (`session_operations`, `journal_operations`); provider observation
+//! [`CollaborationApplication`] shares conversation, session, journal, address book and
+//! provider observation operations with its callers.
 //! (`provider_observation_operations`). Heavier paging logic stays in the crate's domain modules
 //! (`codex_session_inventory`, `provider_session_inventory`).
 mod conversation_operations;
-mod interaction_operations;
 mod journal_operations;
-mod message_operations;
 mod provider_observation_operations;
 mod session_native_control;
 mod session_operations;
@@ -27,12 +23,8 @@ pub use crate::response_budget::{API_RESULT_BUDGET, RESULT_LIMIT_BYTES, ResultBy
 pub use session_native_control::NativeSessionControl;
 
 pub use conversation_operations::{ConversationFailure, ConversationOperations};
-pub use interaction_operations::{InteractionFailure, InteractionOperations, QuestionRejection};
 pub use journal_operations::{
     JournalCursorInvalidation, JournalFailure, JournalOperations, JournalUnavailableKind,
-};
-pub use message_operations::{
-    MessageFailure, MessageFailureKind, MessageFailureStage, MessageOperations,
 };
 pub use provider_observation_operations::{
     ObservationFailure, ObservationOperations, ObservedEventSink,
@@ -52,28 +44,22 @@ use collaboration_contracts::RouterIdentity;
 pub struct CollaborationApplication {
     identity: RouterIdentity,
     conversations: std::sync::Arc<ConversationOperations>,
-    messages: std::sync::Arc<MessageOperations>,
     observation: std::sync::Arc<ObservationOperations>,
     sessions: std::sync::Arc<SessionOperations>,
-    interactions: std::sync::Arc<InteractionOperations>,
 }
 impl CollaborationApplication {
     #[must_use]
     pub fn new(
         identity: RouterIdentity,
         conversations: ConversationOperations,
-        messages: MessageOperations,
         observation: ObservationOperations,
         sessions: SessionOperations,
-        interactions: InteractionOperations,
     ) -> Self {
         Self {
             identity,
             conversations: std::sync::Arc::new(conversations),
-            messages: std::sync::Arc::new(messages),
             observation: std::sync::Arc::new(observation),
             sessions: std::sync::Arc::new(sessions),
-            interactions: std::sync::Arc::new(interactions),
         }
     }
     #[must_use]
@@ -85,7 +71,7 @@ impl CollaborationApplication {
         self.identity.service_epoch()
     }
     #[must_use]
-    pub fn installation_peer(&self) -> Option<fleet_sync_protocol::PeerId> {
+    pub fn installation_peer(&self) -> Option<collaboration_protocol::InstallationPeerId> {
         self.identity.installation_peer()
     }
     #[must_use]
@@ -97,20 +83,12 @@ impl CollaborationApplication {
         &self.conversations
     }
     #[must_use]
-    pub fn messages(&self) -> &MessageOperations {
-        &self.messages
-    }
-    #[must_use]
     pub fn observation(&self) -> &ObservationOperations {
         &self.observation
     }
     #[must_use]
     pub fn sessions(&self) -> &SessionOperations {
         &self.sessions
-    }
-    #[must_use]
-    pub fn interactions(&self) -> &InteractionOperations {
-        &self.interactions
     }
 }
 

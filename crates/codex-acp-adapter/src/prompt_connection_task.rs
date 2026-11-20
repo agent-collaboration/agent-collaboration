@@ -164,6 +164,27 @@ pub async fn run_prompt_task(mut inputs: PromptTaskInputs) -> PromptTaskCompleti
                     terminal: (!frontend_detached).then_some(frame),
                 };
             }
+            Ok(Some(PromptEvent::InteractionRefused(refusal))) => {
+                let mut terminal = pending.cancel_after_refusal().await;
+                if let Some(metadata) = terminal
+                    .as_mut()
+                    .and_then(|frame| frame.pointer_mut("/result/_meta"))
+                    .and_then(Value::as_object_mut)
+                {
+                    metadata.insert(
+                        "codexRouter".into(),
+                        json!({"reasonCode":refusal.code(),"reason":refusal.reason()}),
+                    );
+                }
+                let cancellation_barrier = pending
+                    .blocks_next_prompt()
+                    .then(|| pending.cancellation_barrier());
+                return PromptTaskCompletion {
+                    cancellation_barrier,
+                    binding: pending.into_session().ok(),
+                    terminal: (!frontend_detached).then_some(terminal).flatten(),
+                };
+            }
             Ok(Some(PromptEvent::NativeCallback(_))) => {
                 let _cancel = pending.cancel().await;
                 return PromptTaskCompletion {

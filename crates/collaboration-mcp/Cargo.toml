@@ -37,12 +37,8 @@ sqlx = { workspace = true, features = ["sqlite"] }
 acp-provider-adapters = { path = "../acp-provider-adapters", version = "0.1.114", features = ["test-support"] }
 codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.4" }
 router-clock = { workspace = true, features = ["test-support"] }
-collaboration-application-test-support = { path = "../collaboration-application-test-support", version = "0.1.126" }
 node-test-fixture = { version = "0.1.105", path = "../node-test-fixture" }
 collaboration-service = { path = "../collaboration-service", version = "0.1.30", features = ["test-support"] }
-durable-steps.workspace = true
-interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
-fleet-sync-protocol.workspace = true
 runtime-primitives.workspace = true
 uuid.workspace = true
 agent-collaboration = { path = "../agent-collaboration", version = "0.1.30" }

@@ -3,7 +3,6 @@ use crate::app_server_event_forwarding::AppServerEventForwarding;
 use crate::app_server_event_forwarding::historical_turns;
 use crate::app_server_model_catalog::ProviderModelEntry;
 use crate::app_server_model_catalog::render_model_list;
-use crate::pending_snapshot_interactions::pending_snapshot_requests;
 use crate::private_socket_listener::PrivateSocketListener;
 use collaboration_contracts::CommandContent;
 use collaboration_contracts::CreateSessionCommand;
@@ -43,7 +42,6 @@ pub struct RouterSessionAppServerContext {
     commands: Arc<dyn SessionCommandPort>,
     events: Arc<dyn SessionEventHub>,
     model_catalog: Arc<dyn crate::SessionModelCatalog>,
-    interaction_broker: Option<Arc<crate::ServiceInteractionBroker>>,
     project_trust: Option<Arc<dyn codex_native_integration::CodexProjectTrustLookup>>,
 }
 
@@ -61,15 +59,8 @@ impl RouterSessionAppServerContext {
             commands,
             events,
             model_catalog,
-            interaction_broker: None,
             project_trust: None,
         }
-    }
-
-    #[must_use]
-    pub fn with_interaction_broker(mut self, broker: Arc<crate::ServiceInteractionBroker>) -> Self {
-        self.interaction_broker = Some(broker);
-        self
     }
 
     #[must_use]
@@ -235,8 +226,7 @@ pub async fn serve_router_session_app_server_connection(
     let (skill_sender, mut skill_receiver) = mpsc::channel::<(PathBuf, SessionRef)>(64);
     let mut subscriptions = HashMap::<SessionRef, AbortHandle>::new();
     let mut delivered_sequences = HashMap::<SessionRef, (u64, u64)>::new();
-    let mut forwarding =
-        AppServerEventForwarding::new(context.actor.clone(), context.interaction_broker.clone());
+    let mut forwarding = AppServerEventForwarding::new();
     loop {
         let frame = tokio::select! {
             incoming = websocket.next() => incoming,
@@ -369,11 +359,6 @@ pub async fn serve_router_session_app_server_connection(
         };
         let request: Value = serde_json::from_str(&text)?;
         if request.get("method").is_none() {
-            for notification in forwarding.resolve_reply(&request).await {
-                websocket
-                    .send(Message::Text(notification.to_string().into()))
-                    .await?;
-            }
             continue;
         }
         if request.get("id").is_none() {
@@ -502,17 +487,11 @@ async fn attach_session_events(
     event_tasks: &mut JoinSet<()>,
     replay_after: Option<(u64, u64)>,
 ) -> Result<(AbortHandle, u64, u64), AppServerConnectionError> {
-    let pending_requests = pending_snapshot_requests(&attachment.snapshot);
     let epoch = attachment.epoch;
     let mut latest_sequence = 0;
     let mut initial_settings = None;
     for event in attachment.snapshot {
         latest_sequence = latest_sequence.max(event.sequence);
-        let request_still_pending = matches!(
-            &event.event,
-            SessionEvent::InteractionRequested { interaction }
-                if pending_requests.contains(interaction.request_id())
-        );
         for notification in forwarding.project(&session, &event) {
             if replay_after.is_none() && matches!(event.event, SessionEvent::SettingsChanged { .. })
             {
@@ -524,9 +503,7 @@ async fn attach_session_events(
             let missed_event = replay_after.is_some_and(|(previous_epoch, sequence)| {
                 previous_epoch != epoch || event.sequence > sequence
             });
-            let historical_interaction =
-                matches!(event.event, SessionEvent::InteractionRequested { .. });
-            if request_still_pending || (missed_event && !historical_interaction) {
+            if missed_event {
                 websocket
                     .send(Message::Text(notification.to_string().into()))
                     .await?;
@@ -588,9 +565,6 @@ mod hooks_tests;
 #[cfg(test)]
 #[path = "router_session_app_server_model_test.rs"]
 mod model_tests;
-#[cfg(test)]
-#[path = "router_session_app_server_multichoice_tui_test.rs"]
-mod multichoice_tui_tests;
 #[cfg(test)]
 #[path = "router_session_app_server_order_test.rs"]
 mod order_tests;

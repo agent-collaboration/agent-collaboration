@@ -26,66 +26,6 @@ export const rows: InventoryRow[] = [
     fixedBy: "D2",
   },
   {
-    file: `${P}session_message_send.rs`,
-    line: 8,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP message_send SessionMessageSendParams {itemId?, target: SessionRef, message: MessageContent, mode: MessageDelivery, generationGuard: CodexGeneration?}, also exported by protocol_type_schemas.rs:19",
-    usedBy: [
-      { part: "N11" },
-      { crate: "collaboration-service" },
-      { crate: "collaboration-client" },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${P}session_message_reply.rs`,
-    line: 8,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP message_reply SessionMessageReplyParams {caller, reference, text} and SessionMessageReplyResult L18 {target, targetIdentity, pushId, link, deliveryState, receipt}, also exported by protocol_type_schemas.rs:20-21",
-    usedBy: [
-      { part: "N11" },
-      { crate: "collaboration-service" },
-      { crate: "collaboration-client" },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${P}message_send_result.rs`,
-    line: 11,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP message_send / message_reply result MessageSendResult<TLocal> (local or queued), MessageReplyResult alias L17, QueuedMessageSend L21",
-    usedBy: [
-      { part: "N11" },
-      { crate: "collaboration-service" },
-      { crate: "collaboration-client" },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${P}message_mail_operations.rs`,
-    line: 10,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP router_show (tool registration message_tools.rs:59-65; message_show is the internal application method) and message_history shapes: MessageShowResult L10, RemoteMessageStatus L17, MessageHistoryEntry L26, MessageHistoryResult L32, MailReadContext L43, HumanMessageReader L56, MessageReadCaller L62, MessageShowRequest L69, RemoteDeliveryStatus L91, RemoteDeliveryRefusal L114, RemoteProcessingFailure L144, RemoteSizeField L156",
-    usedBy: [
-      { part: "N11" },
-      { crate: "collaboration-service" },
-      { crate: "collaboration-client" },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
     file: `${P}delivery_rejection.rs`,
     line: 49,
     owner: "router-vocabulary",
@@ -119,21 +59,6 @@ export const rows: InventoryRow[] = [
       { crate: "collaboration-service" },
       { crate: "collaboration-client" },
       { crate: "codex-router-host" },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${P}question_contract.rs`,
-    line: 15,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP question_list / question_answer: QuestionListParams L9, QuestionFieldView L15, public unit QuestionState L59, QuestionRecord L68, QuestionListResult L79, QuestionAnswerParams L85, QuestionAnswerResult L94. The stored QuestionHistoryState is a different contract projected into these (collaboration-service interaction_operations.rs:220-255)",
-    usedBy: [
-      { part: "N11" },
-      { crate: "collaboration-service" },
-      { crate: "collaboration-client" },
     ],
     duplicateGroup: null,
     disposition: "boundary-encoding",

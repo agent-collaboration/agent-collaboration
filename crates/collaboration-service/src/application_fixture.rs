@@ -4,19 +4,14 @@ use collaboration_runtime::EndpointDirectory;
 
 #[derive(Clone)]
 pub struct ApplicationFixture {
-    pub(crate) mail_delivery: Option<std::sync::Arc<crate::MailDeliveryRuntime>>,
-    pub(crate) runtime_clock: std::sync::Arc<dyn router_clock::RuntimeClock>,
     pub(crate) service_id: UuidIdentity,
-    pub(crate) installation_peer: Option<fleet_sync_protocol::PeerId>,
+    pub(crate) installation_peer: Option<collaboration_protocol::InstallationPeerId>,
     pub(crate) machine_identity: collaboration_contracts::MachineIdentity,
     pub(crate) service_epoch: UuidIdentity,
     pub(crate) display_names: collaboration_runtime::SessionDisplayNameCache,
     pub(crate) directory: EndpointDirectory,
     pub(crate) journal: Option<std::sync::Arc<lifecycle_observation::LifecycleStore>>,
     pub(crate) native_backend: Option<collaboration_runtime::NativeControlBackend>,
-    pub(crate) approval_broker:
-        Option<std::sync::Arc<collaboration_runtime::ServiceInteractionBroker>>,
-    pub(crate) interaction_store: Option<std::sync::Arc<interaction_storage::InteractionStore>>,
     pub(crate) provider_operations:
         Option<std::sync::Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>>,
     pub(crate) provider_session_hub:
@@ -31,23 +26,14 @@ pub struct ApplicationFixture {
         Option<std::sync::Arc<dyn collaboration_contracts::ProviderConversationBackend>>,
 }
 impl ApplicationFixture {
-    pub fn with_mail_delivery_runtime(
-        mut self,
-        runtime: std::sync::Arc<crate::MailDeliveryRuntime>,
-    ) -> Result<Self, String> {
-        runtime.validate_owner(&self.router_identity(), self.interaction_store.as_ref())?;
-        runtime.attach_reader_readiness()?;
-        self.mail_delivery = Some(runtime);
-        Ok(self)
-    }
-
     pub fn with_installation_peer(
         mut self,
-        peer: fleet_sync_protocol::PeerId,
+        peer: collaboration_protocol::InstallationPeerId,
     ) -> Result<Self, String> {
         if self
             .installation_peer
-            .is_some_and(|existing| existing != peer)
+            .as_ref()
+            .is_some_and(|existing| existing != &peer)
         {
             return Err("installation peer is already configured with a different identity".into());
         }
@@ -56,8 +42,8 @@ impl ApplicationFixture {
     }
 
     #[must_use]
-    pub fn installation_peer(&self) -> Option<fleet_sync_protocol::PeerId> {
-        self.installation_peer
+    pub fn installation_peer(&self) -> Option<collaboration_protocol::InstallationPeerId> {
+        self.installation_peer.clone()
     }
 
     pub fn with_machine_identity(
@@ -69,24 +55,6 @@ impl ApplicationFixture {
         }
         self.machine_identity = machine_identity;
         Ok(self)
-    }
-
-    pub fn runtime_clock(&self) -> std::sync::Arc<dyn router_clock::RuntimeClock> {
-        self.runtime_clock.clone()
-    }
-    pub fn with_runtime_clock(
-        mut self,
-        clock: std::sync::Arc<dyn router_clock::RuntimeClock>,
-    ) -> Self {
-        self.runtime_clock = clock;
-        self
-    }
-    pub fn with_interaction_store(
-        mut self,
-        store: std::sync::Arc<interaction_storage::InteractionStore>,
-    ) -> Self {
-        self.interaction_store = Some(store);
-        self
     }
 
     pub fn with_provider_operation_store(
@@ -155,18 +123,6 @@ impl ApplicationFixture {
     pub fn session_display_name_cache(&self) -> collaboration_runtime::SessionDisplayNameCache {
         self.display_names.clone()
     }
-    #[must_use]
-    pub fn with_approval_broker(
-        mut self,
-        broker: std::sync::Arc<collaboration_runtime::ServiceInteractionBroker>,
-    ) -> Self {
-        broker.install_display_names(self.display_names.clone());
-        let interactions = broker.interaction_store();
-        self.interaction_store = Some(interactions.clone());
-        broker.install_push_context(interactions, self.machine_identity.clone());
-        self.approval_broker = Some(broker);
-        self
-    }
     /// Registers a bounded inventory without inferring endpoint liveness.
     pub fn with_endpoints(self, endpoints: Vec<EndpointDescription>) -> Result<Self, String> {
         self.directory
@@ -197,27 +153,18 @@ impl ApplicationFixture {
         Ok(Self {
             service_id: service_id.clone(),
             installation_peer: None,
-            mail_delivery: None,
             machine_identity,
             service_epoch: UuidIdentity::try_from(service_epoch.to_owned())
                 .map_err(|error| error.to_string())?,
             display_names: collaboration_runtime::SessionDisplayNameCache::default(),
             journal: None,
             native_backend: None,
-            approval_broker: None,
-            interaction_store: None,
             provider_operations: None,
             provider_session_hub: None,
             claude_code_sessions: None,
             claude_background_jobs: None,
             codex_conversation_recorder: None,
             provider_conversations: None,
-            runtime_clock: std::sync::Arc::new(
-                router_clock::ManualClock::starting_at(
-                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
-                )
-                .map_err(|error| error.to_string())?,
-            ),
             directory: EndpointDirectory::new(service_id),
         })
     }
@@ -232,7 +179,7 @@ impl ApplicationFixture {
         collaboration_contracts::RouterIdentity::new(
             self.service_id.clone(),
             self.service_epoch.clone(),
-            self.installation_peer,
+            self.installation_peer.clone(),
             self.machine_identity.clone(),
         )
         .expect("validated fixture identity")
@@ -243,7 +190,6 @@ impl ApplicationFixture {
             self.router_identity(),
             self.directory.clone(),
             self.native_backend.clone(),
-            self.approval_broker.clone(),
             self.display_names.clone(),
             // As in the Host, the Codex recorder also keeps create-time mode reports.
             self.codex_conversation_recorder.clone().map(|recorder| {
@@ -279,12 +225,6 @@ impl ApplicationFixture {
             provider_inventory,
             journal_operations,
         );
-        let messages = crate::collaboration_application::MessageOperations::new(
-            self.router_identity(),
-            self.interaction_store.clone(),
-            self.mail_delivery.clone(),
-            self.display_names.clone(),
-        );
         let conversations = crate::collaboration_application::ConversationOperations::new(
             self.router_identity(),
             self.provider_conversations.clone(),
@@ -297,16 +237,11 @@ impl ApplicationFixture {
             self.provider_session_hub.clone(),
             self.directory.clone(),
         );
-        let interactions = crate::collaboration_application::InteractionOperations::new(
-            self.approval_broker.clone(),
-        );
         crate::CollaborationApplication::new(
             self.router_identity(),
             conversations,
-            messages,
             observation,
             sessions,
-            interactions,
         )
     }
 }

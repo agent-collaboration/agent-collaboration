@@ -1,8 +1,4 @@
-//! Command groups no other test runs against a real collaboration API: questions, the
-//! message inbox, history and reply, journal status, session rename and turn interrupt
-//! (refused by an application with no native route, as it refuses them today).
-//! Each runs the compiled CLI against the served API and checks its JSON against the
-//! published `FiniteCommandRecord` contract.
+//! Compiled CLI journal and native command groups over the served API.
 
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_service::ApplicationFixture;
@@ -12,7 +8,6 @@ use std::{os::unix::fs::PermissionsExt, path::Path, sync::Arc};
 const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000301";
 const SERVICE_EPOCH: &str = "00000000-0000-4000-8000-000000000302";
 const CALLER_SESSION_ID: &str = "served-command-caller";
-const UNKNOWN_PUSH_ID: &str = "019f0000-0000-7000-8000-000000000999";
 
 struct ServedFixture {
     directory: tempfile::TempDir,
@@ -25,33 +20,11 @@ impl ServedFixture {
         clippy::expect_used,
         reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
     )]
-    /// An application with an interaction broker and a lifecycle journal, publishing a Codex endpoint whose native backend is absent.
+    /// An application with a lifecycle journal and a declared Codex endpoint.
     async fn start() -> Self {
         let directory = tempfile::tempdir_in("/tmp").expect("service directory");
         std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))
             .expect("private service directory");
-        let service_id: collaboration_protocol::UuidIdentity =
-            SERVICE_ID.to_owned().try_into().expect("service ID");
-        let endpoint: collaboration_protocol::EndpointRef =
-            serde_json::from_value(codex_endpoint()).expect("endpoint");
-        let interaction_store = Arc::new(
-            interaction_storage::InteractionStore::open(
-                directory.path().join("interaction.sqlite"),
-            )
-            .await
-            .expect("interaction store"),
-        );
-        let broker = collaboration_runtime::ServiceInteractionBroker::load(
-            service_id,
-            collaboration_runtime::NativeControlBackend {
-                endpoint,
-                gate: collaboration_runtime::NativeGenerationGate::default(),
-                codex_home: directory.path().to_owned(),
-            },
-            interaction_store,
-        )
-        .await
-        .expect("interaction broker");
         let journal = lifecycle_observation::ObservationJournal::open(
             &directory.path().join("session-registry.sqlite"),
             "00000000-0000-4000-8000-000000000303"
@@ -73,7 +46,6 @@ impl ServedFixture {
             .expect("service identity")
             .with_endpoints(vec![description])
             .expect("endpoint inventory")
-            .with_approval_broker(broker)
             .with_journal(Arc::clone(&journal));
         let served = ServedCollaborationApi::start(directory.path(), (identity).build())
             .expect("served collaboration API");
@@ -102,10 +74,6 @@ impl ServedFixture {
 
 fn codex_endpoint() -> Value {
     json!({"serviceId":SERVICE_ID,"endpointId":"codex-local"})
-}
-
-fn session(session_id: &str) -> Value {
-    json!({"endpoint":codex_endpoint(),"sessionId":session_id})
 }
 
 #[expect(
@@ -166,50 +134,8 @@ async fn run_json(directory: &Path, arguments: &[&str]) -> (Option<i32>, Value) 
 }
 
 #[tokio::test]
-async fn questions_messages_and_journal_read_through_the_served_api() {
+async fn journal_reads_through_the_served_api() {
     let fixture = ServedFixture::start().await;
-
-    let (status, questions) = run_finite(fixture.path(), &["question", "list", "--pending"]).await;
-    assert_eq!(status, Some(0), "{questions}");
-    assert_eq!(questions["kind"], "result", "{questions}");
-
-    let human = json!({"kind":"human","humanId":"served-owner"}).to_string();
-    let (status, answer) = run_finite(
-        fixture.path(),
-        &[
-            "question",
-            "answer",
-            "--request-id",
-            "absent-question",
-            "--actor",
-            &human,
-            "--decline",
-        ],
-    )
-    .await;
-    assert_eq!(answer["kind"], "error", "{answer}");
-    assert_eq!(status, Some(4), "{answer}");
-
-    let (status, inbox) = run_finite(fixture.path(), &["message", "inbox"]).await;
-    assert_eq!(status, Some(0), "{inbox}");
-    assert_eq!(inbox["kind"], "result", "{inbox}");
-
-    let with = session("served-command-peer").to_string();
-    let (status, history) =
-        run_finite(fixture.path(), &["message", "history", "--with", &with]).await;
-    assert_eq!(status, Some(0), "{history}");
-    assert_eq!(history["kind"], "result", "{history}");
-
-    // A reply's error record also names its caller, which the finite-record contract does
-    // not describe, so only its fields are checked.
-    let (status, reply) = run_json(
-        fixture.path(),
-        &["message", "reply", UNKNOWN_PUSH_ID, "answer"],
-    )
-    .await;
-    assert_eq!(reply["kind"], "error", "{reply}");
-    assert_eq!(reply["error"]["serviceKind"], "notFound", "{reply}");
-    assert_eq!(status, Some(4), "{reply}");
 
     let (status, journal) = run_finite(fixture.path(), &["journal", "status"]).await;
     assert_eq!(status, Some(0), "{journal}");

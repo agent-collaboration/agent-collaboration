@@ -93,7 +93,6 @@ async fn queue_capability_probe(
         Ok::<_, TestError>(requests)
     });
     let outcome = dispatch_message(NativeMessageRequest {
-        attempt_evidence: None,
         params: NativeMessageParams {
             target: target(),
             generation,
@@ -108,9 +107,6 @@ async fn queue_capability_probe(
         backend: &backend,
         endpoints: &[endpoint],
         held_connection: None,
-        load_policy: LoadPolicy::MayLoad,
-        approval_broker: None,
-        recorded_route: None,
         attempt_deadline: None,
     })
     .await;
@@ -169,7 +165,7 @@ async fn missing_native_queue_schema_steers_exact_message_into_active_turn() {
 async fn missing_native_queue_schema_preserves_active_turn_requirements() {
     for (reply, kind) in [
         (QueueFallbackReply::Idle, "noActiveTurn"),
-        (QueueFallbackReply::NotLoaded, "noActiveTurn"),
+        (QueueFallbackReply::NotLoaded, "notLoaded"),
         (QueueFallbackReply::MissingTurn, "localRejection"),
     ] {
         let NativeMessageOutcome::Failed(failure) =
@@ -191,7 +187,11 @@ async fn missing_native_queue_schema_preserves_active_turn_requirements() {
         );
         assert_eq!(
             failure.response.pointer("/error/data/stage"),
-            Some(&json!("steer"))
+            Some(&json!(if matches!(reply, QueueFallbackReply::NotLoaded) {
+                "start"
+            } else {
+                "steer"
+            }))
         );
     }
 }
@@ -241,25 +241,22 @@ async fn policy_loaded_generic_preserves_each_mode_without_resume() {
         MessageDelivery::Queue,
         MessageDelivery::Steer,
     ] {
-        let fixture = RecordedPolicyFixture::create_without_route().await.unwrap();
+        let fixture = NativeDeliveryFixture::create().unwrap();
         let server = policy_server(
             &fixture,
-            PolicyServerCase {
-                cold: ReplyPolicy::Matching,
-                loaded: ReplyPolicy::Matching,
-                loaded_delivery: mode,
+            LoadedDeliveryScenario {
+                first_unloaded: true,
+                mode,
             },
         )
         .unwrap();
-        let broker: Arc<dyn ApprovalBroker> = fixture.broker.clone();
-        let weak = Arc::downgrade(&broker);
         let first = tokio::time::timeout(
             Duration::from_secs(5),
-            dispatch_message(fixture.message_request(&weak)),
+            dispatch_message(fixture.message_request()),
         )
         .await
         .unwrap();
-        let mut request = fixture.message_request(&weak);
+        let mut request = fixture.message_request();
         request.params.delivery = mode;
         let second = tokio::time::timeout(Duration::from_secs(5), dispatch_message(request))
             .await
@@ -269,7 +266,9 @@ async fn policy_loaded_generic_preserves_each_mode_without_resume() {
             .unwrap()
             .unwrap()
             .unwrap();
-        assert!(matches!(first, NativeMessageOutcome::Accepted(_)));
+        assert!(
+            matches!(first, NativeMessageOutcome::Failed(failure) if failure.response["error"]["data"]["kind"] == "notLoaded")
+        );
         let NativeMessageOutcome::Accepted(receipt) = second else {
             panic!("generic loaded route refused");
         };
@@ -292,75 +291,5 @@ async fn policy_loaded_generic_preserves_each_mode_without_resume() {
                 .iter()
                 .any(|request| request["method"] == method)
         );
-    }
-}
-
-#[tokio::test]
-async fn policy_loaded_expired_broker_refuses_each_mode_before_resume_or_input() {
-    for mode in [
-        MessageDelivery::Auto,
-        MessageDelivery::Queue,
-        MessageDelivery::Steer,
-    ] {
-        let mut fixture = RecordedPolicyFixture::create().await.unwrap();
-        let server = policy_server(
-            &fixture,
-            PolicyServerCase {
-                cold: ReplyPolicy::Matching,
-                loaded: ReplyPolicy::Matching,
-                loaded_delivery: mode,
-            },
-        )
-        .unwrap();
-        let broker: Arc<dyn ApprovalBroker> = fixture.broker.clone();
-        let weak = Arc::downgrade(&broker);
-        let first = tokio::time::timeout(
-            Duration::from_secs(5),
-            dispatch_message(fixture.message_request(&weak)),
-        )
-        .await
-        .unwrap();
-        drop(broker);
-        let interaction_store = Arc::new(
-            interaction_storage::InteractionStore::open(
-                fixture.directory.path().join("interaction.sqlite"),
-            )
-            .await
-            .unwrap(),
-        );
-        fixture.broker = ServiceInteractionBroker::load(
-            fixture.backend.endpoint.service_id.clone(),
-            fixture.backend.clone(),
-            interaction_store,
-        )
-        .await
-        .unwrap();
-        assert!(weak.upgrade().is_none());
-        let mut request = fixture.message_request(&weak);
-        request.params.delivery = mode;
-        let second = tokio::time::timeout(Duration::from_secs(5), dispatch_message(request))
-            .await
-            .unwrap();
-        let requests = tokio::time::timeout(Duration::from_secs(5), server)
-            .await
-            .unwrap()
-            .unwrap()
-            .unwrap();
-        assert!(matches!(first, NativeMessageOutcome::Accepted(_)));
-        let NativeMessageOutcome::Failed(failure) = second else {
-            panic!("expired authority was accepted");
-        };
-        assert_eq!(
-            failure.response.pointer("/error/data/effects/resume"),
-            Some(&json!("notRequested"))
-        );
-        assert_eq!(
-            failure.response.pointer("/error/data/effects/submission"),
-            Some(&json!("notDispatched"))
-        );
-        assert!(requests[1].iter().all(|request| !matches!(
-            request["method"].as_str(),
-            Some("thread/resume" | "turn/start" | "thread/queue/add" | "turn/steer")
-        )));
     }
 }

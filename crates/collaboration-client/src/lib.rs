@@ -9,8 +9,6 @@ mod admission_overload;
 mod api_connection;
 mod collaboration_access;
 mod collaboration_client;
-mod message_operation;
-mod message_submission;
 mod provider_conversations;
 pub use collaboration_access::{CollaborationAccess, LocalCollaboration, LocalFuture};
 pub use provider_conversations::ProviderConversations;
@@ -19,13 +17,6 @@ pub use collaboration_client::{ClientError, CollaborationClient, RouterIdentity}
 pub use collaboration_protocol::EndpointInventory;
 pub use collaboration_protocol::{
     AdapterOperationFailure as OperationFailure, OperationEffect, OperationFailureKind,
-};
-pub use collaboration_protocol::{
-    PushRecordHistoryParams, PushRecordListParams, PushRecordShowParams,
-};
-pub use message_operation::{
-    MessageReplyError, MessageReplyRequest, MessageSendError, MessageSendRequest,
-    PublicMessageContent,
 };
 pub use operation_error::{OperationError, operation_failure_from_client_error};
 static OBSERVED_SERVICE_VERSION: std::sync::OnceLock<std::sync::Mutex<String>> =

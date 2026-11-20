@@ -75,7 +75,6 @@ async fn prompt_rechecks_native_activity_before_starting_a_turn() {
             schemas,
             generation,
             params: json!({"sessionId":"thread-a","cwd":"/work","mcpServers":[]}),
-            approval_broker: Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         },
     )
     .await
@@ -172,7 +171,6 @@ async fn failed_native_turn_keeps_its_error_instead_of_projecting_a_result() {
             schemas,
             generation,
             params: json!({"sessionId":"thread-a","cwd":"/work","mcpServers":[]}),
-            approval_broker: Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         },
     )
     .await

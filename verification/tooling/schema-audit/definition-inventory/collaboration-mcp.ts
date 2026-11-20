@@ -23,16 +23,6 @@ export const rows: InventoryRow[] = [
     disposition: "boundary-encoding",
   },
   {
-    file: "crates/collaboration-mcp/src/mcp_server/message_tools.rs",
-    line: 166,
-    owner: "mcp",
-    kind: "schema-mechanism",
-    defines: "manual JsonSchema impl UndecodedMessageSend delegating to MessageSendRequest",
-    usedBy: [{ part: "N11" }],
-    duplicateGroup: "schema-mechanism",
-    disposition: "boundary-encoding",
-  },
-  {
     file: "crates/collaboration-mcp/src/mcp_server/schema_binding.rs",
     line: 3,
     owner: "mcp",
@@ -232,56 +222,6 @@ export const rows: InventoryRow[] = [
       "Rejected data decoded with the canonical collaboration_protocol::ConversationOperationFailure and re-encoded (L83-L86); invalid data becomes validation_failure: a projection of the canonical decoded type, not a second definition",
     usedBy: [{ part: "N11" }],
     duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: "crates/collaboration-mcp/src/mcp_server/interaction_tools.rs",
-    line: 131,
-    owner: "mcp",
-    kind: "rust-type",
-    defines:
-      "staged_failure_result sets the stage field of the typed AdapterOperationFailure to the literals approval-decision (L36) and question-answer (L63), then encodes it through operation_error_result; no hand-built body",
-    usedBy: [{ part: "N11" }],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: "crates/collaboration-mcp/src/mcp_server/message_tools.rs",
-    line: 25,
-    owner: "mcp",
-    kind: "content-parser",
-    defines:
-      "message_send re-decodes itemId alone as Option<MailItemId> after MessageSendRequest fails to decode, to answer invalidShape instead of the decoder message",
-    usedBy: [{ part: "N11" }],
-    duplicateGroup: "mcp-argument-classification",
-    disposition: "duplicate",
-    fixedBy: "D1",
-  },
-  {
-    file: "crates/collaboration-mcp/src/mcp_server/message_tools.rs",
-    line: 46,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MessageSendRequest to SessionMessageSendParams field by field (delivery to mode, message.into()) L46, and MessageReplyRequest to SessionMessageReplyParams L98: two vocabularies for one send and one reply",
-    usedBy: [
-      { part: "N11" },
-      { crate: "collaboration-client" },
-      { crate: "collaboration-protocol" },
-    ],
-    duplicateGroup: "message-request-params-mapping",
-    disposition: "duplicate",
-    fixedBy: "D2",
-  },
-  {
-    file: "crates/collaboration-mcp/src/mcp_server/message_tools.rs",
-    line: 134,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "rejected_before_submission: MessageFailureKind to effect none (ItemConflict ... OwnerReplyUnsupported) or unknown (ForeignMachine, OutcomeUnknown)",
-    usedBy: [{ part: "N11" }],
-    duplicateGroup: "failure-kind-mapping",
     disposition: "boundary-encoding",
   },
   {

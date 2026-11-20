@@ -1,10 +1,6 @@
 //! ACP route for Router-owned provider Sessions on the shared connection shell.
-use crate::ServiceInteractionBroker;
 use crate::provider_acp_content_translation::parse_prompt_content;
 use crate::provider_acp_event_projection::{ProviderSessionObservers, stream_prompt};
-use crate::provider_acp_interaction::{
-    OutboundInteraction, apply_interaction_reply, present_interaction,
-};
 use codex_acp_adapter::{
     AcpConnectionContext, AcpRouteFuture, AcpRouterChannels, AcpSchemaCatalog, AcpSessionRoute,
 };
@@ -21,54 +17,15 @@ use collaboration_contracts::SteerSessionCommand;
 use message_board::{Identity, SessionEndpointRef, SessionRef};
 use serde_json::{Value, json};
 use session_event_model::session_profile_codec::ProfileElement;
-use session_event_model::{CapabilityReport, PendingInteraction, SessionEvent, SessionState};
+use session_event_model::{CapabilityReport, SessionEvent, SessionState};
 
-use std::{collections::HashMap, io, path::PathBuf, sync::Arc};
-use tokio::{sync::mpsc, task::JoinSet};
+use std::{io, path::PathBuf, sync::Arc};
+use tokio::task::JoinSet;
 
 pub struct ProviderAcpSessionRoute {
     endpoint: SessionEndpointRef,
     commands: Arc<dyn SessionCommandPort>,
     events: Arc<dyn SessionEventHub>,
-    interaction_broker: Option<Arc<ServiceInteractionBroker>>,
-}
-
-struct PendingAcpInteraction {
-    session: SessionRef,
-    interaction: PendingInteraction,
-    presentations: u8,
-}
-
-const MAX_INTERACTION_PRESENTATIONS: u8 = 3;
-
-fn add_interaction_rejection_reason(frame: &mut Value, reason: &str) {
-    if let Some(title) = frame.pointer_mut("/params/toolCall/title") {
-        if let Some(original) = title.as_str() {
-            *title = json!(format!("{original} (previous answer rejected: {reason})"));
-        }
-    } else if let Some(message) = frame.pointer_mut("/params/message")
-        && let Some(original) = message.as_str()
-    {
-        *message = json!(format!("{original} (previous answer rejected: {reason})"));
-    }
-}
-
-fn interaction_error_kind(error: &crate::InteractionHistoryError) -> &'static str {
-    match error {
-        crate::InteractionHistoryError::PersistentChoiceNotAcknowledged { .. } => {
-            "persistentChoiceNotAcknowledged"
-        }
-        crate::InteractionHistoryError::WrongActor => "wrongActor",
-        crate::InteractionHistoryError::AlreadySettled
-        | crate::InteractionHistoryError::NotPending => "notPending",
-        crate::InteractionHistoryError::OptionNotOffered { .. }
-        | crate::InteractionHistoryError::InvalidOptionId => "invalidOption",
-        crate::InteractionHistoryError::InvalidAnswer { .. }
-        | crate::InteractionHistoryError::InvalidQuestion => "invalidAnswer",
-        crate::InteractionHistoryError::AlreadyExists
-        | crate::InteractionHistoryError::SelfApprover
-        | crate::InteractionHistoryError::Unavailable => "unavailable",
-    }
 }
 
 impl ProviderAcpSessionRoute {
@@ -81,14 +38,7 @@ impl ProviderAcpSessionRoute {
             endpoint,
             commands,
             events,
-            interaction_broker: None,
         }
-    }
-
-    #[must_use]
-    pub fn with_interaction_broker(mut self, broker: Arc<ServiceInteractionBroker>) -> Self {
-        self.interaction_broker = Some(broker);
-        self
     }
 }
 
@@ -111,7 +61,6 @@ impl AcpSessionRoute for ProviderAcpSessionRoute {
             router,
             context.actor,
             supports_state,
-            context.client_supports_elicitation_form,
         ))
     }
 }
@@ -240,17 +189,13 @@ async fn serve_provider_sessions(
     mut router: AcpRouterChannels,
     actor: Option<Identity>,
     supports_state: bool,
-    supports_question_form: bool,
 ) -> io::Result<()> {
     let mut schema = AcpSchemaCatalog::load().map_err(io::Error::other)?;
     let mut prompts = JoinSet::<()>::new();
-    let (interaction_sender, mut interaction_receiver) = mpsc::channel(64);
-    let mut pending_interactions = HashMap::<String, PendingAcpInteraction>::new();
     let mut observers = ProviderSessionObservers::new(
         Arc::clone(&route.events),
         router.output.clone(),
         supports_state,
-        interaction_sender,
     );
     loop {
         let frame = tokio::select! {
@@ -267,100 +212,12 @@ async fn serve_provider_sessions(
                 }
                 continue;
             },
-            interaction = interaction_receiver.recv() => {
-                let Some((session, interaction)) = interaction else { break; };
-                if let (Some(actor), Some(_broker)) = (actor.as_ref(), route.interaction_broker.as_ref())
-                    && let Some(OutboundInteraction { request_id, frame, pending }) =
-                        present_interaction(&session, interaction, actor, supports_question_form)
-                    && !pending_interactions.contains_key(&request_id) {
-                    pending_interactions.insert(request_id, PendingAcpInteraction {
-                        session,
-                        interaction: pending,
-                        presentations: 1,
-                    });
-                    router.output.send(frame).await?;
-                }
-                continue;
-            },
             frame = router.input.recv() => match frame { Some(frame) => frame, None => break },
         };
         let method = frame.get("method").and_then(Value::as_str).unwrap_or("");
         let params = frame.get("params").cloned().unwrap_or_else(|| json!({}));
         let id = frame.get("id").cloned();
         if frame.get("method").is_none() {
-            if let (Some(id), Some(actor), Some(broker)) = (
-                id.as_ref(),
-                actor.as_ref(),
-                route.interaction_broker.as_ref(),
-            ) && let Some(pending) = id
-                .as_str()
-                .and_then(|request_id| pending_interactions.remove(request_id))
-            {
-                let request_id = pending.interaction.request_id().to_owned();
-                if frame.get("error").is_some_and(|error| !error.is_null()) {
-                    tracing::warn!(
-                        request_id,
-                        error_kind = "clientRejectedServerRequest",
-                        "provider ACP client rejected interaction request"
-                    );
-                    continue;
-                }
-                if let Err(error) =
-                    apply_interaction_reply(broker, actor, &pending.interaction, &frame).await
-                {
-                    tracing::warn!(
-                        request_id,
-                        error_kind = interaction_error_kind(&error),
-                        "provider ACP interaction decision rejected"
-                    );
-                    let still_pending = match &pending.interaction {
-                        PendingInteraction::Approval { .. } => broker
-                            .list_typed_approvals(true)
-                            .await
-                            .iter()
-                            .any(|record| record.request_id == request_id),
-                        PendingInteraction::Question { .. } => broker
-                            .list_questions(true)
-                            .await
-                            .iter()
-                            .any(|record| record.request_id() == request_id),
-                    };
-                    if still_pending
-                        && pending.presentations < MAX_INTERACTION_PRESENTATIONS
-                        && let Some(mut outbound) = present_interaction(
-                            &pending.session,
-                            pending.interaction,
-                            actor,
-                            supports_question_form,
-                        )
-                    {
-                        add_interaction_rejection_reason(
-                            &mut outbound.frame,
-                            interaction_error_kind(&error),
-                        );
-                        let fresh_id =
-                            format!("{}:retry:{}", outbound.request_id, uuid::Uuid::now_v7());
-                        if let Some(object) = outbound.frame.as_object_mut() {
-                            object.insert("id".into(), json!(fresh_id));
-                        }
-                        pending_interactions.insert(
-                            fresh_id,
-                            PendingAcpInteraction {
-                                session: pending.session,
-                                interaction: outbound.pending,
-                                presentations: pending.presentations + 1,
-                            },
-                        );
-                        router.output.send(outbound.frame).await?;
-                    } else if still_pending {
-                        tracing::warn!(
-                            request_id,
-                            presentations = pending.presentations,
-                            "provider ACP interaction presentation limit reached; broker request remains pending"
-                        );
-                    }
-                }
-            }
             continue;
         }
         if method == "session/cancel" && id.is_none() {

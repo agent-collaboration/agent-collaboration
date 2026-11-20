@@ -11,10 +11,10 @@ fn retired_cancel_tools_and_cli_commands_are_absent() {
         );
     }
     assert_eq!(
-        agent_collaboration::run_message_command(
-            ["message", "cancel", "--help"].map(Into::into).to_vec()
+        agent_collaboration::refuse_retired_command_group(
+            &["message", "cancel", "--help"].map(Into::into)
         ),
-        2,
+        Some(2),
         "message cancel must be rejected by the argument parser"
     );
     assert_eq!(
@@ -167,12 +167,25 @@ const RETIRED_WAKE_AND_SCHEDULE_TOOLS: [&str; 36] = [
     "wake_wait_until_first_fire",
 ];
 
+const RETIRED_MAIL_AND_INTERACTION_TOOLS: [&str; 9] = [
+    "message_send",
+    "message_reply",
+    "message_inbox",
+    "message_history",
+    "router_show",
+    "approval_list",
+    "approval_decide",
+    "question_list",
+    "question_answer",
+];
+
 #[test]
 fn retired_tools_are_absent_from_the_catalog() {
     let tools = CollaborationMcpServer::catalog_only().resolved_tools();
     for retired in RETIRED_WAKE_AND_SCHEDULE_TOOLS
         .into_iter()
         .chain(RETIRED_BOARD_TOOLS)
+        .chain(RETIRED_MAIL_AND_INTERACTION_TOOLS)
     {
         assert!(
             tools.iter().all(|tool| tool.name != retired),
@@ -200,6 +213,7 @@ async fn a_retired_tool_gets_the_ordinary_unknown_tool_answer() {
     for (index, retired) in RETIRED_WAKE_AND_SCHEDULE_TOOLS
         .into_iter()
         .chain(RETIRED_BOARD_TOOLS)
+        .chain(RETIRED_MAIL_AND_INTERACTION_TOOLS)
         .enumerate()
     {
         // Act
@@ -232,21 +246,19 @@ async fn a_retired_tool_gets_the_ordinary_unknown_tool_answer() {
 fn catalog_has_complete_unique_tools_with_resolvable_schemas() {
     let server = CollaborationMcpServer::catalog_only();
     let tools = server.resolved_tools();
-    assert_eq!(tools.len(), 33);
+    assert_eq!(tools.len(), 24);
     let mut names = tools
         .iter()
         .map(|tool| tool.name.as_ref())
         .collect::<Vec<_>>();
     names.sort_unstable();
     names.dedup();
-    assert_eq!(names.len(), 33);
+    assert_eq!(names.len(), 24);
     assert!(names.contains(&"conversation_resume"));
     assert!(names.contains(&"installation_show"));
     assert!(names.contains(&"conversation_close"));
     assert!(names.contains(&"provider_sessions_list"));
     assert!(names.contains(&"provider_session_inspect"));
-    assert!(names.contains(&"question_list"));
-    assert!(names.contains(&"question_answer"));
     for tool in tools {
         let input = serde_json::to_value(&tool.input_schema).expect("input schema JSON");
         jsonschema::validator_for(&input)
@@ -656,36 +668,6 @@ fn representative_catalog_descriptions_explain_operation_specific_behavior() {
     }
     for (name, required_phrases) in [
         ("endpoints_list", &["Read-only"][..]),
-        (
-            "message_send",
-            &["accepted", "replayed", "reported", "not authenticated"][..],
-        ),
-        (
-            "router_show",
-            &["reported", "not authenticated", "confusion guard", "read"][..],
-        ),
-        (
-            "message_inbox",
-            &["reported", "not authenticated", "confusion guard", "unread"][..],
-        ),
-        (
-            "message_history",
-            &[
-                "reported",
-                "not authenticated",
-                "confusion guard",
-                "between",
-            ][..],
-        ),
-        (
-            "message_reply",
-            &[
-                "reported",
-                "not authenticated",
-                "confusion guard",
-                "reference",
-            ][..],
-        ),
         (
             "conversation_create_and_prompt",
             &["advertised client", "completed turn", "peer reply"][..],

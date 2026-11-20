@@ -115,47 +115,6 @@ export const section: LedgerSection = {
       note: "endpoint snapshots over collaboration-protocol EndpointDescription; validation only, no shape",
     },
     {
-      file: `${R}interaction_broker.rs`,
-      disposition: { kind: "converts", owners: ["codex", "router-vocabulary"] },
-      note: "N7 broker: InteractionHistoryError to ApprovalDecisionError codes and detail json! (:55-104), native approval method strings (:145-150), legacy routes file Vec<ApprovalRoute> (:328), approval route stored as JSON text (:338, :366), refusal and history state to ApprovalState (:482-510), native-accept ids to ApprovalOptionScope and ApprovalDecision (:528, :553), board/protocol SessionRef round trip (:612); notices go through typed_interaction_notice (:796). Reads chrono::Utc::now (:287, :360, :694)",
-    },
-    {
-      file: `${R}interaction_broker/legacy_provider_projection.rs`,
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "InteractionCancelReason to ApprovalState (:10), approver SessionRef via a JSON round trip (:43), stored InteractionHistoryState projected into the public approval record state (:44-75), choice to ApprovalDecision (:57) and ApprovalOptionScope (:77), operation json! (:111), subject to presentation (:122), option views (:151, :175), decision back to option id (:200)",
-    },
-    {
-      file: `${R}interaction_broker/native_approval.rs`,
-      disposition: { kind: "converts", owners: ["codex", "router-vocabulary"] },
-      note: "legacy native approval integration: approval route stored as JSON text route_json (:25); native thread_id text to requester SessionRef (:46-53); /params/options read from the brokered request JSON (:71-76); approval-<UUIDv7> ids (:79, :104, :128). Reads chrono::Utc::now (:29, :96, :122, :134) and tokio time (:166)",
-    },
-    {
-      file: `${R}interaction_broker/native_history_fault_fixture.rs`,
-      disposition: {
-        kind: "excluded",
-        reason:
-          "cfg(test)-only module: declared in interaction_broker.rs:822-823 under #[cfg(test)]",
-      },
-    },
-    {
-      file: `${R}interaction_broker/typed_interaction_notice.rs`,
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "stores a push record then delivers the notice line through SessionMessageDelivery::deliver (:196); board SessionRef conversion (:270); request id to InteractionId and RouterOriginRef (:261); approver and actor serialized to JSON text inside notice text (:326, :399, :493); label tables (:381, :470-486, :510-547) and embedded CLI commands",
-    },
-    {
-      file: `${R}interaction_broker/typed_interactions.rs`,
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "typed approval and question routing; no serde; cancel reasons as string literals turnCancelled, providerRetired, approverUnreachable, requesterUnavailable (:54-107, :141, :242, :302, :380, :399, :468-527). Reads chrono::Utc::now (:33)",
-    },
-    {
-      file: `${R}interaction_broker_tests/history_fixtures.rs`,
-      disposition: {
-        kind: "excluded",
-        reason:
-          "cfg(test)-only module: declared in interaction_broker_tests.rs:799-800, which interaction_broker.rs:818-820 declares under #[cfg(test)]",
-      },
-    },
-    {
       file: `${R}interaction_storage_failure.rs`,
       disposition: { kind: "none" },
       note: "maps interaction_storage errors to automation_storage errors (:2-22); storage vocabulary, no message shape",
@@ -169,16 +128,6 @@ export const section: LedgerSection = {
       file: `${R}lib.rs`,
       disposition: { kind: "none" },
       note: "module list and re-exports; feature-gated modules at :144-190",
-    },
-    {
-      file: `${R}mail_delivery_projection.rs`,
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "receive and outcome hooks: RecipientOutcome to DeliveryReceipt with reason texts (:251-328), refusal reason serialized to JSON text (:313), CarrierAcceptance against DeliveryOutcome (:341), TooLateAt mapping (:233), mail ItemId to PushId (:82, :149, :190, :223), message_send answer PushMessageSendResult with RouterLink text (:158-169)",
-    },
-    {
-      file: `${R}mail_push_preparation.rs`,
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "frozen mail to a DeliveryRequest: body kind, TargetPresence and WhenIdle to LoadPolicy or Hold/Drop/Refuse with reason texts (:93-180), push line rendered by collaboration-protocol (:191), push id to DeliveryCorrelationId and CallId to AttemptId (:215-220)",
     },
     {
       file: `${R}manifest_publication.rs`,
@@ -219,11 +168,6 @@ export const section: LedgerSection = {
       file: `${R}native_provider_settings.rs`,
       disposition: { kind: "reads", owners: ["codex"] },
       note: "setting precedence over CLI params read by hand: unsupported keys and serviceTier (:30-53), model, effort, collaborationMode default|plan and settings (:54-109); setting ids model and effort and provider sentinels (:95, :116, :131, :173, :200)",
-    },
-    {
-      file: `${R}native_recorded_policy.rs`,
-      disposition: { kind: "none" },
-      note: "classifies recorded approval routes; uses SessionRef.session_id as the native thread id text (:32, :65) but defines and converts no shape",
     },
     {
       file: `${R}native_relay_listener.rs`,
@@ -309,16 +253,6 @@ export const section: LedgerSection = {
       sends:
         "the selected route's deliver for every Router push; for Codex targets this is codex_app_server_delivery_route.rs:441; provider ACP and Claude Code peer routes are Host routes outside this crate",
       owner: { crate: "collaboration-runtime" },
-      origin: "product",
-      coverage: noTap(DELIVERY_PATH),
-    },
-    {
-      file: `${R}interaction_broker/typed_interaction_notice.rs`,
-      line: 196,
-      edge: "managed-codex",
-      sends:
-        "approval and question notice push lines through SessionMessageDelivery::deliver (session_delivery_router.rs:212)",
-      owner: { part: "N7" },
       origin: "product",
       coverage: noTap(DELIVERY_PATH),
     },

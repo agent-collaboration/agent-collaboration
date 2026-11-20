@@ -5,22 +5,16 @@ mod acp_metadata_projection;
 mod auth_file_reload;
 mod backend_publication;
 mod claude_code_peer_delivery_route;
-mod claude_peer_not_running_dm;
-mod claude_peer_subscription_clock;
 mod collaboration_runtime;
 mod external_provider_composition;
 mod external_provider_recovery;
 mod external_provider_supervisor;
 mod fixed_mcp_bind;
 mod global_harness_selection;
-#[path = "../support/host_clock_control.rs"]
-mod host_clock_control;
 #[path = "../support/host_replacement_cleanup.rs"]
 mod host_replacement_cleanup;
 mod host_replacement_failures;
-mod interaction_retention_runtime;
 mod journal_failure_isolation;
-mod local_mail_cancellation;
 mod maintenance_authority;
 mod native_claude_catalogue;
 mod native_observer_restart;

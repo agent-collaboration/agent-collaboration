@@ -34,8 +34,6 @@ mod collaboration_api_router_tests;
 #[cfg(test)]
 mod mcp_remediation_tests;
 #[cfg(test)]
-use collaboration_application_test_support::native_mail_owner;
-#[cfg(test)]
 mod observation_streaming_tests;
 #[cfg(test)]
 mod permission_entry_path_tests;

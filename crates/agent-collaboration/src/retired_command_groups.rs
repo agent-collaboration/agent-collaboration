@@ -32,6 +32,10 @@ const RETIRED_COMMAND_GROUPS: &[&str] = &[
     "process",
     "move",
     "hook",
+    "message",
+    "show",
+    "approval",
+    "question",
 ];
 
 const NOT_AVAILABLE: &str = "not available in this build";

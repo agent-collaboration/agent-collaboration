@@ -575,8 +575,9 @@ fn resolve_current_session_ref(
     >,
 ) -> Result<collaboration_client::protocol::SessionRef, String> {
     if let Some(value) = from {
-        return serde_json::from_str(value)
-            .map_err(|_| crate::message_input_arguments::session_ref_guidance("--from"));
+        return serde_json::from_str(value).map_err(|_| {
+            "--from must be compact SessionRef JSON with endpoint.serviceId, endpoint.endpointId, and sessionId; for example --from '{\"endpoint\":{\"serviceId\":\"00000000-0000-4000-8000-000000000001\",\"endpointId\":\"codex-local\"},\"sessionId\":\"target-session\"}'. nativeThreadId is a lifecycle address, not a SessionRef. Copy .target from sessions list --json.".to_owned()
+        });
     }
     read_harness()
         .map_err(|error| error.to_string())?

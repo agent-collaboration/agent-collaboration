@@ -10,7 +10,6 @@ use collaboration_protocol::{
     CodexGeneration, OperationId, ProviderIdentity, ProviderPromptStopReason, SessionRef,
 };
 use collaboration_runtime::ProviderSessionEventHub;
-use collaboration_runtime::ServiceInteractionBroker;
 use message_board::SessionEndpointRef;
 use tokio_util::sync::CancellationToken;
 
@@ -93,7 +92,6 @@ mod initialization_authentication_tests;
 
 pub struct ExternalProviderRuntime {
     client: AgentSessionClient<HostInteractionPort>,
-    interaction_port: Arc<HostInteractionPort>,
     event_sink: Option<Arc<HubSessionEventSink>>,
 }
 
@@ -111,7 +109,7 @@ impl ExternalProviderRuntime {
         launch: ExternalProviderLaunch,
         behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
-        let interaction_port = Arc::new(HostInteractionPort::default());
+        let interaction_port = Arc::new(HostInteractionPort);
         let client = AgentSessionClient::initialize(
             launch,
             Arc::clone(&interaction_port),
@@ -121,7 +119,6 @@ impl ExternalProviderRuntime {
         .await?;
         Ok(Self {
             client,
-            interaction_port,
             event_sink: None,
         })
     }
@@ -133,7 +130,7 @@ impl ExternalProviderRuntime {
         server_url: impl Into<String>,
         behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
-        let interaction_port = Arc::new(HostInteractionPort::default());
+        let interaction_port = Arc::new(HostInteractionPort);
         let client = AgentSessionClient::initialize_with_mcp_http(
             launch,
             model_picker,
@@ -146,7 +143,6 @@ impl ExternalProviderRuntime {
         .await?;
         Ok(Self {
             client,
-            interaction_port,
             event_sink: None,
         })
     }
@@ -160,12 +156,9 @@ impl ExternalProviderRuntime {
         endpoint: SessionEndpointRef,
         behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
-        let interaction_port = Arc::new(HostInteractionPort::default());
+        let interaction_port = Arc::new(HostInteractionPort);
         let event_sink = Arc::new(HubSessionEventSink::new(hub, endpoint));
         let published_sink: Arc<dyn acp_client_runtime::SessionEventSink> = event_sink.clone();
-        interaction_port
-            .install_event_sink(Arc::clone(&published_sink))
-            .await;
         let result = AgentSessionClient::initialize_with_mcp_http(
             launch,
             model_picker,
@@ -185,7 +178,6 @@ impl ExternalProviderRuntime {
         };
         Ok(Self {
             client,
-            interaction_port,
             event_sink: Some(event_sink),
         })
     }
@@ -196,7 +188,7 @@ impl ExternalProviderRuntime {
         initialize_timeout: Duration,
         behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
-        let interaction_port = Arc::new(HostInteractionPort::default());
+        let interaction_port = Arc::new(HostInteractionPort);
         let client = AgentSessionClient::initialize_with_timeout(
             launch,
             initialize_timeout,
@@ -207,13 +199,8 @@ impl ExternalProviderRuntime {
         .await?;
         Ok(Self {
             client,
-            interaction_port,
             event_sink: None,
         })
-    }
-
-    pub async fn install_approval_broker(&self, broker: Arc<ServiceInteractionBroker>) {
-        self.interaction_port.install_broker(broker).await;
     }
 
     pub fn admission(&self) -> &ExternalProviderAdmission {
@@ -661,6 +648,3 @@ pub(crate) mod acp_scripted_fixture;
 #[cfg(test)]
 #[path = "external_provider_runtime/approval_dispatch_test.rs"]
 mod approval_dispatch_tests;
-#[cfg(test)]
-#[path = "external_provider_runtime/approval_push_fixture.rs"]
-mod approval_push_fixture;

@@ -7,8 +7,8 @@ use agent_automation::{
     RouteEffectEvidence, SubmissionEffect,
 };
 use codex_router_host::{
-    ExternalProviderBinding, ExternalProviderLaunch, ExternalProviderRuntime,
-    ExternalProviderSupervisor, ProviderAcpDeliveryRoute,
+    ExternalProviderBinding, ExternalProviderRuntime, ExternalProviderSupervisor,
+    ProviderAcpDeliveryRoute,
 };
 use collaboration_contracts::{
     AttemptReconciliation, AttemptReconciliationContext, DeliveryPrecondition, LoadPolicy,
@@ -19,18 +19,14 @@ use collaboration_protocol::{
     AttemptId, CodexGeneration, DeliveryClientReceipt, DeliveryCorrelationId, DeliveryOutcome,
     DeliveryRejectionReason, GenerationNumber, MessageDelivery, MessageText, OperationId,
     ProviderOperationEffect, ProviderOperationKind, ProviderReconciliationState,
-    ProviderRequestedPolicy, ProviderWorkingDirectory, PushId, RouterAccess, SessionRef,
+    ProviderRequestedPolicy, ProviderWorkingDirectory, PushId, RouterAccess,
 };
 use collaboration_runtime::{
     EndpointDirectory, ProviderOperationAdmission, ProviderOperationStore, ProviderSessionRecord,
     SessionDeliveryRouter,
 };
 use serde_json::Value;
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-    time::Duration,
-};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 
 #[path = "../support/provider_delivery_fixture.rs"]
@@ -733,6 +729,3 @@ async fn coded_provider_load_errors_keep_correlations_and_do_not_expose_acp_text
 
 #[path = "../provider_acp_delivery_route/provider_failure_tests.rs"]
 mod provider_failure_tests;
-
-#[path = "../provider_acp_delivery_route/auto_direct_message_tests.rs"]
-mod auto_direct_message_tests;

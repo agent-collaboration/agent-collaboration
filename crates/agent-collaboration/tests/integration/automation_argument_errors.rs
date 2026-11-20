@@ -1,8 +1,7 @@
 //! Argument rejection is machine-readable before service discovery or native dispatch.
 
-/// The local wake and schedule command groups this build no longer carries, each with a
-/// command it once accepted.
-const RETIRED_GROUP_COMMANDS: [[&str; 2]; 29] = [
+/// Retired command groups paired with an argument they once accepted.
+const RETIRED_GROUP_COMMANDS: [[&str; 2]; 33] = [
     ["wake", "send"],
     ["schedule", "create"],
     ["instruction", "show"],
@@ -32,6 +31,10 @@ const RETIRED_GROUP_COMMANDS: [[&str; 2]; 29] = [
     ["process", "show"],
     ["move", "show"],
     ["hook", "list"],
+    ["message", "send"],
+    ["show", "push-id"],
+    ["approval", "list"],
+    ["question", "list"],
 ];
 
 #[test]
@@ -203,7 +206,6 @@ fn finite_control_groups_keep_json_for_missing_required_arguments() {
         &["sessions", "list", "--json"],
         &["session", "inspect", "--json"],
         &["conversation", "prompt", "--json"],
-        &["message", "send", "--json"],
     ];
 
     for arguments in cases {

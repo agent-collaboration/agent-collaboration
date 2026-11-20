@@ -40,16 +40,6 @@ export const section: LedgerSection = {
       note: "open scratch scope record",
     },
     {
-      file: `${R}outgoing_mail_message.rs`,
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "message_send draft to mail DeliveryItem: PushOrigin to MailSender with protocol to board SessionRef by try_into (:21-34), push id to ItemId (:66), target to Recipient address (:71)",
-    },
-    {
-      file: `${R}pending_snapshot_interactions.rs`,
-      disposition: { kind: "none" },
-      note: "finds unresolved interaction requests in a hub snapshot",
-    },
-    {
       file: `${R}private_socket_listener.rs`,
       disposition: { kind: "none" },
       note: "private Unix socket binding",
@@ -63,11 +53,6 @@ export const section: LedgerSection = {
       file: `${R}provider_acp_event_projection.rs`,
       disposition: { kind: "converts", owners: ["acp", "router-extension"] },
       note: "N9: hub event to session/update and _session/state (event_notification :35): TurnOutcome and TurnLostReason (:59-97), SessionState (:100-109), tool kind (:121), tool status (:126), text delta (:146-151) and update kind (:155-159, Usage not filtered); StopReason label (:178) and a second, different StopReason mapping (:384-392); writes into the AcpOutputSender at :262, :314, :336, :365, :379, :394, :399; 10 json!",
-    },
-    {
-      file: `${R}provider_acp_interaction.rs`,
-      disposition: { kind: "converts", owners: ["acp", "router-extension"] },
-      note: "ApprovalRequest to session/request_permission json! with request id router:approval:<session>:<request> (:30), subject to toolCall (:35-52), _meta.sessionProfile.choice and _meta.router.optionsOrigin (:53-87), option kind table (:57-64); question to elicitation/create form schema (:95-185); apply_interaction_reply (:196-271)",
     },
     {
       file: `${R}provider_acp_session_route.rs`,
@@ -98,11 +83,6 @@ export const section: LedgerSection = {
       file: `${R}push_handoff_worker.rs`,
       disposition: { kind: "none" },
       note: "ordered automation operations",
-    },
-    {
-      file: `${R}received_mail_push.rs`,
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "frozen mail DeliveryItem to PushRecordDraft: address to SessionRef, ItemId to PushId, MailSender to PushOrigin, NotificationSource to PushKind, RouterOriginRef and header facts (:42-200), RecordKind summary text (:202-208)",
     },
     {
       file: `${R}router_session_app_server.rs`,
@@ -451,24 +431,6 @@ export const section: LedgerSection = {
     },
     {
       file: `${R}provider_acp_session_route.rs`,
-      line: 281,
-      edge: "acp-served-n9",
-      sends: "session/request_permission and elicitation/create requests pushed to the ACP client",
-      owner: { part: "N9" },
-      origin: "product",
-      coverage: noTap("no tap records outbound interaction requests"),
-    },
-    {
-      file: `${R}provider_acp_session_route.rs`,
-      line: 354,
-      edge: "acp-served-n9",
-      sends: "re-presented session/request_permission or elicitation/create request",
-      owner: { part: "N9" },
-      origin: "product",
-      coverage: noTap("no tap records re-presented interaction requests"),
-    },
-    {
-      file: `${R}provider_acp_session_route.rs`,
       line: 678,
       edge: "acp-served-n9",
       sends:
@@ -604,25 +566,7 @@ export const section: LedgerSection = {
         "thread/start response read from the real websocket by the connection tap (recorded as setup frames at RecordLayer::WireFrame)",
       owner: { part: "N1" },
       origin: "product",
-      coverage: {
-        kind: "tap",
-        testFile: N1_CONNECTION_TAP,
-        cases: ["node_tap_n1_approval_reply_reaches_the_approvals_broker"],
-      },
-    },
-    {
-      file: `${R}router_session_app_server.rs`,
-      line: 346,
-      edge: "cli-codex",
-      sends:
-        "item/commandExecution/requestApproval server request read from the real websocket and compared with the row",
-      owner: { part: "N3" },
-      origin: "product",
-      coverage: {
-        kind: "tap",
-        testFile: N1_CONNECTION_TAP,
-        cases: ["node_tap_n1_approval_reply_reaches_the_approvals_broker"],
-      },
+      coverage: noTap("the retired approval tap used thread/start as setup"),
     },
     {
       file: `${R}provider_acp_event_projection.rs`,

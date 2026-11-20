@@ -141,21 +141,24 @@ fn debug_dry_run_preserves_isolated_socket_and_never_executes_codex() {
 }
 
 #[test]
-fn message_discovery_error_reports_category_without_leaking_content_or_path() {
-    // Arrange: nonexistent service directory; no native process or send can occur.
+fn prompt_discovery_error_reports_category_without_leaking_content_or_path() {
+    // Arrange: discovery fails before a native session can receive the prompt.
     let id = "00000000-0000-4000-8000-000000000001";
     let target = serde_json::json!({"endpoint":{"serviceId":id,"endpointId":"codex-local"},"sessionId":"test"}).to_string();
-    let absent = format!("/tmp/absent-message-service-{}", std::process::id());
+    let absent = format!("/tmp/absent-prompt-service-{}", std::process::id());
     // Act.
     let output = Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
         .args([
-            "message",
-            "send",
-            "--human-user",
-            "--to",
+            "conversation",
+            "prompt",
+            "--endpoint",
+            "codex-local",
+            "--session",
+            "test",
+            "--from",
             &target,
             "--text",
-            "private message text",
+            "private prompt text",
             "--service-directory",
             &absent,
             "--json",
@@ -168,7 +171,7 @@ fn message_discovery_error_reports_category_without_leaking_content_or_path() {
     assert!(text.contains("NotFound"));
     assert!(text.contains("manifest-read"));
     assert!(!text.contains(&absent));
-    assert!(!text.contains("private message text"));
+    assert!(!text.contains("private prompt text"));
 }
 
 #[test]

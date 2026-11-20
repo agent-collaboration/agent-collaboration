@@ -63,9 +63,7 @@ fn target() -> SessionRef {
 #[test]
 fn live_metadata_lifecycle_has_no_transcript_frames_and_preserves_real_content() {
     let session = target();
-    let actor: Identity =
-        serde_json::from_value(json!({"kind":"human","humanId":"owner"})).expect("actor");
-    let mut forwarding = AppServerEventForwarding::new(actor, None);
+    let mut forwarding = AppServerEventForwarding::new();
     forwarding.project(
         &session,
         &HubEvent {

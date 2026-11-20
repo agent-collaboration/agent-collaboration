@@ -43,8 +43,8 @@ impl RegistryCase {
                 Err(error) => failures.push(format!("peer observer join: {error}")),
             }
             check_cleanup(
-                peer.received.is_empty(),
-                "unexpected extra peer frame",
+                peer.count.load(std::sync::atomic::Ordering::Relaxed) == 0,
+                "unexpected peer delivery connection",
                 &mut failures,
             );
         }

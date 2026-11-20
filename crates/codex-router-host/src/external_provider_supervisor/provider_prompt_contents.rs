@@ -135,7 +135,7 @@ impl ExternalProviderSupervisor {
                                 ConversationOperationFailureKind::PermissionRejected,
                                 ConversationOperationFailureStage::Settlement,
                                 ProviderOperationEffect::Applied,
-                                reason.code(),
+                                reason.message(),
                                 operation_id,
                                 Some(completion_target),
                             )),

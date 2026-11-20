@@ -197,13 +197,13 @@ new restart request. Subsequent compatible upgrades use `host restart`.
 See [Host restart validation](docs/testing/host-restart.md) for isolation and
 replacement proof.
 
-For discovery, agent-declared messages and queue/steer, see the [agent CLI guide](docs/agent-guidance/agent-collaboration.md).
+For endpoint discovery and session observation, see the [agent CLI guide](docs/agent-guidance/agent-collaboration.md#cli-discovery).
 `agent-collaboration conversation create|prompt|load|cancel` uses the target
 endpoint's client, including Codex, Claude, and Cursor. Use `conversation
-operation show|wait|reconcile` for inspectable operations. `message send` can
-also reach a live Claude Code session through its peer socket; its
-`peerMessageWritten` receipt confirms the write, not the session's response.
-That guide also documents registering the running Router Host's manifest-advertised
+operation show|wait|reconcile` for inspectable operations. The local
+`message`, `show`, `approval` and `question` command groups are unavailable in
+this build.
+The guide also documents registering the running Router Host's manifest-advertised
 Streamable HTTP MCP endpoint with Codex. Use the selected current `service.json`;
 do not guess a port or expose the unauthenticated endpoint beyond loopback.
 Local wakes and schedules are not available in this build; they return with central

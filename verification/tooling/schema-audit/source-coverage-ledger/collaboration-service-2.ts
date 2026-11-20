@@ -9,48 +9,9 @@ export const section: LedgerSection = {
       note: "feature test-support entry: test_support_deliver_inbound_wake (8) passes a fleet DeliveryItem<RouterDeliveryTypes> and mail-protocol WakeBody straight to MailConsumer::deliver_wake; permit count probe (18). Defines, converts, sends or reads no shape of the four protocols",
     },
     {
-      file: "crates/collaboration-service/src/mail_delivery_runtime/local_admission.rs",
-      disposition: { kind: "none" },
-      note: "fleet Inbox custody for local direct mail (central board/fleet delivery SDK, not one of the four protocols): map_refusal (306) maps fleet DeliveryRefusal {ItemConflict, MailboxFull, TooOld} to mail-protocol MailRefusal; the MCP-facing step (MailRefusal to MessageFailureKind) is message_operations.rs:386, outside this share. Reads typed MessageSendResult::Local (239, 290); PushId to MailItemId (149)",
-    },
-    {
-      file: "crates/collaboration-service/src/mail_delivery_runtime/local_calls.rs",
-      disposition: { kind: "none" },
-      note: "durable_steps CallRouter: decodes the SDK's own CallEnvelope target/request (DeliverCall, DeliveryItemRef) with from_value (13-16) and encodes validated_answer (109); private fleet SDK call records, not one of the four protocols. Native delivery is triggered through MailConsumer/reader actors (82, 97, 106); no transport is written here",
-    },
-    {
-      file: "crates/collaboration-service/src/mail_delivery_runtime/local_cancellation.rs",
-      disposition: { kind: "none" },
-      note: "fleet DeliveryCancel local custody and mail-protocol CancelCause attribution (central board/fleet delivery, not one of the four protocols); fleet ItemId to MailItemId by string (148)",
-    },
-    {
       file: "crates/collaboration-service/src/mail_delivery_runtime/remote_wakes.rs",
       disposition: { kind: "converts", owners: ["router-vocabulary"] },
       note: "remote wake: generic JSON round-trip convert (24) between collaboration_mail_protocol RemoteWake* types and collaboration_protocol Wake* MCP request/result types (363-465), SessionRef protocol to board (132) and compared via JSON (371), ServiceId via String (94), WakeFailureReason/LocalMutationState to RemoteWakeRefusal/RemoteWakeMutationState via JSON (493, 497)",
-    },
-    {
-      file: "crates/collaboration-service/src/mail_delivery_runtime/sender_binding.rs",
-      disposition: { kind: "none" },
-      note: "fleet SenderBinding: mail-protocol MailSender to fleet Submitter (59-87); ProjectId/peer strings to fleet DatabaseId/PeerId; central board/fleet identities, not Router vocabulary identities",
-    },
-    {
-      file: "crates/collaboration-service/src/mail_push_delivery.rs",
-      disposition: { kind: "none" },
-      note: "recipient push policy: prepares a MailPushPreparation and hands layer_zero::DeliveryRequest to SubscriptionDeliveryService (attempt_follow_mail_once 114, attempt_mail_once 124); the native transport sits behind the SessionMessageDelivery trait, implemented elsewhere; no shape defined or converted here",
-    },
-    {
-      file: "crates/collaboration-service/src/mail_push_delivery_fixture.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          "cfg(test) module declared at mail_push_delivery_tests.rs:3-4 (#[path] mod native), itself declared under #[cfg(test)] at mail_push_delivery.rs:150-152",
-      },
-      note: "test stand-in SessionMessageDelivery recording layer_zero::DeliveryRequest in memory (97); hand-built message_board SessionRef JSON (415) and record subject JSON (435) in test data; writes no Codex/ACP/MCP frame",
-    },
-    {
-      file: "crates/collaboration-service/src/mail_push_outcome.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "maps Router DeliveryOutcome to fleet LocalOutcome/mail CarrierAcceptance twice (observed_outcome 40, local_follow_outcome 84, the second holding NotSubmitted/Rejected instead of refusing); UnsentCause/NativeRefusalCode to fleet DeliveryRefusal/DeliveryFailureKind (22-31, 62-77)",
     },
     {
       file: "crates/collaboration-service/src/native_claude_catalogue.rs",

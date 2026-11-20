@@ -9,19 +9,9 @@ export const section: LedgerSection = {
       note: "binds the loopback TCP and control.sock listeners and mounts collaboration_mcp::collaboration_api_router on each (60,74); the MCP shapes live in collaboration-mcp (N11)",
     },
     {
-      file: "crates/codex-router-host/src/collaboration_runtime/fleet_observation.rs",
-      disposition: { kind: "none" },
-      note: "reads the fleet link record and stuck-mail summary into FleetHostObservation (13-52); typed values, no message built",
-    },
-    {
       file: "crates/codex-router-host/src/collaboration_runtime/lifecycle.rs",
       disposition: { kind: "none" },
       note: "listener failure select and ordered shutdown of the runtime's tasks and stores (3-233)",
-    },
-    {
-      file: "crates/codex-router-host/src/collaboration_runtime/mail_delivery_composition.rs",
-      disposition: { kind: "none" },
-      note: "constructs MailDeliveryRuntime, with the debug Inbox limit under runtime-test-support (13-18)",
     },
     {
       file: "crates/codex-router-host/src/collaboration_runtime/native_backend.rs",
@@ -54,24 +44,9 @@ export const section: LedgerSection = {
       note: "hand schema digest hex encoder sha256:{hex} (101-109); collaboration_protocol EndpointRef to message_board SessionEndpointRef by String round trip of service_id and endpoint_id (681-690); typed ServiceManifest publication (747-767); composition otherwise",
     },
     {
-      file: "crates/codex-router-host/src/debug_inbox_limit.rs",
-      disposition: { kind: "none" },
-      note: "debug fixture file InboxLimitInput serde (6-10,38); compiled only under debug_assertions + runtime-test-support (lib.rs); not a message",
-    },
-    {
-      file: "crates/codex-router-host/src/debug_mail_clock.rs",
-      disposition: { kind: "none" },
-      note: "debug-only frozen clock control stream (ClockInput/ClockStep Deserialize, ClockReply Serialize, 15-33) on a private unix socket; compiled only under debug_assertions + runtime-test-support (lib.rs); a test fixture channel, not one of the four protocols",
-    },
-    {
       file: "crates/codex-router-host/src/debug_readiness_timing.rs",
       disposition: { kind: "none" },
       note: "opt-in debug timing line built with json! on stderr (9), diagnostic only",
-    },
-    {
-      file: "crates/codex-router-host/src/debug_runtime_barrier.rs",
-      disposition: { kind: "none" },
-      note: "debug causal barrier writes a fixed marker byte string to a private socket (10-11); compiled only under debug_assertions + runtime-test-support (lib.rs)",
     },
     {
       file: "crates/codex-router-host/src/explicit_app_server_restart.rs",
@@ -94,14 +69,6 @@ export const section: LedgerSection = {
         kind: "excluded",
         reason:
           "cfg(test)-only module: declared #[cfg(test)] at external_provider_runtime.rs:658-660",
-      },
-    },
-    {
-      file: "crates/codex-router-host/src/external_provider_runtime/approval_push_fixture.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          "cfg(test)-only module: declared #[cfg(test)] at external_provider_runtime.rs:664-666",
       },
     },
     {

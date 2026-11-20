@@ -81,7 +81,7 @@ fn ensure_test_scratch() {
 async fn prompt_buffers_early_output_and_settles_native_completion_once() {
     ensure_test_scratch();
     // The fourth case omits effort; the fifth resumes with the inherited
-    // effort. Later cases prove invalid output does not short-circuit callbacks.
+    // effort. Later cases cover unavailable and plan-only final output.
     for (use_task, malformed_callback, requested_effort, resumed, reply, cancel) in [
         (
             false,
@@ -333,25 +333,10 @@ async fn prompt_buffers_early_output_and_settles_native_completion_once() {
             ) {
                 socket.send(Message::Text(json!({"method":"item/agentMessage/delta","params":{"threadId":"thread-a","turnId":"turn-a","itemId":"message-after-reply","delta":"continued after unavailable reply"}}).to_string().into())).await.unwrap_or_else(|error| panic!("continuation after unavailable reply: {error}"));
             }
-            socket.send(Message::Text(json!({"id":9007199254740993_i64,"method":"item/commandExecution/requestApproval","params":{"threadId":"thread-a","turnId":"turn-a","itemId":"tool-a","command":if malformed_callback {json!(42)} else {json!("cargo test")},"availableDecisions":["accept","decline"]}}).to_string().into())).await.unwrap_or_else(|error| panic!("permission: {error}"));
             if malformed_callback {
+                socket.send(Message::Text(json!({"id":9007199254740993_i64,"method":"item/commandExecution/requestApproval","params":{"threadId":"thread-a","turnId":"turn-a","itemId":"tool-a","command":42,"availableDecisions":["accept","decline"]}}).to_string().into())).await.unwrap_or_else(|error| panic!("permission: {error}"));
                 return;
             }
-            let reply = socket
-                .next()
-                .await
-                .unwrap_or_else(|| panic!("reply"))
-                .unwrap_or_else(|error| panic!("reply frame: {error}"));
-            let reply: Value = serde_json::from_str(
-                reply
-                    .to_text()
-                    .unwrap_or_else(|error| panic!("reply text: {error}")),
-            )
-            .unwrap_or_else(|error| panic!("reply JSON: {error}"));
-            assert_eq!(
-                reply,
-                json!({"id":9007199254740993_i64,"result":{"decision":"cancel"}})
-            );
             if cancel {
                 let interrupt = socket.next().await.unwrap().unwrap();
                 let request: Value = serde_json::from_str(interrupt.to_text().unwrap()).unwrap();
@@ -388,7 +373,6 @@ async fn prompt_buffers_early_output_and_settles_native_completion_once() {
             } else {
                 json!({"cwd":"/work","mcpServers":[],"_meta":{"codexRouter":{"model":"gpt-5.6-sol","effort":"medium","access":"workspace-write","scratchScope":"session-00000000-0000-4000-8000-000000000099","scratchPath":TEST_SCRATCH,"createdBy":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"},"approver":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}}}})
             },
-            approval_broker: std::sync::Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         };
         let session = if resumed {
             AcpSessionBinding::load_existing(&mut catalog, setup_inputs)
@@ -493,13 +477,6 @@ async fn prompt_buffers_early_output_and_settles_native_completion_once() {
                 fixture.await.unwrap();
                 continue;
             }
-            let decision = prompt
-                .next_event(&mut catalog)
-                .await
-                .unwrap_or_else(|error| panic!("decision: {error}"));
-            assert!(
-                matches!(decision, Some(PromptEvent::NativeNotification(value)) if value["kind"] == "approvalDecisionSubmitted")
-            );
             if cancel {
                 let Some(response) = prompt.cancel().await else {
                     panic!("cancel response")
@@ -524,7 +501,7 @@ async fn prompt_buffers_early_output_and_settles_native_completion_once() {
                 matches!(&terminal,Some(PromptEvent::Terminal(value)) if value["id"]=="acp-prompt" && value["result"]["stopReason"]=="end_turn")
             );
             let expected_access = if resumed {
-                // A resumed thread with no recorded route inherits its access.
+                // A cold-resumed thread inherits its native access.
                 Value::Null
             } else {
                 Value::from("workspace-write")

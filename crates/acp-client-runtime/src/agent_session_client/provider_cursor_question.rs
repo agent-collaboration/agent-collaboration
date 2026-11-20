@@ -206,6 +206,14 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderCursorQuestionHan
         let request_cancellation = responder.cancellation();
         let response_guard = context.responses.track();
         connection.spawn(async move {
+            if let Some(refusal) = port.managed_refusal() {
+                let queued = responder.respond(refusal.acp_question());
+                drop(response_guard);
+                context
+                    .cancel_after_refusal(port, session_id, refusal)
+                    .await;
+                return queued;
+            }
             let agent_cancellation = CancellationToken::new();
             let answer = port.request_question(
                 context.approval,

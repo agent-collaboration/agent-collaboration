@@ -294,18 +294,6 @@ impl ExternalProviderSupervisor {
         })
     }
 
-    pub async fn install_approval_broker(
-        &self,
-        broker: Arc<collaboration_runtime::ServiceInteractionBroker>,
-    ) {
-        for binding in self.inner.bindings.values() {
-            binding
-                .runtime
-                .install_approval_broker(Arc::clone(&broker))
-                .await;
-        }
-    }
-
     #[expect(
         clippy::result_large_err,
         reason = "The typed failure retains the full published operation payload."

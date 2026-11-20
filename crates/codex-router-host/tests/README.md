@@ -29,3 +29,8 @@ Relaunched test names derive from `module_path!()`. Normally completed children
 with captured output must report one passed test. Intentional exits, kills,
 exec replacements and managed children with discarded output retain actual
 readiness, effect, exit-code or reaping checks that reject zero matches.
+
+The files under `fixtures/predecessor-mail/` came from opening a fresh
+interaction store with Router revision `a2bae5ef8`. The fixture preserves the
+database and its WAL from that open. The Host test copies these files as bytes
+and compares them after startup and shutdown.

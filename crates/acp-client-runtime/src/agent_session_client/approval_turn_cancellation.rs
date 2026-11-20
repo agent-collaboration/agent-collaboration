@@ -2,6 +2,7 @@
 
 use super::{AgentSessionClient, ExternalProviderRuntimeError, ProviderCommand};
 use crate::InteractionPort;
+use session_event_model::managed_interaction_refusal::ManagedInteractionRefusal;
 use std::{
     collections::HashMap,
     sync::{
@@ -50,6 +51,7 @@ pub(crate) struct ActiveApprovalContext<P: InteractionPort> {
     pub(crate) approval: P::Context,
     pub(crate) cancelling: CancellationToken,
     pub(crate) responses: Arc<PermissionResponseBarrier>,
+    pub(crate) commands: tokio::sync::mpsc::WeakSender<ProviderCommand<P>>,
 }
 
 impl<P: InteractionPort> Clone for ActiveApprovalContext<P> {
@@ -58,7 +60,43 @@ impl<P: InteractionPort> Clone for ActiveApprovalContext<P> {
             approval: self.approval.clone(),
             cancelling: self.cancelling.clone(),
             responses: Arc::clone(&self.responses),
+            commands: self.commands.clone(),
         }
+    }
+}
+
+impl<P: InteractionPort> ActiveApprovalContext<P> {
+    pub(crate) async fn cancel_after_refusal(
+        self,
+        interaction_port: Arc<P>,
+        provider_session_id: String,
+        refusal: ManagedInteractionRefusal,
+    ) {
+        let Some(commands) = self.commands.upgrade() else {
+            return;
+        };
+        let operation_id = P::operation_id(&self.approval);
+        let cancellation = ProviderTurnCancellation {
+            cancelling: self.cancelling,
+            approval: self.approval,
+            interaction_port,
+            responses: self.responses,
+        };
+        cancellation.mark_cancelling();
+        cancellation.settle_pending_approvals().await;
+        tracing::warn!(
+            reason_code = refusal.code(),
+            reason = refusal.reason(),
+            "managed provider interaction refused"
+        );
+        let (reply, _result) = tokio::sync::oneshot::channel();
+        let _sent = commands
+            .send(ProviderCommand::Cancel {
+                provider_session_id,
+                expected_operation_id: Some(operation_id),
+                reply,
+            })
+            .await;
     }
 }
 

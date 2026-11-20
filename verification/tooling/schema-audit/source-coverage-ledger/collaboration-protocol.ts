@@ -23,11 +23,6 @@ export const section: LedgerSection = {
       note: "types Existence L9, ArchiveState L16, StatusOrdering L23, LifecycleDisposition L30, AddressEntry L38 (lastStatus is the NativeThreadStatus projection), CoverageState L50, CoverageView L58, AddressPage L67",
     },
     {
-      file: "crates/collaboration-protocol/src/approval_contract.rs",
-      disposition: { kind: "defines", owners: ["router-vocabulary", "mcp"] },
-      note: "ApprovalDecision L18, ApprovalState L26, ApprovalOptionScope L38, ApprovalOfferedOption L49, ApprovalArgument L58, ApprovalPresentation L65, ApprovalOptionEffect L88, ApprovalOptionViewScope L96, ApprovalOptionView L104, ApprovalDetailedRecord L115 (requester is the board SessionRef), untagged ApprovalListResponse L137, ApprovalRequestRecord L144 (requester/approver are the protocol SessionRef; operation is untyped serde_json::Value L158), ApprovalDecideParams L170 (actor through interaction_actor L180).",
-    },
-    {
       file: "crates/collaboration-protocol/src/attempt_history_contract.rs",
       disposition: { kind: "defines", owners: ["router-vocabulary", "mcp"] },
       note: "types AttemptInspection L11, SummaryInspectionState L22, SummaryInspection L33, EarlierAttempts L55, AttemptHistoryCoverage L60, AttemptHistoryPage L68, DeliveryAttemptsRequest L76, RunSummariesRequest L84",
@@ -103,11 +98,6 @@ export const section: LedgerSection = {
       note: "types EndpointInventory L6",
     },
     {
-      file: "crates/collaboration-protocol/src/fleet_host_status.rs",
-      disposition: { kind: "defines", owners: ["router-vocabulary", "mcp"] },
-      note: "types StuckMailSummary L13, KnownStuckMail L30",
-    },
-    {
       file: "crates/collaboration-protocol/src/identity_schemas.rs",
       disposition: { kind: "defines", owners: ["router-vocabulary"] },
       note: "validated_schema! macro L10: hand-written JsonSchema for UuidIdentity, EndpointId, SessionId, NonEmptyText, SchemaDigest, ObservationTimestamp, GenerationNumber (L22-L49), patterns imported from message_board.",
@@ -121,11 +111,6 @@ export const section: LedgerSection = {
       file: "crates/collaboration-protocol/src/instruction_contract.rs",
       disposition: { kind: "defines", owners: ["router-vocabulary", "mcp"] },
       note: "types InstructionCreateParams L8, InstructionUpdateParams L14, InstructionShowParams L22, InstructionSnapshot L27, InstructionFailureKind L37, InstructionStage L48, InstructionNextAction L56, LocalMutationState L64, LocalMutationEvidence L71, InstructionFailure L76",
-    },
-    {
-      file: "crates/collaboration-protocol/src/interaction_actor.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "deserialize_interaction_actor L7: untagged ActorWire L13 (typed board Identity or legacy protocol SessionRef); the legacy SessionRef is converted field by field to the board SessionRef (L20-L33).",
     },
     {
       file: "crates/collaboration-protocol/src/journal_contract.rs",
@@ -143,11 +128,6 @@ export const section: LedgerSection = {
       note: "ThreadAddress L6, ObservationScope L12, ObservationSource L19, LifecycleSubject L27, BackendStatus L33, TerminalStatus L47 (the terminal Codex turn statuses), NativeActiveFlag L54 and NativeThreadStatus L61 (a pinned projection of Codex ThreadStatus, tag type), LifecycleChange L72, LifecycleObservation L95 with validate L103.",
     },
     {
-      file: "crates/collaboration-protocol/src/mail_boundary_conversions.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "TryFrom<SessionRef> for message_board::SessionRef L9 and the reverse L17 convert through a serde_json to_value/from_value round trip; MessageDelivery to MailDeliveryMode L26 and back L35; CodexGeneration to GenerationGuard L44 and back L54; MailItemId to PushId L66 and back L72 through their strings.",
-    },
-    {
       file: "crates/collaboration-protocol/src/message_content.rs",
       disposition: { kind: "defines", owners: ["router-vocabulary", "mcp"] },
       note: "MessageText L9 (hand JsonSchema L63), MessageContent L75, MessageDelivery L92, MessageInputKind L101, MessageRepresentation L108, RenderedMessage L114 (no serde), AcceptedResumeEffect L242; session_identity L121 formats the emoji header identity. Inline #[cfg(test)] mod tests at L200-L238.",
@@ -156,16 +136,6 @@ export const section: LedgerSection = {
       file: "crates/collaboration-protocol/src/message_frame_limit.rs",
       disposition: { kind: "none" },
       note: "MAX_CONTROL_FRAME_BYTES constant only (L6).",
-    },
-    {
-      file: "crates/collaboration-protocol/src/message_mail_operations.rs",
-      disposition: { kind: "defines", owners: ["router-vocabulary", "mcp"] },
-      note: "MessageShowResult L10 and MessageHistoryEntry L26 (untagged local/remote), RemoteMessageStatus L17, MessageHistoryResult L32, MailReadContext L43, MessageReadCaller L62, MessageShowRequest L69, RemoteDeliveryStatus L91 / RemoteDeliveryRefusal L114 / RemoteProcessingFailure L144 / RemoteSizeField L156: public copies of the mail SDK's custody status (comment L82-L83).",
-    },
-    {
-      file: "crates/collaboration-protocol/src/message_send_result.rs",
-      disposition: { kind: "defines", owners: ["router-vocabulary", "mcp"] },
-      note: "MessageSendResult L11 (untagged, schema anyOf rewritten to oneOf by disjoint_message_results L27), QueuedMessageSend L21; tests declared #[cfg(test)] at L35-L37.",
     },
     {
       file: "crates/collaboration-protocol/src/native_claude_inventory.rs",
@@ -261,24 +231,9 @@ export const section: LedgerSection = {
       note: "render_push_line L342 renders a PushLineInput to the push line text (DisplayLimits::render L56 builds the emoji headers, preview and link; largest_fitting_prefix L310 clips to the byte budget); parse_push_line_header L367 classifies a header back to PushKind by its emoji prefix.",
     },
     {
-      file: "crates/collaboration-protocol/src/push_record.rs",
-      disposition: { kind: "defines", owners: ["router-vocabulary"] },
-      note: "PushRecord L237 and PushRecordDraft L63 (originRouterRef carried as Option<String> L67, L241, parsed with RouterOriginRef::parse_canonical L123), PushActivitySnapshot L26, PushDeliveryState L189, CancelledAfterDelivery L201, list/show/history params and results L263-L331: the stored and shown mail record.",
-    },
-    {
-      file: "crates/collaboration-protocol/src/question_contract.rs",
-      disposition: { kind: "defines", owners: ["router-vocabulary", "mcp"] },
-      note: "QuestionListParams L9, QuestionFieldView L15, QuestionState L59, QuestionRecord L68 (requester is the board SessionRef), QuestionListResult L79, QuestionAnswerParams L85, QuestionAnswerResult L94; re-exports session_event_model ChoiceOption, QuestionAnswerValue, QuestionResponse (L5).",
-    },
-    {
       file: "crates/collaboration-protocol/src/router_executable_relation.rs",
       disposition: { kind: "defines", owners: ["router-vocabulary"] },
       note: "RouterExecutableRelation L8 (serde, snake_case tag): how the running Router build relates to its launch path; router_build_warning L27; inline #[cfg(test)] mod tests at L41.",
-    },
-    {
-      file: "crates/collaboration-protocol/src/router_origin_ref.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "RouterOriginRef L11 and its mirror RouterOriginRefWire L131 (to_wire L189, from_wire L234); canonical_string L174 and parse_canonical L178 carry the reference as a JSON string inside a string field and reject any non-canonical encoding; Serialize L276 and Deserialize L286 use that string. Inline #[cfg(test)] mod tests at L306.",
     },
     {
       file: "crates/collaboration-protocol/src/run_evidence_validation.rs",
@@ -337,16 +292,6 @@ export const section: LedgerSection = {
       file: "crates/collaboration-protocol/src/session_delivery_receipt.rs",
       disposition: { kind: "defines", owners: ["router-vocabulary", "mcp"] },
       note: "types DeliveryClientReceipt L15, DeliveryReceipt L23; From<NativeSendReceipt> L29 maps NativeSendAcceptance to DeliveryOutcome by hand.",
-    },
-    {
-      file: "crates/collaboration-protocol/src/session_message_reply.rs",
-      disposition: { kind: "defines", owners: ["router-vocabulary", "mcp"] },
-      note: "types SessionMessageReplyParams L8, SessionMessageReplyResult L18",
-    },
-    {
-      file: "crates/collaboration-protocol/src/session_message_send.rs",
-      disposition: { kind: "defines", owners: ["router-vocabulary", "mcp"] },
-      note: "types SessionMessageSendParams L8",
     },
     {
       file: "crates/collaboration-protocol/src/session_observation_contract.rs",

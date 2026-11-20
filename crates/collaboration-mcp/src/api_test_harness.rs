@@ -5,10 +5,7 @@ use crate::{
     COLLABORATION_API_PATH, CollaborationApiConfig, CollaborationApiListener,
     DEFAULT_CONCURRENT_REQUESTS, collaboration_api_router, serve_collaboration_api,
 };
-use collaboration_protocol::{
-    ApiSelector, ApiSocketPath, ApiTransport, McpSelector, McpTransport, NonEmptyText,
-    RouterExecutableRelation, SERVICE_MANIFEST_VERSION, ServiceManifest,
-};
+use collaboration_protocol::RouterExecutableRelation;
 use collaboration_runtime::ManifestPublication;
 use collaboration_service::ApplicationFixture;
 use collaboration_service::CollaborationApplication;
@@ -42,9 +39,7 @@ pub(crate) const TEST_PROTOCOL_VERSION: &str = "2025-11-25";
 
 /// A Router identity with no stores; tests add the stores their operations need.
 pub(crate) fn test_identity() -> ApplicationFixture {
-    ApplicationFixture::new(TEST_SERVICE_ID, TEST_SERVICE_EPOCH)
-        .expect("test service identity")
-        .with_runtime_clock(std::sync::Arc::new(router_clock::SystemRuntimeClock::new()))
+    ApplicationFixture::new(TEST_SERVICE_ID, TEST_SERVICE_EPOCH).expect("test service identity")
 }
 
 /// The configuration a Host would hand every listener, over `application`.
@@ -62,33 +57,6 @@ pub(crate) fn api_config(
         concurrent_requests: DEFAULT_CONCURRENT_REQUESTS,
         shutdown: CancellationToken::new(),
     }
-}
-
-/// Publishes the version 3 manifest a Host writes for `application`, naming the API socket
-/// `control.sock` in `directory`.
-pub(crate) fn publish_manifest(
-    directory: &Path,
-    application: &CollaborationApplication,
-) -> ManifestPublication {
-    let manifest = ServiceManifest {
-        version: SERVICE_MANIFEST_VERSION,
-        service_id: application.service_id().clone(),
-        service_epoch: application.service_epoch().clone(),
-        machine_label: application.machine_label().clone(),
-        service_version: NonEmptyText::try_from(env!("CARGO_PKG_VERSION").to_owned())
-            .expect("service version"),
-        api: ApiSelector {
-            transport: ApiTransport::StreamableHttpUnix,
-            path: ApiSocketPath::ServiceSocket,
-        },
-        mcp: McpSelector {
-            transport: McpTransport::StreamableHttp,
-            url: "http://127.0.0.1:0/mcp".to_owned(),
-        },
-        native_schema_digest: None,
-        router_proxy_endpoint: None,
-    };
-    ManifestPublication::publish(directory, &manifest).expect("publish the version 3 manifest")
 }
 
 enum ServedEndpoint {

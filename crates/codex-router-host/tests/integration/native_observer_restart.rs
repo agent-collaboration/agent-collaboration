@@ -15,7 +15,7 @@ use tokio::{
 use tokio_tungstenite::tungstenite::Message;
 use tracing_subscriber::layer::SubscriberExt as _;
 
-use crate::host_clock_control;
+use router_clock::RuntimeClock;
 
 /// The warning an observer that never restored coverage logs once per run of failures.
 const NEVER_RECOVERED: &str = "native lifecycle observation failed before restoring coverage";
@@ -236,23 +236,22 @@ async fn an_observer_that_never_restores_coverage_backs_off_with_one_warning_unt
     let root = directory.path().to_path_buf();
     std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700))
         .unwrap_or_else(|error| panic!("directory permissions: {error}"));
-    let clock_listener =
-        host_clock_control::prepare(&root).unwrap_or_else(|error| panic!("clock input: {error}"));
-    let mut runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
-        directory: root.clone(),
-        codex_home: root.clone(),
-        backend_socket: root.join("backend.sock"),
-        mcp_bind: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
-        native_schema: None,
-        peer_registry_directory: None,
-        remote_control_server_name: None,
-        owner_human_id: None,
-    })
+    let clock = Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
+    let mut runtime = CollaborationRuntime::start_with_test_clock(
+        CollaborationRuntimeInputs {
+            directory: root.clone(),
+            codex_home: root.clone(),
+            backend_socket: root.join("backend.sock"),
+            mcp_bind: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
+            native_schema: None,
+            peer_registry_directory: None,
+            remote_control_server_name: None,
+            owner_human_id: None,
+        },
+        clock.clone(),
+    )
     .await
     .unwrap_or_else(|error| panic!("runtime start: {error}"));
-    let mut clock_control = host_clock_control::HostClockControl::connected(clock_listener)
-        .await
-        .unwrap_or_else(|error| panic!("clock control: {error}"));
     let (identity, export) = schema_export(&root).await;
     let listener = UnixListener::bind(root.join("backend.sock"))
         .unwrap_or_else(|error| panic!("backend fixture: {error}"));
@@ -283,12 +282,11 @@ async fn an_observer_that_never_restores_coverage_backs_off_with_one_warning_unt
                 .await
                 .unwrap_or_else(|error| panic!("retry report: {error}"));
             assert!(
-                runtime.runtime_test_sleep_was_checked(delay),
+                clock.has_not_due_check_now(clock.monotonic_now() + delay),
                 "observer retry did not wait on the Host's shared ManualClock"
             );
-            clock_control
+            clock
                 .advance(delay)
-                .await
                 .unwrap_or_else(|error| panic!("clock step: {error}"));
         }
         accepted_at

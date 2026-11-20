@@ -26,9 +26,6 @@ impl CollaborationRuntime {
             };
             self.manifest.take();
             self.shutdown.cancel();
-            if let Some(service) = &self.subscription_delivery {
-                service.cancel();
-            }
             let _retire = self.publication.admission_gate().retire();
             return failure;
         }
@@ -42,16 +39,13 @@ impl CollaborationRuntime {
         {
             failure.get_or_insert(error);
         }
-        if let Some(service) = self.subscription_delivery.take() {
-            // Held-mail signals own a journal reference even after their tasks stop.
-            service.shutdown().await;
-        }
         if let Err(error) = self.collaboration_api.stopped().await {
             failure.get_or_insert(error);
         }
         if let Err(error) = self.publication.admission_gate().retire() {
             failure.get_or_insert(error);
         }
+        self.session_delivery_router.take();
         if let Some(route) = self.provider_delivery_route.take() {
             route.shutdown_queue().await;
         }
@@ -92,16 +86,6 @@ impl CollaborationRuntime {
                     failure.get_or_insert(io::Error::other("lifecycle maintenance failed"));
                 }
             }
-        }
-        if let Some(task) = self.journal_unavailable_rechecks.take()
-            && task.await.is_err()
-        {
-            failure.get_or_insert(io::Error::other("observation re-check shutdown failed"));
-        }
-        if let Some(task) = self.interaction_retention.take()
-            && task.await.is_err()
-        {
-            failure.get_or_insert(io::Error::other("interaction retention shutdown failed"));
         }
         if let Some(task) = self.provider_retention.take()
             && task.await.is_err()
