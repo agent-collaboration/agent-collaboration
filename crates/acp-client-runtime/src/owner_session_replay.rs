@@ -123,3 +123,7 @@ fn replay_projection_error(error: ItemProjectionError) -> ExternalProviderRuntim
         ItemProjectionError::SinkClosed => ExternalProviderRuntimeError::SinkClosed,
     }
 }
+
+#[cfg(test)]
+#[path = "owner_session_replay_test.rs"]
+mod tests;

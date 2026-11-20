@@ -1,5 +1,87 @@
 use super::*;
 
+fn observe_plan_in_live_run(state: &mut SessionOwnerState, generation: SessionGeneration) {
+    apply(
+        state,
+        OwnerEvent::Stream {
+            run: generation,
+            expected_turn: None,
+            event: session_event_model::SessionEvent::SettingsChanged {
+                settings: session_event_model::SessionSettings {
+                    mode: Some("plan".to_owned()),
+                    ..Default::default()
+                },
+            },
+        },
+    );
+    assert_eq!(
+        state
+            .snapshot()
+            .projection
+            .settings
+            .expect("successor settings")
+            .mode
+            .as_deref(),
+        Some("plan")
+    );
+}
+
+#[test]
+fn an_ended_runs_live_settings_update_changes_nothing_of_the_newer_run() {
+    let mut state = fresh();
+    let ended = restore_live(&mut state, 1);
+    apply(&mut state, OwnerEvent::RunLost(ended.generation));
+    let newer = restore_live(&mut state, 2);
+    observe_plan_in_live_run(&mut state, newer.generation);
+    let current = state.snapshot();
+
+    assert_late(
+        &state,
+        OwnerEvent::Stream {
+            run: ended.generation,
+            expected_turn: None,
+            event: session_event_model::SessionEvent::SettingsChanged {
+                settings: session_event_model::SessionSettings {
+                    mode: Some("auto".to_owned()),
+                    ..Default::default()
+                },
+            },
+        },
+    );
+    assert_eq!(state.snapshot(), current);
+}
+
+#[test]
+fn an_ended_runs_returned_catalog_never_replaces_the_newer_runs() {
+    let mut state = fresh();
+    let ended = restore_live(&mut state, 1);
+    let setting = OwnerSetting {
+        change: RunAttempt {
+            generation: ended.generation,
+            attempt: SettingApplication(uuid(2)),
+        },
+        kind: ProviderSettingKind::Mode,
+    };
+    let authorization = setting_authorized(&mut state, setting, 2);
+    apply(&mut state, OwnerEvent::RunLost(ended.generation));
+    let newer = restore_live(&mut state, 3);
+    observe_plan_in_live_run(&mut state, newer.generation);
+    let current = state.snapshot();
+
+    let effects = apply(
+        &mut state,
+        OwnerEvent::Dispatch(DispatchResult::SettingFinished {
+            authorization,
+            observation: SettingObservation::Applied(SettingValueId("default".to_owned())),
+        }),
+    );
+    assert!(
+        effects.is_empty(),
+        "a retired setting reply has no remaining effects"
+    );
+    assert_eq!(state.snapshot(), current);
+}
+
 #[test]
 fn queued_explicit_settings_wait_for_confirmed_storage_and_cancel_known_unsent() {
     let mut state = fresh();

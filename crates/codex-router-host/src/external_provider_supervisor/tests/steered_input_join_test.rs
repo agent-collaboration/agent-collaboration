@@ -10,6 +10,9 @@ use super::*;
 use collaboration_contracts::SessionEventHub as _;
 use session_event_model::SessionEvent;
 
+#[path = "provider_prompt_wire_test.rs"]
+mod provider_prompt_wire;
+
 /// A steering agent that holds its first turn open, on a supervisor whose
 /// session is recorded on a real hub.
 async fn create_test_session(
@@ -252,6 +255,7 @@ async fn busy_with_steering_uses_the_running_owner_answer_after_the_turn_ends() 
             .expect_err("direct prompt can't take the running turn"),
         Err(failure) => failure,
     };
+    assert_eq!(failure.kind, ConversationOperationFailureKind::Busy);
     let answer = String::from(failure.message);
     assert_eq!(
         answer,

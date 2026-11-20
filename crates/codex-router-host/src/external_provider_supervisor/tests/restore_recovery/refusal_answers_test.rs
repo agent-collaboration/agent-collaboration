@@ -146,6 +146,25 @@ async fn busy_without_steering_and_explicit_steer_derive_the_running_answer() {
 }
 
 #[tokio::test]
+async fn a_prompt_on_a_saved_unloaded_session_keeps_its_kind_and_recovery_guidance() {
+    let rig = RestoreRig::new();
+    rig.seed_session().await;
+    let host = rig.open_host("plain-prompts").await;
+    let refusal = host
+        .prompt(rig.prompt_request(OperationId::generate(), "prompt while unloaded"))
+        .await
+        .expect_err("the explicit prompt never loads the session");
+    assert_eq!(refusal.kind, ConversationOperationFailureKind::Unavailable);
+    assert_eq!(refusal.effect, ProviderOperationEffect::None);
+    assert_eq!(
+        String::from(refusal.message),
+        "session is not loaded; load it or resume it"
+    );
+    assert!(!rig.root.path().join("wire.json").exists());
+    host.shutdown().await.expect("fixture shutdown");
+}
+
+#[tokio::test]
 async fn an_unknown_setting_uses_its_derived_prompt_hold_answer() {
     let rig = RestoreRig::new();
     rig.seed_session().await;
