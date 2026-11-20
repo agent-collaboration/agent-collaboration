@@ -170,7 +170,7 @@ impl FailureRoute {
         loop {
             let frame = self.replies.recv().await.expect("ACP reply");
             if frame.get("id").is_some() && frame.get("method").is_none() {
-                assert_eq!(frame["id"], id, "{frame:?}", frame = &*frame);
+                assert_eq!(frame["id"], id, "{}", *frame);
                 return (*frame).clone();
             }
         }
