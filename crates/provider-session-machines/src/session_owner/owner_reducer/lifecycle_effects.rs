@@ -6,8 +6,8 @@ use crate::session_lifecycle_machine::{
 use crate::session_owner::OwnerSetting;
 use crate::session_owner::{
     AuthorizationStatus, CloseRequest, ObservationCause, ObservedSetting, OwnerEffect,
-    PreparationStage, PreparedSetup, RestoreDisposition, RestoreFailure, RestorePhase,
-    RestorePreparation, RestoreResult, SettingEvidence, TurnMembership,
+    PreparationStage, PreparedSetup, RestoreDisposition, RestoreFailure, RestoreModeOutcome,
+    RestorePhase, RestorePreparation, RestoreResult, SettingEvidence, TurnMembership,
 };
 use crate::session_owner::{
     CloseOutcome, EffectOutcome, PendingRestore, RemoteEffect, RestoreFailureStage, RestoreWait,
@@ -122,6 +122,10 @@ impl OwnerTransition {
             WireOutcome::Confirmed(RestoredMode::Observed) => {
                 self.after_restore_mode(run, via, true)
             }
+            WireOutcome::Confirmed(RestoredMode::NotOffered { current }) => {
+                self.record_restore_mode(current, Some(ObservationCause::NotOffered));
+                self.after_restore_mode(run, via, false)
+            }
             WireOutcome::Confirmed(RestoredMode::Reapply { application, value }) => {
                 if self.setting_fenced(ProviderSettingKind::Mode) {
                     return self.after_restore_mode(run, via, false);
@@ -158,20 +162,27 @@ impl OwnerTransition {
         &mut self,
         run: RunAttempt<LoadAttempt>,
         setting: OwnerSetting,
-        outcome: WireOutcome<()>,
+        outcome: RestoreModeOutcome,
     ) -> OwnerResult {
         self.release_restore_fence(run, setting, ProviderSettingKind::Mode)?;
         match self.next.restore {
             Some(PendingRestore::Mode { run: pending, via }) if pending == run => {
-                let cause = match outcome {
-                    WireOutcome::Confirmed(()) => None,
-                    WireOutcome::Refused => Some(ObservationCause::Refused),
-                    WireOutcome::Unknown => Some(ObservationCause::Unconfirmed),
+                let (current, cause) = match outcome {
+                    RestoreModeOutcome::Confirmed(value) => (Some(value), None),
+                    RestoreModeOutcome::Refused { current } => {
+                        (current, Some(ObservationCause::Refused))
+                    }
+                    RestoreModeOutcome::ReportedOther(value) => {
+                        (Some(value), Some(ObservationCause::ReportedOther))
+                    }
+                    RestoreModeOutcome::FellBack(value) => {
+                        (Some(value), Some(ObservationCause::FellBack))
+                    }
+                    RestoreModeOutcome::Unconfirmed => (None, Some(ObservationCause::Unconfirmed)),
                 };
-                if let Some(cause) = cause {
-                    self.record_unconfirmed_mode(cause);
-                }
-                self.after_restore_mode(run, via, outcome == WireOutcome::Confirmed(()))
+                let confirmed = current.is_some();
+                self.record_restore_mode(current, cause);
+                self.after_restore_mode(run, via, confirmed)
             }
             _ => Ok(()),
         }
@@ -225,12 +236,16 @@ impl OwnerTransition {
         Ok(())
     }
 
-    fn record_unconfirmed_mode(&mut self, cause: ObservationCause) {
+    fn record_restore_mode(
+        &mut self,
+        current: Option<SettingValueId>,
+        cause: Option<ObservationCause>,
+    ) {
         self.next.ports.observed.insert(
             ProviderSettingKind::Mode,
             SettingEvidence {
-                value: ObservedSetting::Unknown,
-                cause: Some(cause),
+                value: current.map_or(ObservedSetting::Unknown, ObservedSetting::Confirmed),
+                cause,
             },
         );
     }
@@ -433,7 +448,7 @@ impl OwnerTransition {
                 self.fail_loading(run, RestoreFailureStage::Wire, RemoteEffect::Unknown)
             }
             PendingRestore::Mode { via, .. } => {
-                self.record_unconfirmed_mode(ObservationCause::NoAnswer);
+                self.record_restore_mode(None, Some(ObservationCause::NoAnswer));
                 self.after_restore_mode(run, via, false)
             }
             PendingRestore::FastOff {
@@ -580,10 +595,7 @@ impl OwnerTransition {
             if let SessionCellEffect::Turn(SessionTurnEffect::WriteCancel { turn }) = effect
                 && !self.waiting_for_prompt_enqueue(*turn)
             {
-                self.release(SessionOwnerEffect::Wire(SessionWireRequest::Cancel {
-                    generation: run.generation,
-                    turn: *turn,
-                }));
+                self.issue_cancel(run.generation, *turn)?;
             }
         }
         self.apply_entry_effects(effects)?;

@@ -66,11 +66,18 @@ fn t7_drain_expiry_reports_close_known_unsent_even_when_cancel_was_sent() {
             attempt: closing.attempt,
         },
     );
-    assert!(
-        effects.contains(&OwnerEffect::Wire(SessionWireRequest::Cancel {
-            generation: run.generation,
-            turn: prompt.turn
-        }))
+    let cancel = authorization(&effects);
+    assert_eq!(
+        cancel.target,
+        AuthorizationTarget::ExistingTurn { turn: prompt.turn }
+    );
+    assert!(effects.contains(&OwnerEffect::Authorize {
+        authorization: cancel.clone(),
+        work: AuthorizedWork::Cancel(prompt.clone())
+    }));
+    apply(
+        &mut state,
+        OwnerEvent::Dispatch(DispatchResult::Taken(cancel)),
     );
     assert!(!effects.contains(&OwnerEffect::Wire(SessionWireRequest::Close(closing))));
     let effects = deadline(&mut state, OwnerDeadline::Close(closing));
@@ -437,7 +444,7 @@ fn t5_late_restore_mode_correlation_releases_only_its_own_fence() {
         OwnerEvent::Wire(SessionWireResult::RestoreMode {
             run: wrong_run,
             setting,
-            outcome: WireOutcome::Confirmed(()),
+            outcome: RestoreModeOutcome::Confirmed(SettingValueId("auto".into())),
         }),
     );
     assert_eq!(
@@ -452,7 +459,7 @@ fn t5_late_restore_mode_correlation_releases_only_its_own_fence() {
         OwnerEvent::Wire(SessionWireResult::RestoreMode {
             run: first,
             setting,
-            outcome: WireOutcome::Confirmed(()),
+            outcome: RestoreModeOutcome::Confirmed(SettingValueId("auto".into())),
         }),
     );
     assert!(released.is_empty());

@@ -3,6 +3,8 @@ use uuid::Uuid;
 
 #[path = "session_owner/owner_ports_test.rs"]
 mod owner_contract;
+#[path = "session_owner/owner_followup_test.rs"]
+mod owner_followup;
 #[path = "session_owner/owner_history_test.rs"]
 mod owner_history;
 #[path = "session_owner/owner_property_test.rs"]

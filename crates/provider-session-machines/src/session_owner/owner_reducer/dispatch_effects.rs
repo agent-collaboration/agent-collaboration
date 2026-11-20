@@ -3,27 +3,82 @@ use crate::SessionGeneration;
 use crate::queued_entry_machine::SentOutcome;
 use crate::session_cell_machine::SessionCellEvent;
 use crate::session_owner::{
-    AuthorizationStatus, AuthorizedWork, DispatchAuthorization, DispatchResult, InputWait,
-    OwnerDeadline, OwnerEffect, OwnerInput, PendingAuthorization, RevokeReason, SessionOwnerEffect,
-    SessionPublication, SessionWireRequest, TurnMembership, WireOutcome,
+    AuthorizationStatus, AuthorizationTarget, AuthorizedWork, DispatchAuthorization,
+    DispatchResult, InputWait, OwnerDeadline, OwnerEffect, OwnerInput, PendingAuthorization,
+    RevokeReason, SessionOwnerEffect, SessionPublication, SessionTurn, TurnId, TurnMembership,
+    WireOutcome,
 };
 use session_event_model::InputId;
 
 impl AuthorizedWork {
     fn route(&self) -> (SessionGeneration, &InputId) {
         match self {
-            Self::Prompt(input) | Self::Steer(input) => (input.generation, &input.input),
+            Self::Prompt(input) | Self::Steer(input) | Self::Cancel(input) => {
+                (input.generation, &input.input)
+            }
             Self::Setting {
                 input_id, setting, ..
             } => (setting.change.generation, input_id),
         }
     }
+
+    fn target(&self) -> AuthorizationTarget {
+        match self {
+            Self::Prompt(_) => AuthorizationTarget::NewTurn,
+            Self::Steer(input) | Self::Cancel(input) => {
+                AuthorizationTarget::ExistingTurn { turn: input.turn }
+            }
+            Self::Setting { .. } => AuthorizationTarget::Session,
+        }
+    }
+}
+
+enum Unsent {
+    Revoked,
+    Transport,
+    StaleTarget,
 }
 
 impl OwnerTransition {
+    pub(super) fn issue_cancel(
+        &mut self,
+        generation: SessionGeneration,
+        turn: TurnId,
+    ) -> OwnerResult {
+        if self.next.ports.authorizations.values().any(|pending| {
+            matches!(&pending.work, AuthorizedWork::Cancel(input)
+            if input.generation == generation && input.turn == turn)
+        }) {
+            if self
+                .closing()
+                .is_some_and(|(run, _)| run.generation == generation)
+            {
+                return Ok(());
+            }
+            return Err(super::super::SessionOwnerRefusal::EffectInProgress.into());
+        }
+        let foreground = self
+            .next
+            .prompts
+            .values()
+            .find(|pending| {
+                pending.input.generation == generation
+                    && pending.input.turn == turn
+                    && pending.wait == InputWait::Wire
+            })
+            .map(|pending| pending.input.clone())
+            .ok_or(OwnerRejection::IgnoredLate)?;
+        self.issue_authorization(AuthorizedWork::Cancel(foreground))
+    }
+
     pub(super) fn issue_authorization(&mut self, work: AuthorizedWork) -> OwnerResult {
         let (run, input_id) = work.route();
-        self.require_live(run)?;
+        if !matches!(&work, AuthorizedWork::Cancel(input)
+            if self.next.turn() == (SessionTurn::Cancelling { turn: input.turn })
+                && self.closing().is_some_and(|(closing, _)| closing.generation == run))
+        {
+            self.require_live(run)?;
+        }
         let Some(sequence) = self.next.ports.next_authorization.checked_add(1) else {
             return Err(OwnerRejection::IgnoredLate);
         };
@@ -33,6 +88,7 @@ impl OwnerTransition {
             run,
             input_id: input_id.clone(),
             authorization_seq: sequence,
+            target: work.target(),
         };
         if let AuthorizedWork::Prompt(input) = &work {
             self.effects.push(OwnerEffect::CallbackMembership(
@@ -70,9 +126,13 @@ impl OwnerTransition {
             .next
             .ports
             .authorizations
-            .keys()
-            .find(|key| key.run == run && &key.input_id == input_id)
-            .cloned();
+            .iter()
+            .find(|(key, pending)| {
+                key.run == run
+                    && &key.input_id == input_id
+                    && pending.status == AuthorizationStatus::Offered
+            })
+            .map(|(key, _)| key.clone());
         candidate.is_some_and(|key| self.revoke(&key, reason).is_ok())
     }
 
@@ -81,9 +141,11 @@ impl OwnerTransition {
             .next
             .ports
             .authorizations
-            .keys()
-            .filter(|key| key.run == run)
-            .cloned()
+            .iter()
+            .filter(|(key, pending)| {
+                key.run == run && !matches!(pending.work, AuthorizedWork::Cancel(_))
+            })
+            .map(|(key, _)| key.clone())
             .collect();
         for key in matching {
             let _result = self.revoke(&key, RevokeReason::Closed);
@@ -117,8 +179,13 @@ impl OwnerTransition {
             DispatchResult::Taken(key) | DispatchResult::AlreadyTaken(key) => {
                 self.authorization_taken(&key)
             }
-            DispatchResult::Revoked(key) => self.authorization_unsent(&key, true),
-            DispatchResult::DefinitelyUnsent(key) => self.authorization_unsent(&key, false),
+            DispatchResult::Revoked(key) => self.authorization_unsent(&key, Unsent::Revoked),
+            DispatchResult::DefinitelyUnsent(key) => {
+                self.authorization_unsent(&key, Unsent::Transport)
+            }
+            DispatchResult::StaleTarget(key) => {
+                self.authorization_unsent(&key, Unsent::StaleTarget)
+            }
             DispatchResult::PromptFinished {
                 authorization,
                 outcome,
@@ -204,10 +271,7 @@ impl OwnerTransition {
                     .closing()
                     .is_some_and(|(run, _)| run.generation == input.generation)
                 {
-                    self.release(SessionOwnerEffect::Wire(SessionWireRequest::Cancel {
-                        generation: input.generation,
-                        turn: input.turn,
-                    }));
+                    self.issue_cancel(input.generation, input.turn)?;
                 }
             }
             AuthorizedWork::Steer(_) => {
@@ -222,24 +286,40 @@ impl OwnerTransition {
                 }
             }
             AuthorizedWork::Setting { setting, .. } => self.setting_taken(setting),
+            AuthorizedWork::Cancel(input) => {
+                if self.is_live(input.generation)
+                    && self.next.turn() == (SessionTurn::Running { turn: input.turn })
+                {
+                    self.cell_move(SessionCellEvent::CancelTurn)?;
+                }
+                self.next.ports.authorizations.remove(key);
+                self.continue_close()?;
+            }
         }
         Ok(())
     }
 
-    fn authorization_unsent(&mut self, key: &DispatchAuthorization, revoked: bool) -> OwnerResult {
+    fn authorization_unsent(&mut self, key: &DispatchAuthorization, unsent: Unsent) -> OwnerResult {
         let pending = self
             .next
             .ports
             .authorizations
             .remove(key)
             .ok_or(OwnerRejection::IgnoredLate)?;
-        let reason = match (pending.status, revoked) {
-            (AuthorizationStatus::Revoking(reason), true) => reason,
+        let was_taken = pending.status == AuthorizationStatus::Taken;
+        let reason = match (pending.status, unsent) {
+            (AuthorizationStatus::Revoking(reason), Unsent::Revoked) => reason,
+            (
+                AuthorizationStatus::Offered | AuthorizationStatus::Revoking(_),
+                Unsent::StaleTarget,
+            ) if matches!(key.target, AuthorizationTarget::ExistingTurn { .. }) => {
+                RevokeReason::TurnEnded
+            }
             (
                 AuthorizationStatus::Taken
                 | AuthorizationStatus::Offered
                 | AuthorizationStatus::Revoking(_),
-                false,
+                Unsent::Transport,
             ) => {
                 if self.next.ports.connection_alive {
                     RevokeReason::EnqueueExpired
@@ -251,7 +331,7 @@ impl OwnerTransition {
         };
         match pending.work {
             AuthorizedWork::Prompt(input) => {
-                let membership = if revoked {
+                let membership = if !was_taken {
                     TurnMembership::RemoveOnRevoke {
                         run: input.generation,
                         turn: input.turn,
@@ -271,8 +351,12 @@ impl OwnerTransition {
                 self.unmark_prompt(&input, reason)?;
                 self.continue_close()?;
             }
-            AuthorizedWork::Steer(input) => self.unmark_steer(&input),
+            AuthorizedWork::Steer(input) => self.unmark_steer_unsent(&input, reason),
             AuthorizedWork::Setting { setting, .. } => self.setting_unsent(setting)?,
+            AuthorizedWork::Cancel(_) => self.effects.push(OwnerEffect::CancelNotSent {
+                authorization: key.clone(),
+                reason,
+            }),
         }
         self.continue_close()
     }
@@ -326,17 +410,21 @@ impl OwnerTransition {
         for (key, pending) in pending {
             match (&pending.status, &pending.work) {
                 (AuthorizationStatus::Offered | AuthorizationStatus::Revoking(_), _) => {
-                    self.authorization_unsent(
-                        &key,
-                        matches!(pending.status, AuthorizationStatus::Revoking(_)),
-                    )?;
+                    let unsent = if matches!(pending.status, AuthorizationStatus::Revoking(_)) {
+                        Unsent::Revoked
+                    } else {
+                        Unsent::Transport
+                    };
+                    self.authorization_unsent(&key, unsent)?;
                 }
                 (AuthorizationStatus::Taken, AuthorizedWork::Steer(_)) => {
                     self.steer_expired(&key)?
                 }
                 (
                     AuthorizationStatus::Taken,
-                    AuthorizedWork::Prompt(_) | AuthorizedWork::Setting { .. },
+                    AuthorizedWork::Prompt(_)
+                    | AuthorizedWork::Setting { .. }
+                    | AuthorizedWork::Cancel(_),
                 ) => {
                     // The run's retirement below settles these started effects.
                 }

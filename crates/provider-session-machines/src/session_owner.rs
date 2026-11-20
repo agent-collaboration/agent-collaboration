@@ -101,10 +101,22 @@ pub enum WireOutcome<Reply> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RestoredMode {
     Observed,
+    NotOffered {
+        current: Option<SettingValueId>,
+    },
     Reapply {
         application: SettingApplication,
         value: SettingValueId,
     },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum RestoreModeOutcome {
+    Confirmed(SettingValueId),
+    Refused { current: Option<SettingValueId> },
+    ReportedOther(SettingValueId),
+    FellBack(SettingValueId),
+    Unconfirmed,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -128,7 +140,7 @@ pub enum SessionWireResult {
     RestoreMode {
         run: RunAttempt<LoadAttempt>,
         setting: OwnerSetting,
-        outcome: WireOutcome<()>,
+        outcome: RestoreModeOutcome,
     },
     Close {
         run: RunAttempt<CloseAttempt>,
@@ -168,10 +180,6 @@ pub enum SessionStoreResult {
     },
     ConfirmedSetting {
         setting: OwnerSetting,
-        outcome: EffectOutcome,
-    },
-    DispatchReadback {
-        input: OwnerInput,
         outcome: EffectOutcome,
     },
 }
@@ -262,10 +270,6 @@ pub enum SessionWireRequest {
         setting: OwnerSetting,
     },
     Close(RunAttempt<CloseAttempt>),
-    Cancel {
-        generation: SessionGeneration,
-        turn: TurnId,
-    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -278,7 +282,6 @@ pub enum SessionStoreRequest {
     MarkDispatch(OwnerInput),
     UndoDispatch(OwnerInput),
     MarkSteerDispatch(OwnerInput),
-    ReadDispatch(OwnerInput),
     RecordConfirmedSetting {
         setting: OwnerSetting,
         value: SettingValueId,

@@ -168,7 +168,6 @@ impl OwnerTransition {
             SessionStoreResult::ConfirmedSetting { setting, outcome } => {
                 self.setting_recorded(setting, outcome)
             }
-            SessionStoreResult::DispatchReadback { .. } => Err(OwnerRejection::IgnoredLate),
         }
     }
 

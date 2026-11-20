@@ -101,7 +101,7 @@ impl Mailbox {
                 .push(OwnerEvent::Wire(SessionWireResult::RestoreMode {
                     run,
                     setting,
-                    outcome: WireOutcome::Confirmed(()),
+                    outcome: RestoreModeOutcome::Confirmed(SettingValueId("auto".into())),
                 })),
             OwnerEffect::Wire(SessionWireRequest::Close(run)) => self.arrivals.extend([
                 close_reply(run, WireOutcome::Confirmed(())),
@@ -153,6 +153,7 @@ impl Mailbox {
                                 outcome: WireOutcome::Confirmed(()),
                             }))
                     }
+                    AuthorizedWork::Cancel(_) => {}
                     AuthorizedWork::Setting { value, .. } => {
                         self.arrivals
                             .push(OwnerEvent::Dispatch(DispatchResult::SettingFinished {
@@ -179,6 +180,7 @@ impl Mailbox {
             | OwnerEffect::AdoptProviderId { .. }
             | OwnerEffect::CreateSettled { .. }
             | OwnerEffect::RetireRoute(_)
+            | OwnerEffect::CancelNotSent { .. }
             | OwnerEffect::ReopenRoute(_)
             | OwnerEffect::ForwardTool { .. }
             | OwnerEffect::CheckRetainedTool { .. } => {}
@@ -213,10 +215,6 @@ impl Mailbox {
                         outcome,
                     }
                 }
-                SessionStoreRequest::ReadDispatch(input) => SessionStoreResult::DispatchReadback {
-                    input: input.clone(),
-                    outcome,
-                },
                 SessionStoreRequest::RecordConfirmedSetting { setting, .. } => {
                     SessionStoreResult::ConfirmedSetting {
                         setting: *setting,

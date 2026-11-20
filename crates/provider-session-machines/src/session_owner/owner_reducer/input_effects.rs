@@ -5,7 +5,7 @@ use crate::session_owner::{AuthorizedWork, OwnerEffect, RevokeReason, TurnMember
 use crate::session_owner::{
     EffectOutcome, InputWait, OwnerInput, PendingPrompt, PromptAdmission, RemoteEffect,
     SessionDeadline, SessionOwnerEffect, SessionOwnerRefusal, SessionOwnerReply,
-    SessionPublication, SessionStoreRequest, SessionWireRequest, WireOutcome,
+    SessionPublication, SessionStoreRequest, WireOutcome,
 };
 use crate::session_turn_machine::{SessionTurn, TurnId};
 use crate::{SessionGeneration, session_turn_machine::SessionTurnEffect};
@@ -167,11 +167,8 @@ impl OwnerTransition {
                 Ok(())
             }
             QueuedEntryEffect::ReadBackRow(_) => {
-                // Storage may report a mark even though the owner never sent.
-                // Readback is diagnostic and is outside the admission path.
-                self.release(SessionOwnerEffect::Store(
-                    SessionStoreRequest::ReadDispatch(input.clone()),
-                ));
+                // There was no authorization. Offer known-unsent terminal
+                // settlement to the same lane, behind any accepted mark.
                 self.finish_entry(sequence, input, RemoteEffect::None);
                 Ok(())
             }
@@ -240,6 +237,9 @@ impl OwnerTransition {
         outcome: EffectOutcome,
     ) -> OwnerResult {
         if let Some(reason) = self.next.ports.unsent_prompts.remove(input) {
+            if self.steer_is_pending(input, InputWait::UndoStore) {
+                self.next.steer = None;
+            }
             self.release(SessionOwnerEffect::Reply(SessionOwnerReply::InputUnsent {
                 input: input.clone(),
                 reason,
@@ -309,16 +309,7 @@ impl OwnerTransition {
         {
             return Ok(());
         }
-        let effects = self.cell_move(SessionCellEvent::CancelTurn)?;
-        if effects.contains(&SessionCellEffect::Turn(SessionTurnEffect::WriteCancel {
-            turn,
-        })) {
-            self.release(SessionOwnerEffect::Wire(SessionWireRequest::Cancel {
-                generation,
-                turn,
-            }));
-        }
-        Ok(())
+        self.issue_cancel(generation, turn)
     }
 
     pub(super) fn finish_prompt(
@@ -433,6 +424,11 @@ impl OwnerTransition {
         self.wait_for_steer(input.clone(), InputWait::UndoStore);
     }
 
+    pub(super) fn unmark_steer_unsent(&mut self, input: &OwnerInput, reason: RevokeReason) {
+        self.next.ports.unsent_prompts.insert(input.clone(), reason);
+        self.unmark_steer(input);
+    }
+
     pub(super) fn waiting_for_prompt_enqueue(&self, turn: TurnId) -> bool {
         self.next
             .prompts
@@ -474,11 +470,7 @@ impl OwnerTransition {
             return Err(OwnerRejection::IgnoredLate);
         }
         if outcome != EffectOutcome::Applied {
-            if outcome == EffectOutcome::Unknown {
-                self.release(SessionOwnerEffect::Store(
-                    SessionStoreRequest::ReadDispatch(input.clone()),
-                ));
-            }
+            // The terminal offer follows any accepted mark in the lane.
             self.next.steer = None;
             self.reply_input(input.clone(), RemoteEffect::None);
         } else if self.is_live(input.generation)

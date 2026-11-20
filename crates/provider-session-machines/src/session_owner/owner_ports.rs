@@ -50,12 +50,34 @@ pub struct DispatchAuthorization {
     pub run: SessionGeneration,
     pub input_id: InputId,
     pub authorization_seq: u64,
+    pub target: AuthorizationTarget,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub enum AuthorizationTarget {
+    NewTurn,
+    ExistingTurn { turn: TurnId },
+    Session,
+}
+
+impl DispatchAuthorization {
+    /// Check the route under the same transport lock as identity comparison
+    /// and enqueue. A successful check alone does not authorize a wire send.
+    #[must_use]
+    pub fn matches_route(&self, run: SessionGeneration, current_turn: Option<TurnId>) -> bool {
+        self.run == run
+            && match self.target {
+                AuthorizationTarget::ExistingTurn { turn } => current_turn == Some(turn),
+                AuthorizationTarget::NewTurn | AuthorizationTarget::Session => true,
+            }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthorizedWork {
     Prompt(OwnerInput),
     Steer(OwnerInput),
+    Cancel(OwnerInput),
     Setting {
         input_id: InputId,
         setting: OwnerSetting,
@@ -69,6 +91,20 @@ pub enum RevokeReason {
     Closed,
     EnqueueExpired,
     ConnectionLost,
+    TurnEnded,
+}
+
+impl RevokeReason {
+    #[must_use]
+    pub const fn human_phrase(self) -> &'static str {
+        match self {
+            Self::Cancelled => "cancelled before sending",
+            Self::Closed => "the session closed first; send again",
+            Self::EnqueueExpired => "the Router couldn't send in time; send again",
+            Self::ConnectionLost => "the provider connection ended; reconnect and send again",
+            Self::TurnEnded => "the turn you steered had already ended; send again",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -81,6 +117,7 @@ pub enum DispatchResult {
         replacement_turn: TurnId,
     },
     DefinitelyUnsent(DispatchAuthorization),
+    StaleTarget(DispatchAuthorization),
     PromptFinished {
         authorization: DispatchAuthorization,
         outcome: super::WireOutcome<()>,
@@ -407,6 +444,10 @@ pub enum OwnerEffect {
     },
     RetireRoute(SessionGeneration),
     ReopenRoute(RunAttempt<CloseAttempt>),
+    CancelNotSent {
+        authorization: DispatchAuthorization,
+        reason: RevokeReason,
+    },
     ForwardTool {
         run: SessionGeneration,
         turn: Option<TurnId>,
