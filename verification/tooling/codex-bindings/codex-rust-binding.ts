@@ -1,13 +1,21 @@
-import { definitionName, type NamedDefinition, type ValueShape } from "./codex-schema.ts";
+import {
+  definitionName,
+  definitionReferences,
+  type Definition,
+  type NamedDefinition,
+  type ObjectDefinition,
+  type ValueShape,
+} from "./codex-schema.ts";
 
 type StructField = Extract<NamedDefinition["definition"], { kind: "object" }>["fields"][number];
 
 interface DefaultContext {
   readonly definition: NamedDefinition;
   readonly definitions: ReadonlyMap<string, NamedDefinition>;
+  readonly references: Set<string>;
 }
 
-function fieldIdentifier(name: string): string {
+export function fieldIdentifier(name: string): string {
   return name
     .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
     .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
@@ -15,7 +23,22 @@ function fieldIdentifier(name: string): string {
 }
 
 function variantIdentifier(value: string): string {
-  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+  return value.replace(/(?:^|[-_])([a-z0-9])/g, (_, letter: string) => letter.toUpperCase());
+}
+
+function taggedVariantIdentifiers(tags: readonly string[]): readonly string[] {
+  const identifiers = tags.map(variantIdentifier);
+  const prefix = identifiers[0]?.match(/^[A-Z][a-z0-9]+(?=[A-Z])/)?.[0];
+  if (
+    identifiers.length < 3 ||
+    prefix === undefined ||
+    !identifiers.every(
+      (name) => name.startsWith(prefix) && /^[A-Z]/.test(name.slice(prefix.length)),
+    )
+  ) {
+    return identifiers;
+  }
+  return identifiers.map((name) => name.slice(prefix.length));
 }
 
 function rustType(shape: ValueShape): string {
@@ -26,26 +49,40 @@ function rustType(shape: ValueShape): string {
       return definitionName(shape.pointer);
     case "sequence":
       return `Vec<${rustType(shape.item)}>`;
+    case "map":
+      return `std::collections::BTreeMap<String, ${rustType(shape.value)}>`;
+    case "branchString":
+      return "super::StringAlternative";
+    case "opaque":
+      return "super::OpaqueJson";
   }
 }
 
 function rustDocs(description: string | undefined): string[] {
-  return description?.split(/\r?\n/).map((line) => `/// ${line}`.trimEnd()) ?? [];
+  return (
+    description?.split(/\r?\n/).map((line) => {
+      const markdown = line.trimEnd().replace(/(^|\s)(https?:\/\/[^\s<>`]+)$/, "$1<$2>");
+      return `/// ${markdown}`.trimEnd();
+    }) ?? []
+  );
 }
 
 function renderField(field: StructField): string[] {
   const type = rustType(field.shape);
   const rename = `rename = "${field.name}"`;
-  const attributes = field.required
-    ? [`#[serde(${rename})]`]
-    : [
-        "#[serde(",
-        `    ${rename},`,
-        "    default,",
-        '    skip_serializing_if = "Option::is_none",',
-        '    deserialize_with = "super::deserialize_present",',
-        ")]",
-      ];
+  const attributes =
+    field.required && !field.nullable
+      ? [`#[serde(${rename})]`]
+      : field.required
+        ? [`#[serde(${rename}, deserialize_with = "super::deserialize_required_nullable")]`]
+        : [
+            "#[serde(",
+            `    ${rename},`,
+            "    default,",
+            '    skip_serializing_if = "Option::is_none",',
+            '    deserialize_with = "super::deserialize_present",',
+            ")]",
+          ];
   const value = field.nullable ? `Option<${type}>` : type;
   return [
     ...rustDocs(field.description),
@@ -105,6 +142,19 @@ function renderDefault(field: StructField, context: DefaultContext): string[] {
     result = `&[${rustType(shape.item)}]`;
     const fallback = defaultSequence({ context, field, item: shape.item, values: defaultValue });
     expression = `self.${name}.as_deref().unwrap_or(${fallback})`;
+  } else if (!field.nullable && shape.kind === "reference" && typeof defaultValue === "string") {
+    const reference = context.definitions.get(shape.pointer);
+    const enumeration = reference?.definition;
+    result = rustType(shape);
+    const variant = variantIdentifier(defaultValue);
+    if (enumeration?.kind === "enum" && enumeration.variants.includes(defaultValue)) {
+      expression = `self.${name}.clone().unwrap_or(${result}::${variant})`;
+    } else if (enumeration?.kind === "wrapped" && enumeration.tags.includes(defaultValue)) {
+      context.references.add(`${result}Tag`);
+      expression = `self.${name}.clone().unwrap_or(${result}::Known(${result}Tag::${variant}))`;
+    } else {
+      throw unsupportedDefault(context, field);
+    }
   } else {
     throw unsupportedDefault(context, field);
   }
@@ -118,37 +168,265 @@ function renderDefault(field: StructField, context: DefaultContext): string[] {
   ];
 }
 
+function renderStringEnum(
+  name: string,
+  variants: readonly string[],
+  docs: readonly string[],
+): string {
+  const expectedTags = variants.map((value) => `"${value}"`).join(", ");
+  const identifiers = variants.map(variantIdentifier);
+  if (new Set(identifiers).size !== identifiers.length) {
+    throw new Error(`${name}: duplicate Rust enum variant names`);
+  }
+  return [
+    ...docs,
+    "#[derive(Clone, Debug, Eq, PartialEq, Serialize)]",
+    `pub enum ${name} {`,
+    ...variants.flatMap((value) => [
+      `#[serde(rename = "${value}")]`,
+      `${variantIdentifier(value)},`,
+    ]),
+    "}",
+    "",
+    `impl<'de> Deserialize<'de> for ${name} {`,
+    "fn deserialize<Decoder: serde::Deserializer<'de>>(decoder: Decoder) -> Result<Self, Decoder::Error> {",
+    "let tag = String::deserialize(decoder)?;",
+    "match tag.as_str() {",
+    ...variants.map((value) => `"${value}" => Ok(Self::${variantIdentifier(value)}),`),
+    `_ => Err(serde::de::Error::unknown_variant(&tag, &[${expectedTags}])),`,
+    "}",
+    "}",
+    "}",
+  ].join("\n");
+}
+
+function renderObject(context: DefaultContext, object: ObjectDefinition): string {
+  const { name, description } = context.definition;
+  const identifiers = object.fields.map((field) => fieldIdentifier(field.name));
+  if (new Set(identifiers).size !== identifiers.length) {
+    throw new Error(`${name}: duplicate Rust field identifiers`);
+  }
+  const defaults = object.fields.flatMap((field) => renderDefault(field, context));
+  const constraint = object.closed
+    ? ["    closed"]
+    : object.anyRequired.length === 0
+      ? []
+      : [`    choice [${object.anyRequired.map(fieldIdentifier).join(", ")}]`];
+  return [
+    "codex_object! {",
+    ...constraint,
+    ...rustDocs(description).map((line) => `    ${line}`),
+    `    ${name} {`,
+    ...object.fields.flatMap(renderField).map((line) => `        ${line}`),
+    "    }",
+    "}",
+    ...(defaults.length === 0 ? [] : ["", `impl ${name} {`, ...defaults, "}"]),
+  ].join("\n");
+}
+
+function renderTagged(
+  context: DefaultContext,
+  tagged: Extract<Definition, { kind: "tagged" }>,
+): string {
+  const { name, description } = context.definition;
+  const identifiers = taggedVariantIdentifiers(tagged.branches.map((branch) => branch.tag));
+  if (new Set(identifiers).size !== identifiers.length) {
+    throw new Error(`${name}: duplicate Rust tagged variant names`);
+  }
+  return [
+    "codex_tagged_object! {",
+    ...rustDocs(description).map((line) => `    ${line}`),
+    `    ${name} {`,
+    ...tagged.branches.map(({ tag, name: payload }, index) => {
+      const variant = identifiers[index];
+      if (variant === undefined) throw new Error(`${name}: missing Rust tagged variant name`);
+      return `        "${tag}" => ${variant}(${payload}),`;
+    }),
+    "    }",
+    "}",
+  ].join("\n");
+}
+
+function rawJsonDecoderPath(
+  shape: Definition | ValueShape,
+  definitions: ReadonlyMap<string, NamedDefinition>,
+  path: string,
+): string | undefined {
+  switch (shape.kind) {
+    case "opaque":
+    case "branchString":
+    case "tagged":
+    case "textOrSequence":
+      return path;
+    case "wrapped":
+      if (shape.open) return path;
+      for (const [index, branch] of shape.branches.entries()) {
+        const branchPath = `${path}/oneOf/${index + 1}/properties/${branch.key}`;
+        const rawPath = rawJsonDecoderPath(branch.value, definitions, branchPath);
+        if (rawPath !== undefined) return rawPath;
+      }
+      return undefined;
+    case "object":
+      for (const field of shape.fields) {
+        const rawPath = rawJsonDecoderPath(
+          field.shape,
+          definitions,
+          `${path}/properties/${field.name}`,
+        );
+        if (rawPath !== undefined) return rawPath;
+      }
+      return undefined;
+    case "reference": {
+      const target = definitions.get(shape.pointer);
+      if (target === undefined) throw new Error(`${path}: unresolved definition ${shape.pointer}`);
+      return rawJsonDecoderPath(target.definition, definitions, `${path} -> ${shape.pointer}`);
+    }
+    case "sequence":
+      return rawJsonDecoderPath(shape.item, definitions, `${path}/items`);
+    case "map":
+      return rawJsonDecoderPath(shape.value, definitions, `${path}/additionalProperties`);
+    case "alias":
+      return rawJsonDecoderPath(shape.shape, definitions, path);
+    case "scalar":
+    case "enum":
+    case "nonEmptyString":
+      return undefined;
+    default: {
+      const unhandledShape: never = shape;
+      throw new Error(`${path}: unhandled schema shape ${JSON.stringify(unhandledShape)}`);
+    }
+  }
+}
+
+function renderWrapped(
+  context: DefaultContext,
+  wrapped: Extract<Definition, { kind: "wrapped" }>,
+): string {
+  const { name, description } = context.definition;
+  // Derived untagged decoding materializes Serde content before any variant sees it.
+  if (!wrapped.open) {
+    const rawPath = rawJsonDecoderPath(wrapped, context.definitions, `#/definitions/v2/${name}`);
+    if (rawPath !== undefined) {
+      throw new Error(`${rawPath}: raw JSON decoder cannot run inside a buffered union`);
+    }
+  }
+  const tagName = `${name}Tag`;
+  const wrappers = wrapped.branches.flatMap((branch) => {
+    const valueName = `${branch.name}Payload`;
+    const value = branch.value;
+    const field = {
+      name: branch.key,
+      required: true,
+      nullable: false,
+      defaultValue: undefined,
+      description: undefined,
+      shape: value.kind === "object" ? undefined : value,
+    };
+    const prefix =
+      value.kind === "object"
+        ? [
+            renderObject(
+              {
+                ...context,
+                definition: { name: valueName, description: undefined, definition: value },
+              },
+              value,
+            ),
+            "",
+          ]
+        : [];
+    return [
+      ...prefix,
+      "codex_object! {",
+      "    closed",
+      ...rustDocs(branch.description).map((line) => `    ${line}`),
+      `    ${branch.name} {`,
+      ...(field.shape === undefined
+        ? [
+            `        #[serde(rename = "${branch.key}")]`,
+            `        ${fieldIdentifier(branch.key)}: ${valueName},`,
+          ]
+        : renderField({ ...field, shape: field.shape }).map((line) => `        ${line}`)),
+      "    }",
+      "}",
+      "",
+    ];
+  });
+  const variants = wrapped.branches.map(
+    (branch) => `${variantIdentifier(branch.key)}(${branch.name}),`,
+  );
+  const openVariants = wrapped.open
+    ? [
+        "UnknownString(String),",
+        "UnknownObject(super::OpaqueJsonObject),",
+        "MalformedKnownObject(super::OpaqueJsonObject),",
+      ]
+    : [];
+  return [
+    renderStringEnum(tagName, wrapped.tags, []),
+    "",
+    ...wrappers,
+    ...rustDocs(description),
+    wrapped.open
+      ? "#[derive(Clone, Debug, Eq, PartialEq, Serialize)]"
+      : "#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]",
+    "#[serde(untagged)]",
+    `pub enum ${name} {`,
+    `Known(${tagName}),`,
+    ...variants,
+    ...openVariants,
+    "}",
+    ...(wrapped.open ? renderOpenWrapped(name, tagName, wrapped) : []),
+  ].join("\n");
+}
+
+function renderOpenWrapped(
+  name: string,
+  tagName: string,
+  wrapped: Extract<Definition, { kind: "wrapped" }>,
+): string[] {
+  return [
+    "",
+    `impl<'de> Deserialize<'de> for ${name} {`,
+    "fn deserialize<Decoder: serde::Deserializer<'de>>(decoder: Decoder) -> Result<Self, Decoder::Error> {",
+    "let wire = super::OpaqueJson::deserialize(decoder)?;",
+    "match wire.as_json().as_bytes().first() {",
+    "Some(b'\"') => {",
+    "let tag: String = serde_json::from_str(wire.as_json()).map_err(serde::de::Error::custom)?;",
+    "Ok(match tag.as_str() {",
+    ...wrapped.tags.map((tag) => `"${tag}" => Self::Known(${tagName}::${variantIdentifier(tag)}),`),
+    "_ => Self::UnknownString(tag),",
+    "})",
+    "},",
+    "Some(b'{') => {",
+    "let object = super::OpaqueJsonObject::try_from(wire).map_err(serde::de::Error::custom)?;",
+    "let fields: std::collections::BTreeMap<String, serde::de::IgnoredAny> =",
+    "serde_json::from_str(object.as_json()).map_err(serde::de::Error::custom)?;",
+    ...wrapped.branches.flatMap((branch) => [
+      `if fields.contains_key("${branch.key}") {`,
+      `return Ok(match serde_json::from_str::<${branch.name}>(object.as_json()) {`,
+      `Ok(payload) => Self::${variantIdentifier(branch.key)}(payload),`,
+      "Err(_) => Self::MalformedKnownObject(object),",
+      "});",
+      "}",
+    ]),
+    "Ok(Self::UnknownObject(object))",
+    "},",
+    '_ => Err(serde::de::Error::custom("expected a string or object")),',
+    "}",
+    "}",
+    "}",
+  ];
+}
+
 function renderDefinition(context: DefaultContext): string {
   const { name, description, definition } = context.definition;
   const docs = rustDocs(description);
   const derives = "#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]";
   switch (definition.kind) {
     // Derived enum deserialization also accepts object-shaped tags. Decode the schema string first.
-    case "enum": {
-      const expectedTags = definition.variants.map((value) => `"${value}"`).join(", ");
-      return [
-        ...docs,
-        "#[derive(Clone, Debug, Eq, PartialEq, Serialize)]",
-        `pub enum ${name} {`,
-        ...definition.variants.flatMap((value) => [
-          `#[serde(rename = "${value}")]`,
-          `${variantIdentifier(value)},`,
-        ]),
-        "}",
-        "",
-        `impl<'de> Deserialize<'de> for ${name} {`,
-        "fn deserialize<Decoder: serde::Deserializer<'de>>(decoder: Decoder) -> Result<Self, Decoder::Error> {",
-        "let tag = String::deserialize(decoder)?;",
-        "match tag.as_str() {",
-        ...definition.variants.map(
-          (value) => `"${value}" => Ok(Self::${variantIdentifier(value)}),`,
-        ),
-        `_ => Err(serde::de::Error::unknown_variant(&tag, &[${expectedTags}])),`,
-        "}",
-        "}",
-        "}",
-      ].join("\n");
-    }
+    case "enum":
+      return renderStringEnum(name, definition.variants, docs);
     case "nonEmptyString":
       return [
         ...docs,
@@ -170,22 +448,35 @@ function renderDefinition(context: DefaultContext): string {
         "}",
         "}",
       ].join("\n");
-    case "object": {
-      const identifiers = definition.fields.map((field) => fieldIdentifier(field.name));
-      if (new Set(identifiers).size !== identifiers.length) {
-        throw new Error(`${name}: duplicate Rust field identifiers`);
-      }
-      const defaults = definition.fields.flatMap((field) => renderDefault(field, context));
+    case "object":
+      return renderObject(context, definition);
+    case "alias":
+      return [...docs, `pub type ${name} = ${rustType(definition.shape)};`].join("\n");
+    case "tagged":
+      return renderTagged(context, definition);
+    case "wrapped":
+      return renderWrapped(context, definition);
+    case "textOrSequence":
       return [
-        "codex_object! {",
-        ...docs.map((line) => `    ${line}`),
-        `    ${name} {`,
-        ...definition.fields.flatMap(renderField).map((line) => `        ${line}`),
-        "    }",
+        ...docs,
+        "#[derive(Clone, Debug, Eq, PartialEq, Serialize)]",
+        "#[serde(untagged)]",
+        `pub enum ${name} {`,
+        "Text(String),",
+        `Items(Vec<${rustType(definition.item)}>),`,
         "}",
-        ...(defaults.length === 0 ? [] : ["", `impl ${name} {`, ...defaults, "}"]),
+        "",
+        `impl<'de> Deserialize<'de> for ${name} {`,
+        "fn deserialize<Decoder: serde::Deserializer<'de>>(decoder: Decoder) -> Result<Self, Decoder::Error> {",
+        "let wire = super::OpaqueJson::deserialize(decoder)?;",
+        "match wire.as_json().as_bytes().first() {",
+        "Some(b'\"') => serde_json::from_str(wire.as_json()).map(Self::Text).map_err(serde::de::Error::custom),",
+        "Some(b'[') => serde_json::from_str(wire.as_json()).map(Self::Items).map_err(serde::de::Error::custom),",
+        '_ => Err(serde::de::Error::custom("expected a string or array")),',
+        "}",
+        "}",
+        "}",
       ].join("\n");
-    }
   }
 }
 
@@ -195,29 +486,104 @@ interface RequestBinding {
   readonly response: string;
 }
 
-export function renderRustBindings(
-  binding: RequestBinding,
+export interface RustBindingItem {
+  readonly name: string;
+  readonly exports: readonly string[];
+  readonly references: readonly string[];
+  readonly needsSerde: boolean;
+  readonly source: string;
+}
+
+export interface RustBindingPairing extends RustBindingItem {
+  readonly references: readonly [request: string, response: string];
+}
+
+function renderDeclaration(
+  definition: NamedDefinition,
   definitions: ReadonlyMap<string, NamedDefinition>,
-): string {
-  const orderedDefinitions = [...definitions.values()].sort((left, right) =>
-    left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
-  );
+): readonly RustBindingItem[] {
+  const { name, definition: shape } = definition;
+  const marker = `// #/definitions/v2/${name}\n`;
+  if (shape.kind === "tagged") {
+    const branches = shape.branches.map((branch) => {
+      const branchDefinition = {
+        name: branch.name,
+        description: branch.description,
+        definition: branch.object,
+      };
+      const references = new Set(definitionReferences(branch.object).map(definitionName));
+      const source = renderObject(
+        { definition: branchDefinition, definitions, references },
+        branch.object,
+      );
+      return {
+        name: branch.name,
+        exports: [branch.name],
+        references: [...references],
+        needsSerde: true,
+        source,
+      };
+    });
+    const references = new Set(branches.map((branch) => branch.name));
+    return [
+      ...branches,
+      {
+        name,
+        exports: [name],
+        references: [...references],
+        needsSerde: true,
+        source: marker + renderTagged({ definition, definitions, references }, shape),
+      },
+    ];
+  }
+
+  const references = new Set(definitionReferences(shape).map(definitionName));
+  const source = renderDefinition({ definition, definitions, references });
+  const exports =
+    shape.kind === "wrapped"
+      ? [
+          name,
+          `${name}Tag`,
+          ...shape.branches.flatMap((branch) =>
+            branch.value.kind === "object" ? [`${branch.name}Payload`, branch.name] : [branch.name],
+          ),
+        ]
+      : [name];
   return [
-    "// @generated by verification/tooling/codex-bindings/generate-codex-bindings.ts.",
-    "// Source identities and hashes are recorded in verification/schemas/pins.json.",
-    "",
-    "use serde::{Deserialize, Serialize};",
-    "",
-    ...orderedDefinitions.flatMap((definition) => [
-      renderDefinition({ definition, definitions }),
-      "",
-    ]),
-    `impl super::sealed::Sealed for ${definitionName(binding.params)} {}`,
-    "",
-    `impl super::CodexRequest for ${definitionName(binding.params)} {`,
-    `const METHOD: &'static str = "${binding.method}";`,
-    `type Response = ${definitionName(binding.response)};`,
-    "}",
-    "",
-  ].join("\n");
+    {
+      name,
+      exports,
+      references: [...references],
+      needsSerde: shape.kind !== "alias",
+      source: marker + source,
+    },
+  ];
+}
+
+export function renderRustBindings(
+  bindings: readonly RequestBinding[],
+  definitions: ReadonlyMap<string, NamedDefinition>,
+): { declarations: readonly RustBindingItem[]; pairings: readonly RustBindingPairing[] } {
+  const declarations = [...definitions.values()].flatMap((definition) =>
+    renderDeclaration(definition, definitions),
+  );
+  const pairings = bindings.map(({ method, params, response }): RustBindingPairing => {
+    const requestName = definitionName(params);
+    const responseName = definitionName(response);
+    return {
+      name: `pair_${fieldIdentifier(method.replaceAll("/", "_"))}`,
+      exports: [],
+      references: [requestName, responseName],
+      needsSerde: false,
+      source: [
+        `impl super::sealed::Sealed for ${requestName} {}`,
+        "",
+        `impl super::CodexRequest for ${requestName} {`,
+        `const METHOD: &'static str = "${method}";`,
+        `type Response = ${responseName};`,
+        "}",
+      ].join("\n"),
+    };
+  });
+  return { declarations, pairings };
 }
