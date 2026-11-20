@@ -20,44 +20,51 @@ import { z } from "zod";
 /** A request family: requests the CLI sends to Codex, or requests Codex sends to the CLI. */
 export type RequestSide = "client" | "server";
 
-export interface PairedRequest {
-  method: string;
-  variant: string;
-  experimental: boolean;
-  /** The Rust type, as `common.rs` declares it (attributes removed). */
-  paramsType: string;
-  responseType: string;
-  bundle: BundleDefinitions;
-}
-
 /**
  * Where the exported bundle defines the request. Codex declares a few deprecated requests that its
  * JSON export leaves out (`EXCLUDED_CLIENT_METHODS_FOR_JSON`, `export.rs:76` at the tag); those
  * are kept here as declared but not exported, with no definition.
  */
-export type BundleDefinitions =
-  | {
-      kind: "exported";
-      /** JSON pointer into the bundle; null when the request takes no params (`Option<()>`). */
-      paramsDefinition: string | null;
-      responseDefinition: string;
-    }
-  | { kind: "notExported" };
+const bundleDefinitionsSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("exported"),
+    // Null means the declaration takes no params (Option<()>).
+    paramsDefinition: z.string().nullable(),
+    responseDefinition: z.string(),
+  }),
+  z.strictObject({ kind: z.literal("notExported") }),
+]);
+export type BundleDefinitions = z.infer<typeof bundleDefinitionsSchema>;
 
-export interface CodexPairing {
-  source: { repository: string; tag: string; path: string };
-  clientRequests: PairedRequest[];
-  serverRequests: PairedRequest[];
-}
+const pairedRequestSchema = z.strictObject({
+  method: z.string(),
+  variant: z.string(),
+  experimental: z.boolean(),
+  // Rust type as declared by common.rs, without attributes.
+  paramsType: z.string(),
+  responseType: z.string(),
+  bundle: bundleDefinitionsSchema,
+});
+export type PairedRequest = z.infer<typeof pairedRequestSchema>;
+
+export const codexPairingSchema = z.strictObject({
+  source: z.strictObject({ repository: z.string(), tag: z.string(), path: z.string() }),
+  clientRequests: z.array(pairedRequestSchema),
+  serverRequests: z.array(pairedRequestSchema),
+});
+export type CodexPairing = z.infer<typeof codexPairingSchema>;
 
 const requestUnionSchema = z.looseObject({
   oneOf: z.array(
     z.looseObject({
-      properties: z.looseObject({ method: z.looseObject({ enum: z.tuple([z.string()]) }) }),
+      properties: z.looseObject({
+        method: z.looseObject({ enum: z.tuple([z.string()]) }),
+        params: z.unknown().optional(),
+      }),
     }),
   ),
 });
-const bundleSchema = z.looseObject({
+export const codexBundleSchema = z.looseObject({
   definitions: z.looseObject({
     v2: z.record(z.string(), z.unknown()),
     ClientRequest: requestUnionSchema,
@@ -65,7 +72,7 @@ const bundleSchema = z.looseObject({
   }),
 });
 
-type Bundle = z.infer<typeof bundleSchema>;
+type Bundle = z.infer<typeof codexBundleSchema>;
 
 const MACRO_OPENINGS: Record<RequestSide, string> = {
   client: "client_request_definitions! {",
@@ -183,7 +190,7 @@ export function transcribeRequests(
 }
 
 export function transcribePairing(source: string, bundleText: string): CodexPairing {
-  const bundle = bundleSchema.parse(JSON.parse(bundleText));
+  const bundle = codexBundleSchema.parse(JSON.parse(bundleText));
   return {
     source: {
       repository: "https://github.com/openai/codex",

@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "check": "tsc --noEmit && pnpm run check:behavior-peer",
+    "codex:generate": "node tooling/codex-bindings/generate-codex-bindings.ts --write",
+    "codex:check": "node tooling/codex-bindings/generate-codex-bindings.ts --check",
     "check:behavior-peer": "tsc --noEmit -p tsconfig.behavior-peer.json",
     "lint": "oxlint --deny-warnings . \"${PWD%/*}/crates/acp-client-runtime/tests/support/behavior-agent.ts\" \"${PWD%/*}/crates/acp-client-runtime/tests/support/behavior-agent.test.ts\" \"${PWD%/*}/scripts/one-off\"",
     "format": "oxfmt . \"${PWD%/*}/crates/acp-client-runtime/tests/support/behavior-agent.ts\" \"${PWD%/*}/crates/acp-client-runtime/tests/support/behavior-agent.test.ts\" \"${PWD%/*}/scripts/one-off\"",

@@ -1,0 +1,10 @@
+error[E0308]: mismatched types
+ --> tests/integration/codex_model_list/invalid_response.rs:4:71
+  |
+4 |     let _reply: Option<<ModelListParams as CodexRequest>::Response> = None::<ModelListParams>;
+  |                 ---------------------------------------------------   ^^^^^^^^^^^^^^^^^^^^^^^ expected `Option<ModelListResponse>`, found `Option<ModelListParams>`
+  |                 |
+  |                 expected due to this
+  |
+  = note: expected enum `Option<ModelListResponse>`
+             found enum `Option<ModelListParams>`
