@@ -1,0 +1,21 @@
+error[E0308]: mismatched types
+ --> tests/integration/codex_observation_bindings/wrong_notification.rs:8:9
+  |
+7 |     let _: serde_json::Result<TurnCompletedNotification> =
+  |            --------------------------------------------- expected due to this
+8 |         TurnStartedNotification::decode_params(payload);
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Result<TurnCompletedNotification, Error>`, found `Result<TurnStartedNotification, Error>`
+  |
+  = note: expected enum `Result<TurnCompletedNotification, serde_json::Error>`
+             found enum `Result<TurnStartedNotification, serde_json::Error>`
+
+error[E0308]: mismatched types
+  --> tests/integration/codex_observation_bindings/wrong_notification.rs:10:9
+   |
+ 9 |     let _: serde_json::Result<TurnStartedNotification> =
+   |            ------------------------------------------- expected due to this
+10 |         TurnCompletedNotification::decode_params(payload);
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Result<TurnStartedNotification, Error>`, found `Result<TurnCompletedNotification, Error>`
+   |
+   = note: expected enum `Result<TurnStartedNotification, serde_json::Error>`
+              found enum `Result<TurnCompletedNotification, serde_json::Error>`
