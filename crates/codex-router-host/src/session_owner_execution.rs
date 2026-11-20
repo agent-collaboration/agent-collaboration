@@ -202,7 +202,7 @@ impl SessionOwnerExecution {
             .restore(route, run.attempt, provider_id, via, setup)
         {
             Ok(receipt) => receipt,
-            Err(_) => return Ok(Some(restore_failed(run, RestoreFailure::Disconnected))),
+            Err(_) => return Ok(Some(restore_failed(run, RestoreFailure::NotEnqueued))),
         };
         let paused = CancellationToken::new();
         self.routes.insert(

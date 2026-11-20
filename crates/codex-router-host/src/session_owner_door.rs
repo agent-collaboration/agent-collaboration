@@ -682,6 +682,11 @@ impl SessionOwnerAddress {
     pub(crate) async fn wait_for_recovery_replies(&self) {
         self.calls.wait_for_replies().await;
     }
+
+    #[cfg(test)]
+    pub(crate) fn hold_provider_writer_capacity(&self) -> impl Sized + use<> {
+        self.wire.hold_writer_capacity_for_test()
+    }
 }
 
 fn prompt_with_requirements(

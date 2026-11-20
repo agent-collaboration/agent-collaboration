@@ -583,9 +583,10 @@ impl OwnerTransition {
         {
             return Err(OwnerRejection::IgnoredLate);
         }
-        let remote = if failure
-            .coded_evidence()
-            .is_some_and(|coded| coded.definitely_no_effect())
+        let remote = if failure == RestoreFailure::NotEnqueued
+            || failure
+                .coded_evidence()
+                .is_some_and(|coded| coded.definitely_no_effect())
         {
             RemoteEffect::None
         } else {
@@ -667,7 +668,8 @@ impl OwnerTransition {
     ) {
         self.settle_restore(RestoreResult {
             attempt: run,
-            phase: if stage == RestoreFailureStage::Setup {
+            phase: if stage == RestoreFailureStage::Setup || failure == RestoreFailure::NotEnqueued
+            {
                 RestorePhase::Preflight
             } else {
                 RestorePhase::Attempted

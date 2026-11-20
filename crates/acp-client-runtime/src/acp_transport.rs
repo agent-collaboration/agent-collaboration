@@ -105,6 +105,11 @@ impl<Frame> AcpTransport<Frame> {
         (Self { state, ordered }, output)
     }
 
+    #[cfg(feature = "test-observation")]
+    pub(crate) fn hold_ordered_capacity(&self) -> Vec<mpsc::OwnedPermit<OrderedOutput<Frame>>> {
+        std::iter::from_fn(|| self.ordered.clone().try_reserve_owned().ok()).collect()
+    }
+
     fn state(&self) -> MutexGuard<'_, TransportState<Frame>> {
         self.state
             .lock()

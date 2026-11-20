@@ -410,6 +410,7 @@ pub enum RestoreFailure {
     },
     Refused(ProviderWireFailure),
     ProviderError(ProviderWireFailure),
+    NotEnqueued,
     Disconnected,
     NoAnswer,
     LocalPrerequisite {
@@ -454,6 +455,7 @@ impl RestoreFailure {
             Self::Refused(_) => {
                 "the provider refused to restore this session, so check the provider before retrying"
             }
+            Self::NotEnqueued => "the Router couldn't send the restore, so retry this session",
             Self::Disconnected => {
                 "the provider disconnected before confirming the restore, so reconnect and retry this session"
             }

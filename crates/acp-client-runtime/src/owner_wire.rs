@@ -189,6 +189,13 @@ impl OwnerAcpWire {
         self.transport.open_route(run, session);
     }
 
+    /// Reserves the real writer's free slots until the returned guard is dropped.
+    #[cfg(feature = "test-observation")]
+    #[must_use]
+    pub fn hold_writer_capacity_for_test(&self) -> impl Sized + use<> {
+        self.transport.hold_ordered_capacity()
+    }
+
     pub fn create(
         &self,
         owner: OwnerIncarnation,
