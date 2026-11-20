@@ -34,7 +34,36 @@ struct CursorConfigOption {
     #[serde(rename = "type")]
     kind: CursorOptionKind,
     current_value: Value,
+    #[serde(default, deserialize_with = "decode_discovery_choices")]
     options: Option<Vec<SessionConfigSelectOption>>,
+}
+
+fn decode_discovery_choices<'de, D>(
+    deserializer: D,
+) -> Result<Option<Vec<SessionConfigSelectOption>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<Vec<Value>>::deserialize(deserializer)?
+        .map(|choices| {
+            choices
+                .into_iter()
+                .map(|choice| {
+                    // Discovery's positional form has two fields. The ACP type
+                    // also accepts description and metadata in extra positions.
+                    if let Some(fields) = choice.as_array()
+                        && fields.len() != 2
+                    {
+                        return Err(serde::de::Error::invalid_length(
+                            fields.len(),
+                            &"two fields in a positional Cursor discovery choice",
+                        ));
+                    }
+                    SessionConfigSelectOption::deserialize(choice).map_err(serde::de::Error::custom)
+                })
+                .collect()
+        })
+        .transpose()
 }
 
 #[derive(Deserialize)]

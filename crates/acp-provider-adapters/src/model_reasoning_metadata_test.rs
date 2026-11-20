@@ -152,6 +152,60 @@ fn synthetic_grouped_core_acp_offers_are_malformed_for_cursor_discovery() {
 }
 
 #[test]
+fn cursor_discovery_keeps_the_two_field_positional_choice_boundary() {
+    let decode = |choice: Value| {
+        decode_cursor_models(&json!({"models": [
+            {"value": "sibling", "name": "Sibling", "configOptions": [
+                {"id": "effort", "type": "select", "currentValue": "low",
+                 "options": [{"value": "low", "name": "Low"}]}
+            ]},
+            {"value": "target", "name": "Target", "configOptions": [
+                {"id": "effort", "type": "select", "currentValue": "high", "options": [choice]}
+            ]}
+        ]}))
+    };
+
+    let accepted = [
+        json!(["high", "High"]),
+        json!({"value": "high", "name": "High", "description": "Optional",
+               "_meta": {"vendor": true}}),
+    ]
+    .map(decode);
+
+    for metadata in accepted {
+        assert!(matches!(
+            metadata.for_model("sibling"),
+            ModelReasoning::Select(_)
+        ));
+        let ModelReasoning::Select(target) = metadata.for_model("target") else {
+            panic!("expected Cursor to retain the advertised effort");
+        };
+        assert_eq!(target.default_value(), "high");
+        assert_eq!(
+            target.choices(),
+            &[ProviderSettingChoice {
+                value: "high".into(),
+                label: "High".into()
+            }]
+        );
+    }
+
+    let rejected = [
+        json!(["high", "High", "Optional"]),
+        json!(["high", "High", "Optional", {"vendor": true}]),
+    ]
+    .map(decode);
+    assert_eq!(
+        rejected,
+        [
+            ModelReasoningMetadata::Unknown(ModelReasoningUnknown::Malformed),
+            ModelReasoningMetadata::Unknown(ModelReasoningUnknown::Malformed)
+        ],
+        "extra positional fields must invalidate the reply, including the valid named sibling"
+    );
+}
+
+#[test]
 fn literal_claude_annotation_requires_offered_default_and_unique_model_identity() {
     let valid = json!({"version":1,"kind":"available","models":[
         {"modelId":"sonnet","kind":"select","configId":"effort","defaultValue":"default",
