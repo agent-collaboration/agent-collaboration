@@ -1,6 +1,8 @@
 // Unconfirmed cancel, local close and explicit reconciliation in a single Host lifetime.
 import { z } from "zod";
-import type { SessionRef } from "../observations/observation-models.ts";
+import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { sessionRefSchema, type SessionRef } from "../observations/observation-models.ts";
 import * as requests from "../transport/journey-requests.ts";
 import {
   baseline,
@@ -17,6 +19,7 @@ import {
   holdWire,
   inspect,
   negotiated,
+  notOffered,
   observed,
   preparePrompt,
   promptFrame,
@@ -35,6 +38,109 @@ import {
 } from "./session-control-steps.ts";
 
 const NAME = "unconfirmedCancel";
+const CANCEL_RESTART = "cancelRestart";
+const restartWitness = z.strictObject({
+  sourceHead: z.string(),
+  store: z.string(),
+  epoch: z.string(),
+  target: sessionRefSchema,
+  prompt: z.uuid(),
+});
+
+export async function cancelRestartCase(inputs: CaseInputs): Promise<CaseResult> {
+  const plan = control(inputs);
+  const phase = plan.restart;
+  if (phase === undefined) throw new Error("cancel restart requires a phase");
+  const offered = await negotiated(inputs);
+  if (!offered[plan.restore]) return notOffered(CANCEL_RESTART, "restore method");
+  const db = statSync(join(inputs.plan.serviceDirectory, "provider-operations.sqlite"), {
+    bigint: true,
+  });
+  const store = String(db.dev) + ":" + String(db.ino);
+  if (phase.phase === "seed") {
+    const target = await createSession(inputs, "cancel-restart-create", plan.savedMode);
+    await completePrompt(inputs, "cancel-restart-materialize", target);
+    const before = await baseline(inputs, "cancel-restart-baseline", target);
+    const prompt = await preparePrompt(inputs, target, "cancel-restart-seed");
+    if ((await holdAndClose(inputs, target, prompt, before.result.generation)) !== "held")
+      return {
+        name: CANCEL_RESTART,
+        target,
+        verdict: {
+          kind: "inconclusive",
+          reason: "the provider ended before the cancel crossed the pipe",
+        },
+      };
+    const witness = {
+      sourceHead: inputs.plan.sourceHead,
+      store,
+      epoch: inputs.plan.expectedServiceEpoch,
+      target,
+      prompt: prompt.operationId,
+    };
+    writeFileSync(phase.record, JSON.stringify(witness) + "\n", { flag: "wx", mode: 0o600 });
+    return {
+      name: CANCEL_RESTART,
+      target,
+      verdict: { kind: "prepared", detail: "terminal Unknown retained for Host B" },
+    };
+  }
+  const witness = restartWitness.parse(JSON.parse(readFileSync(phase.record, "utf8")));
+  const { target } = witness;
+  if (
+    witness.sourceHead !== inputs.plan.sourceHead ||
+    witness.store !== store ||
+    witness.epoch === inputs.plan.expectedServiceEpoch ||
+    target.endpoint.serviceId !== inputs.plan.expectedServiceId ||
+    target.endpoint.endpointId !== inputs.plan.endpointId
+  )
+    throw new Error("cancel restart needs the original Session and store on a new epoch");
+  inputs.knownTargets.push(target);
+  await requireOperation(
+    inputs,
+    "cancel-restart-old-row",
+    target,
+    witness.prompt,
+    "conversationPrompt",
+    UNKNOWN,
+  );
+  const prospect = requests.newOperationId();
+  const token = "session-control-" + prospect;
+  const probe = { operationId: prospect, token, text: inputs.promptText + " [" + token + "]" };
+  const refusal = await startPrompt(inputs, "cancel-restart-before-load", target, probe);
+  const kind = z
+    .looseObject({ kind: z.string() })
+    .safeParse(refusal.kind === "refused" ? refusal.value : null);
+  if (!kind.success || kind.data.kind === "busy")
+    throw new Error("the fresh caller did not receive the ordinary unloaded-session refusal");
+  if (
+    requireFailure(
+      refusal,
+      prospect,
+      target,
+      kind.data.kind,
+      "session is not loaded; load it or resume it",
+    ).effect !== "none" ||
+    wireEntries(inputs).some(promptFrame(target, probe.token))
+  )
+    throw new Error("the unloaded probe reached the provider");
+  await reattach(inputs, "cancel-restart-load", target);
+  await restoreDeclaredModel(inputs, target, "cancel-restart-load");
+  await completePrompt(inputs, "cancel-restart-first-loaded-input", target);
+  await requireOperation(
+    inputs,
+    "cancel-restart-old-row-after-input",
+    target,
+    witness.prompt,
+    "conversationPrompt",
+    UNKNOWN,
+  );
+  return observed(
+    CANCEL_RESTART,
+    target,
+    "new Host refused as unloaded, then dispatched one loaded prompt while retaining the old Unknown",
+  );
+}
 
 async function verifySameLifetimeHold(inputs: CaseInputs, target: SessionRef, foreground: string) {
   const expectedRefusal =
@@ -152,7 +258,8 @@ async function requestCancellation(
 }
 
 export async function unconfirmedCancelCase(inputs: CaseInputs): Promise<CaseResult> {
-  await negotiated(inputs);
+  if (!(await negotiated(inputs))[control(inputs).restore])
+    return notOffered(NAME, "restore method");
   const target = await createSession(inputs, "cancel-create", control(inputs).savedMode);
   const before = await baseline(inputs, "cancel-baseline", target);
   const prompt = await preparePrompt(inputs, target, "cancel-prompt");

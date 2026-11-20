@@ -14,7 +14,7 @@ import {
   negotiated,
   notOffered,
   observed,
-  reattach,
+  reattachResult,
   requireAdmission,
   requireFailure,
   requireHeldReply,
@@ -72,7 +72,13 @@ export async function unansweredCloseCase(inputs: CaseInputs): Promise<CaseResul
   } finally {
     release();
   }
-  await reattach(inputs, "close-same-session-reopen", target);
+  const reopen = await reattachResult(inputs, "close-same-session-reopen", target);
+  if (reopen.kind === "missing")
+    return observed(
+      NAME,
+      target,
+      "local retirement followed by explicit missing-session guidance: " + reopen.message,
+    );
   await restoreDeclaredModel(inputs, target, "close-restored");
   await completePrompt(inputs, "close-after-reopen", target);
   return observed(

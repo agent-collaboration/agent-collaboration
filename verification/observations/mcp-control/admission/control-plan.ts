@@ -46,6 +46,7 @@ const sessionControlCases = z.enum([
   "unansweredReopen",
   "unansweredClose",
   "unconfirmedCancel",
+  "cancelRestart",
 ]);
 export const controlCaseSchema = z.enum([
   "lifecycle",
@@ -167,6 +168,7 @@ const CASE_EFFECTS: Readonly<
   unansweredClose: { sessions: 1, prompts: 2 },
   // Reserve the refusal probe too. A wrong build could dispatch it.
   unconfirmedCancel: { sessions: 1, prompts: 3 },
+  cancelRestart: { sessions: 1, prompts: 2 },
 };
 const CONTINUATION_CASE = { retain: "continuationRetain", reload: "continuationReload" } as const;
 const OWNER_LOOKUP_COMMAND = "/usr/bin/id"; // collaboration-client owner_identity_resolution.rs:8
@@ -381,8 +383,11 @@ function checkSessionControlDeclaration(plan: ControlPlan): void {
       plan.host.kind !== "automationDebugHost")
   )
     throw new Error("declare one session-control case on its own gated Host connection");
-  if ((control.restart !== undefined) !== (selected[0] === "savedModeRestart"))
-    throw new Error("only the saved-mode case declares seed and reopen lifetimes");
+  if (
+    (control.restart !== undefined) !==
+    (selected[0] === "savedModeRestart" || selected[0] === "cancelRestart")
+  )
+    throw new Error("only the restart cases declare seed and reopen lifetimes");
   if (control.closePrimer === false && selected[0] !== "unansweredClose")
     throw new Error("only the unanswered-close case declares a metadata-only seed");
   if (plan.host.kind === "automationDebugHost") {
@@ -415,30 +420,11 @@ function checkSessionControlDeclaration(plan: ControlPlan): void {
     sha256File(control.restart.record) !== control.restart.sha256
   )
     throw new Error("the saved-mode record differs from its declared digest");
-  const uid = process.getuid?.();
-  for (const path of [
+  checkPrivateSessionControlPaths([
     dirname(plan.serviceDirectory),
     plan.serviceDirectory,
     control.gateDirectory,
-  ]) {
-    const stat = lstatSync(path);
-    if (
-      realpathSync(path) !== path ||
-      !stat.isDirectory() ||
-      stat.uid !== uid ||
-      (stat.mode & 0o777) !== 0o700
-    )
-      throw new Error(
-        "session control requires canonical owner-private runtime and gate directories",
-      );
-    const sharedDebug = join(homedir(), ".codex-router-debug");
-    if (
-      isProductionRouterPath(path, homedir()) ||
-      path === sharedDebug ||
-      path.startsWith(sharedDebug + sep)
-    )
-      throw new Error("session control requires a private root outside the shared Router homes");
-  }
+  ]);
   if (fixture) {
     const binding = z
       .looseObject({
@@ -457,6 +443,29 @@ function checkSessionControlDeclaration(plan: ControlPlan): void {
       binding.serviceEpoch !== plan.expectedServiceEpoch
     )
       throw new Error("scripted mode requires this Host's isolated fixture launch receipt");
+  }
+}
+
+function checkPrivateSessionControlPaths(paths: readonly string[]): void {
+  const uid = process.getuid?.();
+  const sharedDebug = join(homedir(), ".codex-router-debug");
+  for (const path of paths) {
+    const stat = lstatSync(path);
+    if (
+      realpathSync(path) !== path ||
+      !stat.isDirectory() ||
+      stat.uid !== uid ||
+      (stat.mode & 0o777) !== 0o700
+    )
+      throw new Error(
+        "session control requires canonical owner-private runtime and gate directories",
+      );
+    if (
+      isProductionRouterPath(path, homedir()) ||
+      path === sharedDebug ||
+      path.startsWith(sharedDebug + sep)
+    )
+      throw new Error("session control requires a private root outside the shared Router homes");
   }
 }
 

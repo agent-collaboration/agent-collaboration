@@ -37,7 +37,7 @@ import { z } from "zod";
 import { savedModeRestartCase } from "./journeys/saved-mode-restart.ts";
 import { unansweredReopenCase } from "./journeys/unanswered-reopen.ts";
 import { unansweredCloseCase } from "./journeys/unanswered-close.ts";
-import { unconfirmedCancelCase } from "./journeys/unconfirmed-cancel.ts";
+import { cancelRestartCase, unconfirmedCancelCase } from "./journeys/unconfirmed-cancel.ts";
 
 const CASES: Readonly<Record<ControlCase, (inputs: CaseInputs) => Promise<CaseResult>>> = {
   lifecycle: lifecycleCase,
@@ -52,6 +52,7 @@ const CASES: Readonly<Record<ControlCase, (inputs: CaseInputs) => Promise<CaseRe
   unansweredReopen: unansweredReopenCase,
   unansweredClose: unansweredCloseCase,
   unconfirmedCancel: unconfirmedCancelCase,
+  cancelRestart: cancelRestartCase,
 };
 
 async function discover(context: JourneyContext, plan: ControlPlan): Promise<readonly string[]> {
@@ -81,7 +82,7 @@ function sessionControlTools(plan: ControlPlan): string[] {
     "conversation_operation_show",
     "provider_session_inspect",
   ];
-  if (plan.cases.includes("unconfirmedCancel"))
+  if (plan.cases.includes("unconfirmedCancel") || plan.cases.includes("cancelRestart"))
     return [
       ...common,
       "events_observe",

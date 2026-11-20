@@ -281,8 +281,35 @@ export function requireFailure(
 }
 
 export async function reattach(inputs: CaseInputs, step: string, target: SessionRef) {
+  const result = await reattachResult(inputs, step, target);
+  if (result.kind === "missing") throw new Error(result.message);
+  return result.settlement;
+}
+
+export async function reattachResult(inputs: CaseInputs, step: string, target: SessionRef) {
   const operationId = requests.newOperationId();
-  requireAdmission(await startRestore(inputs, step, target, operationId), operationId, target);
+  const submission = await startRestore(inputs, step, target, operationId);
+  const missing = (outcome: McpCallOutcome) => {
+    if (outcome.kind !== "refused") return null;
+    const lost = z
+      .looseObject({ kind: z.literal("providerSessionNotFound"), message: z.string() })
+      .safeParse(outcome.value);
+    if (!lost.success) return null;
+    requireFailure(
+      outcome,
+      operationId,
+      target,
+      "providerSessionNotFound",
+      "the provider no longer knows this session, so start a new session with the same setup",
+    );
+    return { kind: "missing" as const, message: lost.data.message };
+  };
+  const earlyMissing = missing(submission);
+  if (earlyMissing !== null) return earlyMissing;
+  requireAdmission(submission, operationId, target);
+  const waited = await waitOperation(inputs, step + "-wait", operationId);
+  const lateMissing = missing(waited);
+  if (lateMissing !== null) return lateMissing;
   const result = z
     .looseObject({
       output: z.looseObject({
@@ -300,7 +327,7 @@ export async function reattach(inputs: CaseInputs, step: string, target: Session
         }),
       }),
     })
-    .parse(answered(await waitOperation(inputs, step + "-wait", operationId), step));
+    .parse(answered(waited, step));
   const load = control(inputs).restore === "load";
   const { settlement } = result.output;
   if (settlement.kind !== (load ? "loaded" : "resumed") || !sameSession(settlement.target, target))
@@ -313,7 +340,7 @@ export async function reattach(inputs: CaseInputs, step: string, target: Session
     load ? "conversationLoad" : "conversationResume",
     APPLIED,
   );
-  return settlement;
+  return { kind: "attached" as const, settlement };
 }
 
 export async function preparePrompt(inputs: CaseInputs, target: SessionRef, step: string) {

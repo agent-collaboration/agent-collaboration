@@ -307,7 +307,9 @@ if (import.meta.main) {
   const [directory, separator, executable, ...arguments_] = process.argv.slice(2);
   if (directory === undefined || separator !== "--" || executable === undefined)
     throw new Error("usage: session-control-stdio-gate.ts DIRECTORY -- EXECUTABLE [ARG ...]");
-  relay(directory, executable, arguments_);
+  const capture = process.env["CODEX_ROUTER_SESSION_CONTROL_GATE"] ?? directory;
+  delete process.env["CODEX_ROUTER_SESSION_CONTROL_GATE"];
+  relay(capture, executable, arguments_);
 } else {
   const directory = process.env["CODEX_ROUTER_SESSION_CONTROL_GATE"];
   const library = process.env["CODEX_ROUTER_SESSION_CONTROL_CLAUDE_LIBRARY"];

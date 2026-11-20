@@ -1,5 +1,7 @@
 // Unanswered reopen. A build that waits indefinitely or stalls a second Session must fail.
 import { newOperationId } from "../transport/journey-requests.ts";
+import { z } from "zod";
+import type { SessionRef } from "../observations/observation-models.ts";
 import { closeSession, createSession, type CaseInputs, type CaseResult } from "./journey-cases.ts";
 import {
   completePrompt,
@@ -15,22 +17,24 @@ import {
   requireHeldReply,
   requireOperation,
   restoreMethod,
+  startClose,
   startRestore,
   UNKNOWN,
   waitForWire,
   waitOperation,
   wireEntries,
 } from "./session-control-steps.ts";
-import { record } from "./journey-steps.ts";
+import { answered, record } from "./journey-steps.ts";
 
 const NAME = "unansweredReopen";
 
 export async function unansweredReopenCase(inputs: CaseInputs): Promise<CaseResult> {
-  if (!(await negotiated(inputs))[control(inputs).restore])
-    return notOffered(NAME, "restore method");
+  const offered = await negotiated(inputs);
+  if (!offered[control(inputs).restore]) return notOffered(NAME, "restore method");
   const target = await createSession(inputs, "reopen-A", control(inputs).savedMode);
   await completePrompt(inputs, "reopen-A-primer", target);
-  await closeSession(inputs, target, "reopen-A-close");
+  if (offered.close) await closeSession(inputs, target, "reopen-A-close");
+  else await closeRouterOnly(inputs, target);
   const before = (await inspect(inputs, "reopen-A-before", target)).state;
   if (before !== "closed" && before !== "unloaded")
     throw new Error("the first Session is still loaded before the reopen");
@@ -98,5 +102,33 @@ export async function unansweredReopenCase(inputs: CaseInputs): Promise<CaseResu
     NAME,
     target,
     "held restore ended with retry guidance while the other Session completed",
+  );
+}
+
+async function closeRouterOnly(inputs: CaseInputs, target: SessionRef): Promise<void> {
+  const operation = newOperationId();
+  requireAdmission(
+    await startClose(inputs, "reopen-A-router-only-close", target, operation),
+    operation,
+    target,
+  );
+  z.looseObject({
+    output: z.looseObject({
+      kind: z.literal("available"),
+      settlement: z.looseObject({ kind: z.literal("closed"), routerClosed: z.literal(true) }),
+    }),
+  }).parse(
+    answered(
+      await waitOperation(inputs, "reopen-A-router-only-wait", operation),
+      "Router-only close",
+    ),
+  );
+  await requireOperation(
+    inputs,
+    "reopen-A-router-only-close",
+    target,
+    operation,
+    "conversationClose",
+    { effect: "none", reconciliation: "confirmed" },
   );
 }

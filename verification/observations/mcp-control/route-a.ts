@@ -21,6 +21,8 @@ import { observeChild, processOperations, stopOwned } from "../runtime/runtime-p
 import { qualifyGlobalClaude, sha256 } from "../runtime/runtime-qualification.ts";
 import type { ProcessIdentity } from "../shared/evidence-models.ts";
 import { controlPlanSchema, type ControlPlan } from "./admission/control-plan.ts";
+import { newOperationId } from "./transport/journey-requests.ts";
+import { sessionRefSchema } from "./observations/observation-models.ts";
 import { PROTECTED_PORTS, StreamingMcpClient } from "./transport/streaming-mcp-client.ts";
 
 const pathSchema = z.string().refine(isAbsolute, "absolute path required");
@@ -52,17 +54,35 @@ const routePlanSchema = z.strictObject({
     .max(65535)
     .refine((port) => !PROTECTED_PORTS.has(port)),
   version: z.string().min(1),
-  claudeExecutable: pathSchema,
-  claudeAdapter: pathSchema,
+  claudeExecutable: pathSchema.optional(),
+  claudeAdapter: pathSchema.optional(),
+  cursor: z
+    .strictObject({
+      executable: pathSchema,
+      selection: z
+        .strictObject({
+          model: z.string().regex(/grok/i),
+          advertisedLabel: z.string().regex(/\bGrok\b/i),
+        })
+        .optional(),
+      mode: z.enum(["ask", "plan", "agent"]).default("plan"),
+    })
+    .optional(),
   deadline: z.iso.datetime(),
   journey: z.discriminatedUnion("kind", [
     z.strictObject({ kind: z.literal("preflight") }),
     z.strictObject({ kind: z.enum(["unansweredReopen", "unansweredClose", "unconfirmedCancel"]) }),
     z.strictObject({ kind: z.literal("savedModeSeed") }),
     z.strictObject({ kind: z.literal("savedModeReopen"), record: pathSchema }),
+    z.strictObject({ kind: z.literal("cancelRestartSeed") }),
+    z.strictObject({ kind: z.literal("cancelRestartReopen"), record: pathSchema }),
   ]),
 });
 type RoutePlan = z.infer<typeof routePlanSchema>;
+
+function isReopen(plan: RoutePlan): boolean {
+  return plan.journey.kind === "savedModeReopen" || plan.journey.kind === "cancelRestartReopen";
+}
 const publicationSchema = z.looseObject({
   serviceId: z.uuid(),
   serviceEpoch: z.uuid(),
@@ -113,9 +133,7 @@ function prepare(plan: RoutePlan) {
   const host = manifest.binaries["automation-debug-host"];
   assertSigned(router, "dev.shravansunder.codex-router.debug");
   assertSigned(host, "dev.shravansunder.test.automation-debug-host");
-  const claude = qualifyGlobalClaude(plan.claudeExecutable, process.env.PATH);
-  const adapter = realpathSync(plan.claudeAdapter);
-  const library = realpathSync(join(dirname(adapter), "lib.js"));
+  const provider = prepareProvider(plan);
   const shared = join(homedir(), ".codex-router-debug");
   if (realpathSync(shared) !== shared) throw new Error("noncanonical shared debug root");
   if (
@@ -123,8 +141,8 @@ function prepare(plan: RoutePlan) {
     dirname(plan.runDirectory) !== realpathSync("/tmp")
   )
     throw new Error("the private run directory must be a canonical direct child of /tmp");
-  if (existsSync(plan.runDirectory) !== (plan.journey.kind === "savedModeReopen"))
-    throw new Error("only the saved-mode reopen can use an existing private directory");
+  if (existsSync(plan.runDirectory) !== isReopen(plan))
+    throw new Error("only a restart reopen can use an existing private directory");
   const evidence = canonicalPath(plan.evidence);
   const protectedRoots = [
     shared,
@@ -140,7 +158,27 @@ function prepare(plan: RoutePlan) {
   processOperations.table();
   const before = sharedSnapshot(shared);
   if (before.lockConsumers.length > 0) throw new Error("the shared debug Host lock is held");
-  return { router, host, adapter, library, claude, shared, before, evidence };
+  return { router, host, provider, shared, before, evidence };
+}
+
+function prepareProvider(plan: RoutePlan) {
+  if (plan.cursor !== undefined) {
+    if (plan.journey.kind !== "preflight" && plan.cursor.selection === undefined)
+      throw new Error("Cursor input requires a separately qualified Grok catalog choice");
+    if (plan.journey.kind === "cancelRestartSeed" || plan.journey.kind === "cancelRestartReopen")
+      throw new Error("the restart cancel route is commissioned for Claude");
+    return { kind: "cursor" as const, executable: realpathSync(plan.cursor.executable) };
+  }
+  if (plan.claudeExecutable === undefined || plan.claudeAdapter === undefined)
+    throw new Error("Claude requires its qualified executable and ACP package entry");
+  const claude = qualifyGlobalClaude(plan.claudeExecutable, process.env.PATH);
+  const adapter = realpathSync(plan.claudeAdapter);
+  return {
+    kind: "claude" as const,
+    claude,
+    adapter,
+    library: realpathSync(join(dirname(adapter), "lib.js")),
+  };
 }
 
 function inventory(
@@ -252,9 +290,9 @@ function makeControlPlan(
   if (plan.journey.kind === "preflight") throw new Error("preflight does not drive MCP cases");
   const evidence = join(prepared.evidence, "case");
   const restart: NonNullable<ControlPlan["sessionControl"]>["restart"] =
-    plan.journey.kind === "savedModeSeed"
+    plan.journey.kind === "savedModeSeed" || plan.journey.kind === "cancelRestartSeed"
       ? { phase: "seed", record: join(evidence, "seed.json") }
-      : plan.journey.kind === "savedModeReopen"
+      : plan.journey.kind === "savedModeReopen" || plan.journey.kind === "cancelRestartReopen"
         ? {
             phase: "reopen",
             record: plan.journey.record,
@@ -264,12 +302,10 @@ function makeControlPlan(
   const caseName =
     plan.journey.kind === "savedModeReopen" || plan.journey.kind === "savedModeSeed"
       ? "savedModeRestart"
-      : plan.journey.kind;
-  const actor = {
-    kind: "human",
-    humanId: execFileSync("/usr/bin/id", ["-un"], { encoding: "utf8" }).trim(),
-    source: "ownerLookup",
-  } as const;
+      : plan.journey.kind === "cancelRestartReopen" || plan.journey.kind === "cancelRestartSeed"
+        ? "cancelRestart"
+        : plan.journey.kind;
+  const actor = localActor();
   return controlPlanSchema.parse({
     repository: plan.repository,
     sourceHead: plan.sourceHead,
@@ -280,7 +316,7 @@ function makeControlPlan(
     serviceDirectory: binding.serviceDirectory,
     expectedServiceId: publication.serviceId,
     expectedServiceEpoch: publication.serviceEpoch,
-    endpointId: "claude-local",
+    endpointId: plan.cursor === undefined ? "claude-local" : "cursor-local",
     workingDirectory: binding.workspace,
     actor,
     approver: actor,
@@ -288,8 +324,7 @@ function makeControlPlan(
     peer: {
       kind: "provider",
       selection: {
-        model: "haiku",
-        advertisedLabel: "Haiku 5.5",
+        ...(plan.cursor?.selection ?? { model: "haiku", advertisedLabel: "Haiku 5.5" }),
         selectOnCreate: true,
         selectOnRestore: true,
         requiredOptions: {},
@@ -306,10 +341,57 @@ function makeControlPlan(
     sessionControl: {
       gateDirectory: capture,
       restore: "load",
-      savedMode: "plan",
+      savedMode: plan.cursor?.mode ?? "plan",
       ...(restart === undefined ? {} : { restart }),
     },
   });
+}
+
+function localActor() {
+  return {
+    kind: "human",
+    humanId: execFileSync("/usr/bin/id", ["-un"], { encoding: "utf8" }).trim(),
+    source: "ownerLookup",
+  } as const;
+}
+
+async function cursorCatalog(
+  client: StreamingMcpClient,
+  evidence: string,
+  publication: z.infer<typeof publicationSchema>,
+  binding: z.infer<typeof preparedHostSchema>,
+  mode: string,
+): Promise<void> {
+  const actor = { kind: "human", humanId: localActor().humanId };
+  const created = await client.callTool(
+    "conversation_create",
+    {
+      operationId: newOperationId(),
+      endpoint: { serviceId: publication.serviceId, endpointId: "cursor-local" },
+      workingDirectory: binding.workspace,
+      access: "write-restricted",
+      createdBy: actor,
+      approver: actor,
+      mode,
+      timeoutSeconds: 45,
+    },
+    { timeoutMs: 55_000 },
+  );
+  saveRecord(join(evidence, "cursor-create.json"), created);
+  if (created.kind !== "answered") throw new Error("Cursor metadata-only session failed");
+  const { target } = z.object({ target: sessionRefSchema }).parse(created.value);
+  if (
+    target.endpoint.serviceId !== publication.serviceId ||
+    target.endpoint.endpointId !== "cursor-local"
+  )
+    throw new Error("Cursor metadata returned an unexpected SessionRef");
+  const inspected = await client.callTool(
+    "provider_session_inspect",
+    { target },
+    { timeoutMs: 5000 },
+  );
+  saveRecord(join(evidence, "cursor-catalog.json"), inspected);
+  if (inspected.kind !== "answered") throw new Error("Cursor metadata-only inspect failed");
 }
 
 async function runControl(plan: ControlPlan, evidence: string, signal: AbortSignal): Promise<void> {
@@ -337,9 +419,10 @@ async function drive(
   mkdirSync(capture, { mode: 0o700 });
   saveRecord(join(evidence, "before.json"), before);
   const gate = join(import.meta.dirname, "../providers/acp/session-control-stdio-gate.ts");
+  const { provider } = prepared;
   const command = [
     prepared.host.path,
-    plan.journey.kind === "savedModeReopen" ? "--resume-run-directory" : "--run-directory",
+    isReopen(plan) ? "--resume-run-directory" : "--run-directory",
     plan.runDirectory,
     "--router-root",
     shared,
@@ -347,27 +430,40 @@ async function drive(
     prepared.router.path,
     "--port",
     String(plan.port),
-    "--claude-acp-executable",
-    prepared.adapter,
   ];
   const environment: NodeJS.ProcessEnv = {
     ...process.env,
-    CLAUDE_CODE_EXECUTABLE: prepared.claude.canonicalPath,
-    CODEX_ROUTER_SESSION_CONTROL_GATE: capture,
-    CODEX_ROUTER_SESSION_CONTROL_CLAUDE_LIBRARY: pathToFileURL(prepared.library).href,
-    NODE_OPTIONS: "--import=" + pathToFileURL(gate).href,
     RUST_LOG: "warn",
   };
+  if (provider.kind === "claude") {
+    command.push("--claude-acp-executable", provider.adapter);
+    environment["CLAUDE_CODE_EXECUTABLE"] = provider.claude.canonicalPath;
+    environment["CODEX_ROUTER_SESSION_CONTROL_GATE"] = capture;
+    environment["CODEX_ROUTER_SESSION_CONTROL_CLAUDE_LIBRARY"] = pathToFileURL(
+      provider.library,
+    ).href;
+    environment["NODE_OPTIONS"] = "--import=" + pathToFileURL(gate).href;
+  } else {
+    command.push("--cursor-acp-executable", process.execPath);
+    environment["CODEX_ROUTER_SESSION_CONTROL_GATE"] = capture;
+    for (const argument of [
+      gate,
+      cursorCaptureArgument(plan),
+      "--",
+      provider.executable,
+      "--disable-auto-update",
+      "--disable-project-configs",
+      "--workspace",
+      join(plan.runDirectory, "agent-workspace"),
+      "acp",
+    ])
+      command.push("--cursor-acp-arguments", argument);
+    delete environment["CURSOR_API_KEY"];
+    environment["CURSOR_AGENT_DISABLE_DEBUG_LOG"] = "1";
+  }
   delete environment["CODEX_ROUTER_HOST_INHERITED_LOCK"];
   delete environment["CLAUDE_AGENT_LOGS"];
-  saveRecord(join(evidence, "launch.json"), {
-    argv: command,
-    sourceHead: plan.sourceHead,
-    host: prepared.host,
-    router: prepared.router,
-    claude: prepared.claude,
-    gateSha256: sha256(gate),
-  });
+  recordLaunch(plan, prepared, command, gate);
   const known = new Map<number, ProcessIdentity>();
   let child: ChildProcess | undefined;
   try {
@@ -393,7 +489,9 @@ async function drive(
     const endpoints = await client.callTool("endpoints_list", {}, { timeoutMs: 5000 });
     saveRecord(join(evidence, "endpoints.json"), endpoints);
     if (endpoints.kind !== "answered" || !existsSync(join(capture, "wire.jsonl")))
-      throw new Error("the qualified Claude route has no ACP capture");
+      throw new Error("the declared provider route has no ACP capture");
+    if (plan.journey.kind === "preflight" && plan.cursor !== undefined)
+      await cursorCatalog(client, evidence, publication, binding, plan.cursor.mode);
     if (plan.journey.kind !== "preflight")
       await runControl(
         makeControlPlan(plan, prepared, capture, publication, binding),
@@ -403,6 +501,37 @@ async function drive(
   } finally {
     await settleRoute(child, known, prepared);
   }
+}
+
+function recordLaunch(
+  plan: RoutePlan,
+  prepared: ReturnType<typeof prepare>,
+  command: string[],
+  gate: string,
+): void {
+  saveRecord(join(prepared.evidence, "launch.json"), {
+    argv: command,
+    sourceHead: plan.sourceHead,
+    host: prepared.host,
+    router: prepared.router,
+    provider: prepared.provider.kind,
+    gateSha256: sha256(gate),
+  });
+}
+
+// An automation Host restart keeps provider argv byte-identical. Older seeds put
+// the first capture path in argv, so preserve it while directing writes through env.
+function cursorCaptureArgument(plan: RoutePlan): string {
+  if (!isReopen(plan)) return join(plan.runDirectory, "cursor-acp-capture");
+  const previous = z
+    .looseObject({
+      cursorProvider: z.looseObject({ arguments: z.array(z.string()).min(2) }),
+    })
+    .parse(JSON.parse(readFileSync(join(plan.runDirectory, "debug-host-context.json"), "utf8")));
+  const captureArgument = previous.cursorProvider.arguments[1];
+  if (captureArgument === undefined || !isAbsolute(captureArgument))
+    throw new Error("the stopped Cursor Host has no stable ACP capture argument");
+  return captureArgument;
 }
 
 async function settleRoute(
