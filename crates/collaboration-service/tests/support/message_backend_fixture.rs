@@ -318,7 +318,6 @@ async fn exercise_message(
     };
     let owner = collaboration_service::SubscriptionDeliveryService::new(
         collaboration_service::SubscriptionDeliveryServiceProps {
-            board_availability: collaboration_service::BoardAvailability::Unavailable,
             push_store: interactions.clone(),
             delivery: delivery.clone(),
             presence: presence.clone(),
@@ -327,7 +326,6 @@ async fn exercise_message(
         },
     );
     owner.start().await?;
-    let identity = identity.with_subscription_delivery_service(owner.clone(), presence.clone());
 
     let (identity, native_mail) = native_mail_owner::start(
         identity,

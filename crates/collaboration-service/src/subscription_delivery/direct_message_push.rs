@@ -98,7 +98,6 @@ impl SubscriptionPushStore {
     ) -> Result<PushRecord, BoardError> {
         let mode = match record.kind {
             PushKind::DirectMessage => record.mode.ok_or_else(BoardError::board_unavailable)?,
-            PushKind::BoardNotification => MessageDelivery::Auto,
             _ => return Err(BoardError::board_unavailable()),
         };
         let line = render_push_line(&PushLineInput {

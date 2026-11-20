@@ -73,9 +73,7 @@ pub(super) async fn verify(
             .build()
             .map_err(transport_failure)?;
         let tools: ToolInventory = call(&client, &url, 1, "tools/list", json!({})).await?;
-        if !tools.tools.iter().any(|tool| tool.name == "endpoints_list")
-            || !tools.tools.iter().any(|tool| tool.name == "workspace_list")
-        {
+        if !tools.tools.iter().any(|tool| tool.name == "endpoints_list") {
             return Err(io::Error::other(
                 "loopback MCP endpoint lacks the collaboration MCP inventory",
             ));

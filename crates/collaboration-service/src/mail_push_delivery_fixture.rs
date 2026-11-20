@@ -1,6 +1,5 @@
 //! Actual Inbox, journal, native actors and physical push/retry owner; native client and timer stand in.
 use super::*;
-use crate::BoardAvailability;
 use crate::SubscriptionDeliveryServiceProps;
 use crate::mail_delivery_projection_tests::fixture;
 use collaboration_contracts::AttemptEvidenceSink;
@@ -12,12 +11,9 @@ use collaboration_mail_protocol::{
     FollowDeliveryPolicy, MailSender, NotificationBody, NotificationSource, RecordPointer,
     RootRange,
 };
-use collaboration_protocol::{
-    DeliveryNextAction, DeliveryOutcome, DeliveryReceipt, DeliveryRejection,
-    DeliveryRejectionReason, PushId, SessionRef,
-};
+use collaboration_protocol::{DeliveryOutcome, DeliveryReceipt, PushId, SessionRef};
 use durable_steps::{AtomicStore, Engine, storage::TransactionScope, turso_store::TursoScope};
-pub(super) use fixture::{Fixture, ProjectionHost, ProjectionStore, ProjectionTask, recorded_at};
+pub(super) use fixture::{Fixture, ProjectionHost, ProjectionStore, recorded_at};
 use fleet_sync_protocol::{ItemId, Recipient};
 use message_board::{
     BatchTiming, FeedCursor, Identity, SubscriptionGeneration, SubscriptionLifetime,
@@ -138,7 +134,6 @@ pub(super) struct Runtime {
     pub(super) fixture: Fixture,
     pub(super) actors: SubscriptionDeliveryService,
     pub(super) client: Arc<NativeClient>,
-    publisher: Arc<crate::NotificationPublisher>,
     _directory: tempfile::TempDir,
 }
 impl Runtime {
@@ -155,7 +150,6 @@ impl Runtime {
         crate::MailDeliveryRuntime::new(
             self.fixture.host.config.local.owner,
             self.local_mail_props(),
-            None,
         )
         .unwrap()
     }
@@ -175,26 +169,20 @@ impl Runtime {
         let fixture = Fixture::new().await;
         let directory = tempfile::tempdir().unwrap();
         let client = Arc::new(NativeClient::default());
-        let (actors, publisher) = Self::start_actors(&fixture, &client, directory.path()).await;
+        let actors = Self::start_actors(&fixture, &client).await;
         Self::attach(&fixture, &actors);
         Self {
             fixture,
             actors,
             client,
-            publisher,
             _directory: directory,
         }
     }
     async fn start_actors(
         fixture: &Fixture,
         client: &Arc<NativeClient>,
-        directory: &std::path::Path,
-    ) -> (
-        SubscriptionDeliveryService,
-        Arc<crate::NotificationPublisher>,
-    ) {
+    ) -> SubscriptionDeliveryService {
         let actors = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
-            board_availability: BoardAvailability::Unavailable,
             push_store: fixture.owner.clone(),
             delivery: client.clone(),
             presence: Arc::new(Running),
@@ -203,41 +191,8 @@ impl Runtime {
         });
         // This recipient has no sender project. Its real check must establish
         // that absence before dispatch, instead of omitting the check port.
-        let registry = Arc::new(collaboration_runtime::ProjectStoreRegistry::new(
-            directory,
-            Some(fixture.host.config.local.owner),
-            fixture.host.clock.clone(),
-            message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
-                .expect("32-byte fixture cursor key"),
-        ));
-        // A local, unenrolled machine: the Fleet client has no session and no
-        // central behind it, so project admission answers from local state only.
-        let fleet = Arc::new(collaboration_runtime::FleetClient::new(
-            &message_board_storage::FleetStore::open(
-                &(directory).join(message_board_storage::FleetStore::FILE_NAME),
-            )
-            .await
-            .unwrap(),
-            Arc::new(crate::test_project_runtime::PendingRegistration),
-            None,
-        ));
-        let admission = Arc::new(
-            crate::ProjectAdmission::new(crate::ProjectAdmissionProps {
-                clock: fixture.host.clock.clone(),
-                registry,
-                fleet,
-                identity: machine(),
-            })
-            .unwrap(),
-        );
-        let publisher = Arc::new(crate::NotificationPublisher::new(
-            admission.clone(),
-            fixture.owner.clone(),
-            std::sync::Weak::new(),
-        ));
-        actors.attach_follow_admission(Arc::downgrade(&admission), Arc::downgrade(&publisher));
         actors.start().await.unwrap();
-        (actors, publisher)
+        actors
     }
     fn attach(fixture: &Fixture, actors: &SubscriptionDeliveryService) {
         Self::attach_with_presence(fixture, actors, Arc::new(Running));
@@ -319,22 +274,18 @@ impl Runtime {
             fixture,
             actors,
             client,
-            publisher,
             _directory,
         } = self;
         fixture.host.consumer.native.lock().unwrap().take();
-        publisher.shutdown().await;
         actors.shutdown().await;
         drop(actors);
-        drop(publisher);
         let fixture = fixture.reopen().await;
-        let (actors, publisher) = Self::start_actors(&fixture, &client, _directory.path()).await;
+        let actors = Self::start_actors(&fixture, &client).await;
         Self::attach(&fixture, &actors);
         Self {
             fixture,
             actors,
             client,
-            publisher,
             _directory,
         }
     }
@@ -343,14 +294,11 @@ impl Runtime {
             fixture,
             actors,
             client: _,
-            publisher,
             _directory,
         } = self;
-        publisher.shutdown().await;
         actors.shutdown().await;
         fixture.host.consumer.native.lock().unwrap().take();
         drop(actors);
-        drop(publisher);
         drop(fixture.close().await);
         drop(_directory);
     }
@@ -433,20 +381,6 @@ pub(super) fn follow(
         }),
     )
     .unwrap()
-}
-pub(super) fn rejected() -> DeliveryReceipt {
-    DeliveryReceipt {
-        outcome: DeliveryOutcome::Rejected(DeliveryRejection {
-            native_failure: None,
-            reason: DeliveryRejectionReason::ProviderRejected,
-            next_action: DeliveryNextAction::InspectTarget,
-            client_code: Some(42),
-            detail: Some("complete native rejection detail".to_owned()),
-            claims: None,
-        }),
-        reachability: Some(collaboration_protocol::SessionReachability::CodexAppServer),
-        client: None,
-    }
 }
 pub(super) fn accepted() -> DeliveryReceipt {
     DeliveryReceipt {

@@ -20,7 +20,7 @@ impl MailDeliveryRuntime {
                     .map_err(delivery_rollback)?;
                     #[cfg(test)]
                     if let Some(socket) = probe {
-                        super::project_admission::pause_project_admission(&socket).await?;
+                        super::local_cancellation::pause_cancel_admission(&socket).await?;
                     }
                     Ok(admitted)
                 })
@@ -29,45 +29,21 @@ impl MailDeliveryRuntime {
     }
 
     pub(crate) async fn initialize_submitter_bindings(&self) -> Result<usize, StoreError> {
-        loop {
-            let binding = self.binding.clone();
-            let now = self.host.now();
-            let result = self
-                .store
-                .transaction(move |scope| {
-                    Box::pin(async move {
-                        backfill_submitters::<RouterDeliveryTypes, _, _>(
-                            scope,
-                            fleet_sync_delivery::DeliveryHostRole::Machine,
-                            binding.as_ref(),
-                            now,
-                        )
-                        .await
-                        .map_err(delivery_rollback)
-                    })
-                })
-                .await;
-            match result {
-                Err(error) => {
-                    if matches!(
-                        fleet_sync_delivery::classify_delivery_store_error(error.clone()),
-                        fleet_sync_delivery::DeliveryTransactionFailure::BindingUnavailable {
-                            reason: fleet_sync_protocol::SenderBindingFailure::Unknown,
-                            ..
-                        }
-                    ) && super::installation_directory::refresh_sender_bindings(
-                        self.binding.as_ref(),
-                        self.owner.as_ref(),
-                        self.session.as_ref(),
+        let binding = self.binding.clone();
+        let now = self.host.now();
+        self.store
+            .transaction(move |scope| {
+                Box::pin(async move {
+                    backfill_submitters::<RouterDeliveryTypes, _, _>(
+                        scope,
+                        fleet_sync_delivery::DeliveryHostRole::Machine,
+                        binding.as_ref(),
+                        now,
                     )
-                    .await?
-                    {
-                        continue;
-                    }
-                    return Err(error);
-                }
-                Ok(changed) => return Ok(changed),
-            }
-        }
+                    .await
+                    .map_err(delivery_rollback)
+                })
+            })
+            .await
     }
 }

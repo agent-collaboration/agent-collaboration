@@ -7,19 +7,17 @@ use collaboration_contracts::RouterConsumerProtocol;
 use collaboration_contracts::RouterDeliveryTypes;
 use collaboration_mail_protocol::{CarrierAcceptance, MailSender};
 use collaboration_protocol::{DeliveryReceipt, PushMessageSendResult, PushRecordDraft};
-use collaboration_runtime::MailDeliverySession;
 use collaboration_runtime::outgoing_mail_message;
 use collaboration_runtime::project_mail_cancel_outcome;
 use collaboration_runtime::project_mail_outcome;
 use collaboration_runtime::project_received_mail;
 use durable_steps::{
-    AtomicStore, CallFailure, CallId, CallTarget, Engine, NotSentReason, OperationState,
-    StoreError, storage::TransactionScope, turso_store::TursoScope,
+    AtomicStore, CallFailure, CallId, CallTarget, Engine, OperationState, StoreError,
+    storage::TransactionScope, turso_store::TursoScope,
 };
 use fleet_sync_delivery::{
     DeliverCall, DeliverLocally, DeliveryConsumer, DeliveryError, DeliveryLimits, GateDecision,
-    Inbox, LocalDelivery, LocalDeliveryConfig, ReportOutcome, SubmitItem,
-    minimum_settlement_allowance,
+    Inbox, LocalDelivery, LocalDeliveryConfig, ReportOutcome, minimum_settlement_allowance,
 };
 use fleet_sync_protocol::{
     DeliveryHeader, DeliveryItem, DeliveryItemRef, ItemId, PeerId, RecipientOutcome,
@@ -36,28 +34,14 @@ use std::sync::{Arc, OnceLock, Weak};
 use tokio::sync::watch;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
-mod frozen_cancel_outcome;
-mod frozen_handoff_status;
-pub(crate) use frozen_cancel_outcome::{FrozenCancelSettlement, RemoteCancelReplay};
 mod custody_backfill;
 mod held_readiness;
-mod installation_directory;
 mod sender_binding;
 pub use sender_binding::MachineSenderBinding;
+mod inbound_wake_refusal;
 mod local_admission;
 mod local_calls;
 mod local_cancellation;
-mod local_project_admission;
-mod poll_handover;
-mod project_admission;
-mod project_cancellation;
-mod pushed_mail;
-pub(crate) use project_cancellation::other_canonical_cancel;
-mod inbound_wake_refusal;
-mod remote_admission;
-mod remote_calls;
-mod remote_status;
-pub(crate) use installation_directory::InstallationPeerResolutionError;
 pub use local_cancellation::LocalCancelReference;
 
 type MailHost = TokioHost<MailCallRouter, SubscriptionRuntimeClock>;
@@ -71,8 +55,6 @@ type LocalMailTask = DeliverLocally<
     MachineSenderBinding,
 >;
 type RemoveMailRecord = fleet_sync_delivery::RemoveDeliveryRecord<MailStore, MailDatabase>;
-type SubmitMailTask =
-    SubmitItem<MailStore, MailDatabase, RouterDeliveryTypes, MailConsumer, MachineSenderBinding>;
 type ReportMailTask =
     ReportOutcome<MailStore, MailDatabase, RouterDeliveryTypes, MachineSenderBinding>;
 
@@ -81,12 +63,8 @@ pub struct MailDeliveryRuntime {
     #[cfg(test)]
     pub(crate) cancel_admission_probe: Option<std::path::PathBuf>,
     #[cfg(test)]
-    pub(crate) project_admission_probe: Option<std::path::PathBuf>,
-    #[cfg(test)]
     pub(crate) backfill_admission_probe: Option<std::path::PathBuf>,
     settlement_drives: Arc<std::sync::Mutex<TaskTracker>>,
-    project_replication:
-        Arc<OnceLock<Arc<dyn collaboration_contracts::ProjectReplicationPosition>>>,
     owner: Arc<InteractionStore>,
     store: Arc<MailStore>,
     host: Arc<MailHost>,
@@ -97,7 +75,6 @@ pub struct MailDeliveryRuntime {
     reader_actors: crate::SubscriptionDeliveryService,
     service: message_board::ServiceId,
     clock: Arc<dyn RuntimeClock>,
-    session: Option<MailDeliverySession>,
 }
 
 impl MailDeliveryRuntime {
@@ -202,28 +179,22 @@ impl MailDeliveryRuntime {
     }
 
     /// Construction registers work but starts no background task or native call.
-    pub fn new(
-        peer: PeerId,
-        props: MailPushDeliveryProps,
-        session: Option<MailDeliverySession>,
-    ) -> Result<Self, StoreError> {
-        Self::with_default_limits(peer, props, session, 256 * 1024 * 1024)
+    pub fn new(peer: PeerId, props: MailPushDeliveryProps) -> Result<Self, StoreError> {
+        Self::with_default_limits(peer, props, 256 * 1024 * 1024)
     }
 
     #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
     pub fn runtime_test_new_with_inbox_limit(
         peer: PeerId,
         props: MailPushDeliveryProps,
-        session: Option<MailDeliverySession>,
         inbox_bytes: std::num::NonZeroU64,
     ) -> Result<Self, StoreError> {
-        Self::with_default_limits(peer, props, session, inbox_bytes.get())
+        Self::with_default_limits(peer, props, inbox_bytes.get())
     }
 
     fn with_default_limits(
         peer: PeerId,
         props: MailPushDeliveryProps,
-        session: Option<MailDeliverySession>,
         inbox_bytes: u64,
     ) -> Result<Self, StoreError> {
         // PD4 §3's quotas reserve the SDK-computed settlement allowance.
@@ -234,7 +205,7 @@ impl MailDeliveryRuntime {
             minimum_settlement_allowance::<RouterDeliveryTypes>().map_err(StoreError::backend)?,
         )
         .map_err(StoreError::backend)?;
-        Self::with_limits(peer, props, limits, session)
+        Self::with_limits(peer, props, limits)
     }
 
     #[cfg(test)]
@@ -243,20 +214,14 @@ impl MailDeliveryRuntime {
         props: MailPushDeliveryProps,
         limits: DeliveryLimits,
     ) -> Result<Self, StoreError> {
-        Self::with_limits(peer, props, limits, None)
+        Self::with_limits(peer, props, limits)
     }
 
     fn with_limits(
         peer: PeerId,
         props: MailPushDeliveryProps,
         limits: DeliveryLimits,
-        session: Option<MailDeliverySession>,
     ) -> Result<Self, StoreError> {
-        if session.as_ref().is_some_and(|session| session.peer != peer) {
-            return Err(StoreError::backend(
-                "mail session peer does not match the installation peer",
-            ));
-        }
         let owner = props.interactions.clone();
         let clock = props.clock.clone();
         let service: message_board::ServiceId = String::from(props.machine.service_id().clone())
@@ -273,15 +238,11 @@ impl MailDeliveryRuntime {
             carrier: MailPushDelivery::new(props),
             clock: clock.clone(),
         });
-        let project_replication = Arc::new(OnceLock::new());
         let router = Arc::new(MailCallRouter {
-            project_replication: project_replication.clone(),
             store: OnceLock::new(),
             consumer: consumer.clone(),
             binding: binding.clone(),
-            owner: owner.clone(),
             config,
-            session: session.clone(),
         });
         // The SDK still waits on its Tokio timer until it can accept an injected
         // timer. That inherited engine waiting is tracked under clock C.
@@ -304,22 +265,9 @@ impl MailDeliveryRuntime {
         engine.register(RemoveMailRecord::new(
             fleet_sync_delivery::DeliveryHostRole::Machine,
         ))?;
-        if let Some(session) = &session {
-            let remote = session.task_config(config)?;
-            engine.register(SubmitMailTask::new(
-                limits,
-                consumer.clone(),
-                host.clone(),
-                binding.clone(),
-            ))?;
-            engine.register(ReportMailTask::new(remote, host.clone(), binding.clone()))?;
-        }
         Ok(Self {
-            project_replication,
             #[cfg(test)]
             cancel_admission_probe: None,
-            #[cfg(test)]
-            project_admission_probe: None,
             #[cfg(test)]
             backfill_admission_probe: None,
             settlement_drives: Arc::new(std::sync::Mutex::new(TaskTracker::new())),
@@ -333,8 +281,11 @@ impl MailDeliveryRuntime {
             reader_actors,
             service,
             clock,
-            session,
         })
+    }
+
+    pub(crate) fn custody_record_is_past_retention(&self, item: ItemId) -> bool {
+        fleet_sync_delivery::item_is_too_old(item, self.host.now())
     }
 
     /// Refuses attaching mail to a different installation or physical interaction owner.
@@ -367,7 +318,14 @@ impl MailDeliveryRuntime {
 
     /// Host monitors this future and drains in-flight native work during shutdown.
     pub async fn run(&self, shutdown: CancellationToken) -> Result<(), StoreError> {
-        let admitted = tokio::select! { result = async { let admitted = self.initialize_record_removals().await?; self.initialize_submitter_bindings().await?; Ok::<_, StoreError>(admitted) } => result?, () = shutdown.cancelled() => return Ok(()) };
+        let admitted = tokio::select! {
+            result = async {
+                let admitted = self.initialize_record_removals().await?;
+                self.initialize_submitter_bindings().await?;
+                Ok::<_, StoreError>(admitted)
+            } => result?,
+            () = shutdown.cancelled() => return Ok(()),
+        };
         if admitted > 0 {
             tracing::info!(admitted, "admitted existing mail custody removal records");
         }
@@ -381,25 +339,19 @@ impl MailDeliveryRuntime {
         }
         let (stop, stopped) = watch::channel(false);
         let runner = TokioRunner::new(self.engine.clone(), self.host.clone());
-        let running = async {
-            tokio::try_join!(
-                runner.run(stopped.clone()),
-                self.run_sender_binding_lookups(stopped)
-            )
-            .map(|_| ())
-        };
+        let running = runner.run(stopped);
         tokio::pin!(running);
         tokio::select! {
             result = &mut running => {
                 let settlements = self.close_settlement_admission()?;
                 settlements.wait().await;
-                result
+                result.map(|_| ())
             },
             () = shutdown.cancelled() => {
                 let settlements = self.close_settlement_admission()?;
                 stop.send_replace(true);
                 let (result, ()) = tokio::join!(running, settlements.wait());
-                result
+                result.map(|_| ())
             }
         }
     }
@@ -418,16 +370,6 @@ impl DeliveryConsumer<TursoScope<'_, MailHost>> for MailConsumer {
         item: &DeliveryItem<RouterDeliveryTypes>,
     ) -> Result<(), DeliveryError> {
         project_received_mail(scope, item, self.clock.utc_now()).await?;
-        if collaboration_runtime::received_mail_push::is_poll_mail(item) {
-            let target = item.recipient().address.clone().try_into().map_err(|_| {
-                DeliveryError::Corrupt {
-                    field: "Poll recipient",
-                }
-            })?;
-            // This hint waits behind the receive transaction. It also discovers
-            // new remote items for a wait that was already registered.
-            self.reader_actors.prompt_native_mail_outcome(target);
-        }
         Ok(())
     }
     async fn on_outcome(
@@ -437,17 +379,7 @@ impl DeliveryConsumer<TursoScope<'_, MailHost>> for MailConsumer {
         outcome: &RecipientOutcome<CarrierAcceptance>,
         observation: Option<&collaboration_contracts::RouterLocalObservation>,
     ) -> Result<(), DeliveryError> {
-        let pending_poll = interaction_storage::read_pending_poll_in_scope(scope, item)
-            .await
-            .map_err(|error| DeliveryError::Storage(error.to_string()))?;
-        let poll_outcome = pending_poll.is_some();
         project_mail_outcome(scope, item, outcome, observation, self.clock.utc_now()).await?;
-        if let Some(pending) = pending_poll
-            && !matches!(outcome, RecipientOutcome::Held)
-        {
-            self.reader_actors
-                .prompt_native_mail_outcome(pending.recipient);
-        }
         {
             let push =
                 item.as_uuid()
@@ -459,26 +391,14 @@ impl DeliveryConsumer<TursoScope<'_, MailHost>> for MailConsumer {
             let record = interaction_storage::read_mail_push_in_scope(scope, &push)
                 .await
                 .map_err(|error| DeliveryError::Storage(error.to_string()))?;
-            if !poll_outcome
-                && matches!(
-                    outcome,
-                    RecipientOutcome::Held | RecipientOutcome::Prevented { .. }
-                )
-                && let Some(record) = &record
+            if matches!(
+                outcome,
+                RecipientOutcome::Held | RecipientOutcome::Prevented { .. }
+            ) && let Some(record) = &record
+                && record.kind == collaboration_protocol::PushKind::DirectMessage
             {
                 self.reader_actors
                     .prompt_native_mail_outcome(record.target.clone());
-            }
-            if !matches!(outcome, RecipientOutcome::Held)
-                && record.as_ref().is_none_or(|record| {
-                    matches!(
-                        record.kind,
-                        collaboration_protocol::PushKind::SubscriptionActivity
-                            | collaboration_protocol::PushKind::BoardNotification
-                    )
-                })
-            {
-                self.reader_actors.prompt_project_mail_outcome(item);
             }
         }
         Ok(())
@@ -506,7 +426,7 @@ impl DeliveryConsumer<TursoScope<'_, MailHost>> for MailConsumer {
         item: &DeliveryItem<RouterDeliveryTypes>,
         call: CallId,
     ) -> LocalDelivery<RouterDeliveryTypes> {
-        self.deliver_with_load_policy(item, call, LoadPolicy::LoadedOnly)
+        self.dispatch_frozen_body(item, call, LoadPolicy::LoadedOnly)
             .await
     }
     fn may_cancel(&self, sender: &MailSender, item: &DeliveryHeader<RouterDeliveryTypes>) -> bool {
@@ -527,19 +447,7 @@ impl MailConsumer {
             .await
         {
             Ok(Some(answer)) => answer,
-            Ok(None) => LocalDelivery {
-                outcome: fleet_sync_delivery::LocalOutcome::Held { until: None },
-                observation: DeliveryReceipt {
-                    outcome: collaboration_protocol::DeliveryOutcome::NotSubmitted {
-                        retryable: true,
-                        reason: "Poll item waits for a matching waiter".to_owned(),
-                    },
-                    reachability: None,
-                    client: None,
-                }
-                .into(),
-            },
-            Err(_) => LocalDelivery {
+            Ok(None) | Err(_) => LocalDelivery {
                 outcome: fleet_sync_delivery::LocalOutcome::Uncertain,
                 observation: DeliveryReceipt {
                     outcome: collaboration_protocol::DeliveryOutcome::Unknown,
@@ -553,14 +461,10 @@ impl MailConsumer {
 }
 
 struct MailCallRouter {
-    project_replication:
-        Arc<OnceLock<Arc<dyn collaboration_contracts::ProjectReplicationPosition>>>,
     store: OnceLock<Weak<MailStore>>,
     consumer: Arc<MailConsumer>,
     binding: Arc<MachineSenderBinding>,
-    owner: Arc<InteractionStore>,
     config: LocalDeliveryConfig,
-    session: Option<MailDeliverySession>,
 }
 
 #[cfg(test)]

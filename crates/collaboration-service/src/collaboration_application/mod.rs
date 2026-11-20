@@ -6,19 +6,17 @@
 //! these methods and encode what comes back; no operation logic lives in a transport.
 //!
 //! Each family owns only the capabilities its constructor receives.
-//! [`CollaborationApplication`] shares the constructed families and lends callers their APIs: board (`board_operations`); messages (`message_operations`);
+//! [`CollaborationApplication`] shares the constructed families and lends callers their APIs: messages (`message_operations`);
 //! conversations (`conversation_operations`); approvals and
 //! questions (`interaction_operations`); sessions, the journal and the address book
 //! (`session_operations`, `journal_operations`); provider observation
 //! (`provider_observation_operations`). Heavier paging logic stays in the crate's domain modules
 //! (`codex_session_inventory`, `provider_session_inventory`).
-mod board_operations;
 mod conversation_operations;
 mod interaction_operations;
 mod journal_operations;
 mod message_operations;
 mod provider_observation_operations;
-mod session_context_reader;
 mod session_native_control;
 mod session_operations;
 pub use crate::inventory_failures::{
@@ -26,10 +24,8 @@ pub use crate::inventory_failures::{
     ProviderInventoryFailureKind,
 };
 pub use crate::response_budget::{API_RESULT_BUDGET, RESULT_LIMIT_BYTES, ResultByteBudget};
-pub use session_context_reader::SessionContextReader;
 pub use session_native_control::NativeSessionControl;
 
-pub use board_operations::{BoardOperations, ThreadWaitBudgetError, thread_wait_root_notice_limit};
 pub use conversation_operations::{ConversationFailure, ConversationOperations};
 pub use interaction_operations::{InteractionFailure, InteractionOperations, QuestionRejection};
 pub use journal_operations::{
@@ -49,16 +45,12 @@ pub(crate) use session_operations::{
     classify_native_call_failure, rename_method_unsupported, valid_session_rename_name,
 };
 
-#[cfg(test)]
-#[path = "thread_wait_budget_tests.rs"]
-mod thread_wait_budget_tests;
 use collaboration_contracts::RouterIdentity;
 
 /// Constructed operation families serving one Router installation and run.
 #[derive(Clone)]
 pub struct CollaborationApplication {
     identity: RouterIdentity,
-    board: std::sync::Arc<BoardOperations>,
     conversations: std::sync::Arc<ConversationOperations>,
     messages: std::sync::Arc<MessageOperations>,
     observation: std::sync::Arc<ObservationOperations>,
@@ -69,7 +61,6 @@ impl CollaborationApplication {
     #[must_use]
     pub fn new(
         identity: RouterIdentity,
-        board: BoardOperations,
         conversations: ConversationOperations,
         messages: MessageOperations,
         observation: ObservationOperations,
@@ -78,7 +69,6 @@ impl CollaborationApplication {
     ) -> Self {
         Self {
             identity,
-            board: std::sync::Arc::new(board),
             conversations: std::sync::Arc::new(conversations),
             messages: std::sync::Arc::new(messages),
             observation: std::sync::Arc::new(observation),
@@ -101,10 +91,6 @@ impl CollaborationApplication {
     #[must_use]
     pub fn machine_label(&self) -> &collaboration_protocol::MachineLabel {
         self.identity.machine_identity().machine_label()
-    }
-    #[must_use]
-    pub fn board(&self) -> &BoardOperations {
-        &self.board
     }
     #[must_use]
     pub fn conversations(&self) -> &ConversationOperations {

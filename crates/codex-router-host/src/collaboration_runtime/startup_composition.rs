@@ -3,9 +3,9 @@ use super::{
     BackendPublication, BoundCollaborationApi, CancellationToken, CollaborationRuntime,
     CollaborationRuntimeInputs, EndpointAvailability, EndpointId, EndpointRef,
     HostCollaborationInputs, JoinSet, NativeRelayListener, NonEmptyText, RemoteControlServerName,
-    RouterExecutableRelation, SchemaDigest, SocketAddr, board_composition,
-    create_private_socket_directory, current_observation_timestamp, io, load_installation_peer,
-    load_service_identity, new_service_uuid, unix_seconds,
+    RouterExecutableRelation, SchemaDigest, SocketAddr, create_private_socket_directory,
+    current_observation_timestamp, io, load_installation_peer, load_service_identity,
+    new_service_uuid, unix_seconds,
 };
 
 impl CollaborationRuntime {
@@ -24,7 +24,6 @@ impl CollaborationRuntime {
             std::sync::Arc::new(collaboration_mcp::FixedRouterExecutableRelation(
                 RouterExecutableRelation::Match,
             )),
-            None,
             None,
             None,
         ))
@@ -46,7 +45,6 @@ impl CollaborationRuntime {
             router_executable_check,
             Some(host_inputs.router_proxy_endpoint),
             prepared_exposure,
-            Some(host_inputs.enrollment_reset_directory),
         ))
         .await
     }
@@ -57,7 +55,6 @@ impl CollaborationRuntime {
         router_executable_check: std::sync::Arc<dyn collaboration_mcp::RouterExecutableCheck>,
         router_proxy_endpoint: Option<SocketAddr>,
         prepared_exposure: Option<crate::tailscale_exposure::PreparedTailscaleExposure>,
-        enrollment_reset_directory: Option<std::path::PathBuf>,
     ) -> io::Result<Self> {
         let mut owner_human_id = inputs.owner_human_id.clone();
         #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
@@ -74,16 +71,6 @@ impl CollaborationRuntime {
             std::sync::Arc::new(router_clock::SystemRuntimeClock::new());
         let service_id = load_service_identity(&inputs.directory)?;
         let installation_peer = load_installation_peer(&inputs.directory)?;
-        if inputs
-            .board_session
-            .as_ref()
-            .is_some_and(|session| session.peer != installation_peer)
-        {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "enrollment peer differs from this installation's persisted peer",
-            ));
-        }
         let service_epoch = new_service_uuid()?;
         let machine_identity = collaboration_contracts::MachineIdentity::new(
             service_id.clone(),
@@ -145,38 +132,6 @@ impl CollaborationRuntime {
         .map_err(io::Error::other)?;
         let endpoint_directory = collaboration_runtime::EndpointDirectory::new(service_id.clone());
         let display_names = collaboration_runtime::SessionDisplayNameCache::default();
-        let mut project_claim = None;
-        let mut project_replication: std::sync::Arc<
-            dyn collaboration_contracts::ProjectReplicationPosition,
-        > = std::sync::Arc::new(collaboration_contracts::UnacknowledgedProjectReplication);
-        let (opened_board, fleet_link) = board_composition::open_observed_board_admission(
-            worker_clock.clone(),
-            &inputs.directory,
-            machine_identity.clone(),
-            inputs.board_session,
-            enrollment_reset_directory
-                .as_deref()
-                .unwrap_or(&inputs.directory),
-        )
-        .await;
-        let mut prepared_board = None;
-        let project_admission = match opened_board {
-            Ok(board) => {
-                let admission = board.admission.clone();
-                if let Some(claim) = &board.claim {
-                    project_claim = Some(claim.clone());
-                }
-                if let Some(replication) = &board.replication {
-                    project_replication = replication.clone();
-                }
-                prepared_board = Some(board);
-                Some(admission)
-            }
-            Err(error) => {
-                tracing::warn!(%error,"board storage unavailable; other collaboration remains independent");
-                None
-            }
-        };
         let provider_store = match collaboration_runtime::ProviderOperationStore::open(
             &inputs.directory.join("provider-operations.sqlite"),
         )
@@ -294,40 +249,25 @@ impl CollaborationRuntime {
         let observation_rechecks = super::observation_recheck::ObservationRechecks::new();
         // Local message delivery needs only the interaction store; it never waits on automation.
         // The value stays optional until the board composition (M1) no longer needs it so.
-        let subscription_delivery = Some({
-            let board_availability = match project_admission.as_ref() {
-                Some(admission) => collaboration_service::BoardAvailability::Available(
-                    std::sync::Arc::new(tokio::sync::Mutex::new(
-                        admission.subscription_window_store(interactions.clone()),
-                    )),
-                ),
-                None => collaboration_service::BoardAvailability::Unavailable,
-            };
-            collaboration_service::SubscriptionDeliveryService::new(
-                collaboration_service::SubscriptionDeliveryServiceProps {
-                    board_availability,
-                    push_store: interactions.clone(),
-                    delivery: std::sync::Arc::clone(&session_delivery),
-                    presence: std::sync::Arc::clone(&subscription_presence),
-                    machine_identity: machine_identity.clone(),
-                    clock: std::sync::Arc::clone(&worker_clock),
-                },
-            )
-        });
-        if let Some(service) = &subscription_delivery {
-            // Held mail is checked again when its target may have loaded: a Codex thread
-            // load in the journal, an ACP load through the supervisor, or an observation
-            // retry while observation is unavailable.
-            service
-                .attach_held_mail_signals(collaboration_service::HeldMailSignals {
-                    journal: journal.clone(),
-                    provider_completions: external_provider_supervisor
-                        .as_ref()
-                        .map(|supervisor| supervisor.subscribe_completions()),
-                    observation_rechecks: Some(observation_rechecks.subscribe()),
-                })
-                .map_err(io::Error::other)?;
-        }
+        let subscription_delivery = collaboration_service::SubscriptionDeliveryService::new(
+            collaboration_service::SubscriptionDeliveryServiceProps {
+                push_store: interactions.clone(),
+                delivery: std::sync::Arc::clone(&session_delivery),
+                presence: std::sync::Arc::clone(&subscription_presence),
+                machine_identity: machine_identity.clone(),
+                clock: std::sync::Arc::clone(&worker_clock),
+            },
+        );
+        // Recheck held mail on journal, provider completion, or observation signals.
+        subscription_delivery
+            .attach_held_mail_signals(collaboration_service::HeldMailSignals {
+                journal: journal.clone(),
+                provider_completions: external_provider_supervisor
+                    .as_ref()
+                    .map(|supervisor| supervisor.subscribe_completions()),
+                observation_rechecks: Some(observation_rechecks.subscribe()),
+            })
+            .map_err(io::Error::other)?;
         if let Some(supervisor) = &external_provider_supervisor {
             supervisor
                 .install_approval_broker(std::sync::Arc::clone(&approval_broker))
@@ -338,61 +278,23 @@ impl CollaborationRuntime {
             .map_err(io::Error::other)?;
         approval_broker.install_display_names(display_names.clone());
         approval_broker.install_push_context(interactions.clone(), machine_identity.clone());
-        let mail_session = prepared_board
-            .as_ref()
-            .and_then(|board| board.mail_session());
-        let mail_delivery = subscription_delivery
-            .as_ref()
-            .map(|actors| {
-                super::mail_delivery_composition::construct(
-                    installation_peer,
-                    collaboration_service::MailPushDeliveryProps {
-                        interactions: interactions.clone(),
-                        actors: actors.clone(),
-                        presence: subscription_presence.clone(),
-                        machine: machine_identity.clone(),
-                        clock: worker_clock.clone(),
-                    },
-                    mail_session,
-                    &inputs.directory,
-                )
-                .map(std::sync::Arc::new)
-            })
-            .transpose()?;
-        if let (Some(board), Some(mail)) = (&mut prepared_board, &mail_delivery) {
-            board.attach_mail(mail);
-        }
-        if let Some(mail) = &mail_delivery {
-            mail.validate_owner(&identity, Some(&interactions))
-                .map_err(io::Error::other)?;
-            mail.attach_reader_readiness().map_err(io::Error::other)?;
-            mail.attach_project_replication(project_replication.clone())
-                .map_err(io::Error::other)?;
-        }
-        let notification_publisher =
-            project_admission
-                .as_ref()
-                .zip(mail_delivery.as_ref())
-                .map(|(admission, mail)| {
-                    std::sync::Arc::new(collaboration_service::NotificationPublisher::new(
-                        admission.clone(),
-                        interactions.clone(),
-                        std::sync::Arc::downgrade(mail),
-                    ))
-                });
-        if let (Some(board), Some(publisher)) = (&mut prepared_board, &notification_publisher) {
-            board.attach_publisher(publisher);
-        }
-        if let (Some(service), Some(admission), Some(publisher)) = (
-            &subscription_delivery,
-            &project_admission,
-            &notification_publisher,
-        ) {
-            service.attach_follow_admission(
-                std::sync::Arc::downgrade(admission),
-                std::sync::Arc::downgrade(publisher),
-            );
-        }
+        let mail_delivery = std::sync::Arc::new(super::mail_delivery_composition::construct(
+            installation_peer,
+            collaboration_service::MailPushDeliveryProps {
+                interactions: interactions.clone(),
+                actors: subscription_delivery.clone(),
+                presence: subscription_presence.clone(),
+                machine: machine_identity.clone(),
+                clock: worker_clock.clone(),
+            },
+            &inputs.directory,
+        )?);
+        mail_delivery
+            .validate_owner(&identity, Some(&interactions))
+            .map_err(io::Error::other)?;
+        mail_delivery
+            .attach_reader_readiness()
+            .map_err(io::Error::other)?;
         // Interaction records and history are retained for the Host's whole life.
         let interaction_retention_worker = collaboration_runtime::InteractionRetentionWorker::new(
             approval_broker.clone(),
@@ -415,13 +317,6 @@ impl CollaborationRuntime {
                     codex_recorder.clone().map(|recorder| {
                         recorder as std::sync::Arc<dyn collaboration_runtime::CodexPermissionModes>
                     }),
-                );
-            let session_context =
-                collaboration_service::collaboration_application::SessionContextReader::new(
-                    identity.clone(),
-                    native_control.clone(),
-                    provider_store.clone(),
-                    Some(claude_code_sessions.clone()),
                 );
             let codex_inventory = collaboration_service::CodexSessionInventory::new(
                 identity.clone(),
@@ -447,41 +342,19 @@ impl CollaborationRuntime {
                     endpoint_directory.clone(),
                     journal.clone(),
                 );
-            let sessions =
-                collaboration_service::collaboration_application::SessionOperations::new(
-                    identity.clone(),
-                    endpoint_directory.clone(),
-                    native_control,
-                    codex_inventory,
-                    provider_inventory,
-                    journal_operations,
-                )
-                .with_fleet_link(fleet_link.clone());
-            let board = collaboration_service::collaboration_application::BoardOperations::new(
+            let sessions = collaboration_service::collaboration_application::SessionOperations::new(
                 identity.clone(),
-                project_admission.clone(),
-                project_claim,
-                notification_publisher.clone(),
-                subscription_delivery.clone(),
-                subscription_delivery
-                    .as_ref()
-                    .map(|_| subscription_presence.clone()),
-                worker_clock.clone(),
-                Some(interactions.clone()),
-                project_replication,
-                session_context,
-                project_admission
-                    .as_ref()
-                    .map(|admission| admission.project_registry()),
+                endpoint_directory.clone(),
+                native_control,
+                codex_inventory,
+                provider_inventory,
+                journal_operations,
             );
             let messages = collaboration_service::collaboration_application::MessageOperations::new(
                 identity.clone(),
                 Some(interactions.clone()),
-                mail_delivery.clone(),
+                Some(mail_delivery.clone()),
                 display_names.clone(),
-                project_admission
-                    .as_ref()
-                    .map(|admission| admission.project_registry()),
             );
             let conversations =
                 collaboration_service::collaboration_application::ConversationOperations::new(
@@ -505,7 +378,6 @@ impl CollaborationRuntime {
                 ));
             collaboration_service::CollaborationApplication::new(
                 identity.clone(),
-                board,
                 conversations,
                 messages,
                 observation,
@@ -651,34 +523,16 @@ impl CollaborationRuntime {
                 router_proxy_endpoint,
             },
         )?;
-        if let Some(admission) = &project_admission
-            && let Err(error) = admission.recover_creating_projects().await
-        {
-            tracing::warn!(%error, "project creation recovery unavailable; unrelated collaboration remains available");
-        }
         let shutdown = CancellationToken::new();
-        if let Some(service) = &subscription_delivery
-            && let Err(error) = service.start().await
-        {
-            service.shutdown().await;
+        if let Err(error) = subscription_delivery.start().await {
+            subscription_delivery.shutdown().await;
             drop(manifest);
             return Err(io::Error::other(error));
-        }
-        if let Some(publisher) = &notification_publisher {
-            publisher.recover().await.map_err(io::Error::other)?;
         }
         // Binding above establishes this runtime owns the listeners before recovery can mutate state.
         let interaction_retention = Some(tokio::spawn(
             interaction_retention_worker.run(shutdown.clone()),
         ));
-        let fleet_outbox_maintenance = prepared_board
-            .as_ref()
-            .and_then(board_composition::BoardComposition::fleet_client)
-            .map(|fleet| {
-                let shutdown = shutdown.clone();
-                let clock = std::sync::Arc::clone(&worker_clock);
-                tokio::spawn(async move { fleet.run_outbox_retention(clock, shutdown).await })
-            });
         let collaboration_api =
             collaboration_api.serve(&collaboration_mcp::CollaborationApiConfig {
                 application,
@@ -691,17 +545,17 @@ impl CollaborationRuntime {
         let mut tasks = JoinSet::new();
         #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
         if let Some(control) = mail_clock_control {
-            let mail = mail_delivery
-                .clone()
-                .ok_or_else(|| io::Error::other("debug mail clock requires mail storage"))?;
-            tasks.spawn(control.run(mail, shutdown.clone()));
+            tasks.spawn(control.run(mail_delivery.clone(), shutdown.clone()));
         }
         #[cfg(feature = "runtime-test-support")]
-        let runtime_test_mail = mail_delivery.as_ref().map(std::sync::Arc::downgrade);
-        if let Some(mail) = mail_delivery {
-            let mail_shutdown = shutdown.clone();
-            tasks.spawn(async move { mail.run(mail_shutdown).await.map_err(io::Error::other) });
-        }
+        let runtime_test_mail = std::sync::Arc::downgrade(&mail_delivery);
+        let mail_shutdown = shutdown.clone();
+        tasks.spawn(async move {
+            mail_delivery
+                .run(mail_shutdown)
+                .await
+                .map_err(io::Error::other)
+        });
         let mut provider_retirement_tasks = JoinSet::new();
         tasks.spawn(native.run(shutdown.clone()));
         tasks.spawn(acp.run(shutdown.clone()));
@@ -747,7 +601,6 @@ impl CollaborationRuntime {
         });
         let mut runtime = Self {
             clock: worker_clock,
-            fleet_link,
             interactions: interactions_reader,
             #[cfg(test)]
             startup_test_broker,
@@ -755,13 +608,9 @@ impl CollaborationRuntime {
             startup_test_display_names: display_names.clone(),
             #[cfg(feature = "runtime-test-support")]
             runtime_test_mail,
-            notification_publisher,
             installation_peer,
-            board_session: None,
-            fleet_store: None,
             owner_human_id,
-            project_admission,
-            subscription_delivery,
+            subscription_delivery: Some(subscription_delivery),
             provider_store,
             external_provider_supervisor,
             provider_delivery_route,
@@ -781,7 +630,6 @@ impl CollaborationRuntime {
             journal,
             maintenance,
             interaction_retention,
-            fleet_outbox_maintenance,
             current_generation: None,
             observer_task: None,
             observation_rechecks,
@@ -789,11 +637,6 @@ impl CollaborationRuntime {
             collaboration_api,
             tailscale_exposure: None,
         };
-        if let Some(board) = prepared_board {
-            let started = board.start();
-            runtime.board_session = started.session;
-            runtime.fleet_store = Some(started.fleet_store);
-        }
         if let Some(prepared) = prepared_exposure {
             match prepared
                 .start(

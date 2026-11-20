@@ -5,7 +5,7 @@ use collaboration_protocol::{
 };
 
 #[tokio::test]
-async fn board_notification_is_stored_once_and_interrupted_delivery_becomes_unknown() {
+async fn board_notification_is_stored_once_and_its_interrupted_delivery_is_left_alone() {
     let database = TestDatabase::new();
     let store = InteractionStore::open(&database.path)
         .await
@@ -58,18 +58,15 @@ async fn board_notification_is_stored_once_and_interrupted_delivery_becomes_unkn
             .settle_interrupted_pushes(Utc::now())
             .await
             .expect("recovery"),
-        1
+        0
     );
     let recovered = store
         .get_push_record(&record.push_id)
         .await
         .expect("read")
         .expect("saved push");
-    assert_eq!(recovered.delivery_state, PushDeliveryState::OutcomeUnknown);
-    assert_eq!(
-        recovered.last_outcome.expect("unknown receipt").outcome,
-        DeliveryOutcome::Unknown
-    );
+    assert_eq!(recovered.delivery_state, PushDeliveryState::Attempted);
+    assert!(recovered.last_outcome.is_none());
     store.close().await.expect("close");
 }
 

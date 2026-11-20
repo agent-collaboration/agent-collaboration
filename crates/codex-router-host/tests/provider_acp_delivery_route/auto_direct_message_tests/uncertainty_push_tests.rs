@@ -85,7 +85,6 @@ async fn same_generation_unknown_holds_push_with_blocking_operation_id() {
             .expect("push store"),
     );
     let owner = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
-        board_availability: BoardAvailability::Unavailable,
         push_store: pushes.clone(),
         delivery: router.clone(),
         presence: router,

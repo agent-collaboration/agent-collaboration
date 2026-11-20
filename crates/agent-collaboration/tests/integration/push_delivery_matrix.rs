@@ -25,12 +25,6 @@ mod delivery_matrix_support {
 }
 #[path = "../delivery_matrix/held_cells.rs"]
 mod held_cells;
-#[path = "../delivery_matrix/held_subscription_producer.rs"]
-mod held_subscription_producer;
-#[path = "../delivery_matrix/owned_resource_cleanup.rs"]
-mod owned_resource_cleanup;
-#[path = "../delivery_matrix/owned_resources.rs"]
-mod owned_resources;
 use crate::peer_fixture;
 mod proof_context {
     pub(super) use crate::proof_context::*;
@@ -53,9 +47,6 @@ mod proof_context {
         }
     }
 }
-#[path = "../delivery_matrix/settled_creation.rs"]
-mod settled_creation;
-use crate::subscription_notice_observer as subscription;
 
 use chrono::{Duration as ChronoDuration, Utc};
 use collaboration_protocol::{
@@ -72,7 +63,6 @@ use std::time::Duration;
 
 const OBSERVATION_TIMEOUT: Duration = Duration::from_secs(120);
 const ACP_TARGET_EXPECTED_PROMPTS: usize = 9;
-const SUBSCRIPTION_NOTICE_LABEL: &str = "🧵 Router: new thread activity";
 
 fn assert_long_preview_literal(observed: &str, body: &str, link: &str) -> ProofResult<()> {
     let source_scalars = body.chars().count();
@@ -138,7 +128,7 @@ async fn exercise_push_delivery_matrix(
     proof.record(
         "pushDeliveryMatrixRun",
         json!({"runId":uuid::Uuid::now_v7().to_string(),
-        "cells":["S1","S1-long","S2","S3","S4","S5","S7","S8","S9","S10"]}),
+        "cells":["S1","S1-long","S2","S3","S4","S7","S8","S9","S10"]}),
     )?;
     *peer_owner = Some(peer_fixture::start(&proof).await?);
     let peer = peer_owner
@@ -445,39 +435,11 @@ async fn exercise_scripted_acp_target(
 #[ignore = "requires the documented interactions-debug-host with existing debug model access"]
 async fn push_delivery_matrix_holds_codex_recipients() -> ProofResult<()> {
     let config_guard = delivery_matrix_support::ConfigHashGuard::capture()?;
-    let mut resource_owner: Option<owned_resource_cleanup::OwnedMatrixScope> = None;
-    owned_process_test_support::scenario_finalization::run_scenario(
-        &mut resource_owner,
-        async |owner: &mut &mut Option<owned_resource_cleanup::OwnedMatrixScope>| {
-            exercise_held_codex_recipients(&config_guard, owner).await
-        },
-        |owner: &mut Option<owned_resource_cleanup::OwnedMatrixScope>| async move {
-            match owner.take() {
-                Some(scope) => scope.cleanup().await,
-                None => Ok(()),
-            }
-        },
-        || config_guard.verify(),
-    )
-    .await
-}
-
-async fn exercise_held_codex_recipients(
-    config_guard: &delivery_matrix_support::ConfigHashGuard,
-    resource_owner: &mut Option<owned_resource_cleanup::OwnedMatrixScope>,
-) -> ProofResult<()> {
     let mut proof = ProofContext::connect().await?;
-    *resource_owner = Some(owned_resource_cleanup::OwnedMatrixScope::new(
-        proof.client.clone(),
-    ));
-    let resources = &mut resource_owner
-        .as_mut()
-        .ok_or("actual cleanup client and resources missing from runner owner")?
-        .resources;
     proof.record(
         "pushDeliveryMatrixRun",
         json!({
-            "runId":uuid::Uuid::now_v7().to_string(),"cells":["S3","S5"],
+            "runId":uuid::Uuid::now_v7().to_string(),"cells":["S3"],
             "route":"documentedAcceptanceHost",
         }),
     )?;
@@ -489,18 +451,6 @@ async fn exercise_held_codex_recipients(
     held_cells::cover_held_dm_cell(&mut proof, &sender, &unloaded_targets.held_dm).await?;
     config_guard.verify()?;
     covered_cells.push("S3 held DM delivered after Codex load");
-
-    // S5: two independently subscribed roots are held as one batch, then
-    // delivered as one notice after loading the Codex recipient.
-    held_cells::cover_held_subscription_batch_cell(
-        &mut proof,
-        &sender,
-        &unloaded_targets.held_subscription,
-        resources,
-    )
-    .await?;
-    config_guard.verify()?;
-    covered_cells.push("S5 held two-thread subscription batch delivered after Codex load");
 
     config_guard.verify()?;
     proof.record(

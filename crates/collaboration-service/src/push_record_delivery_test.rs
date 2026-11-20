@@ -1,5 +1,4 @@
 use crate::ApplicationFixture;
-use crate::BoardAvailability;
 use crate::SubscriptionDeliveryService;
 use crate::SubscriptionDeliveryServiceProps;
 
@@ -44,7 +43,6 @@ async fn identity_without_native_work(
     )
     .unwrap();
     let actors = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
-        board_availability: BoardAvailability::Unavailable,
         push_store: owner.clone(),
         delivery,
         presence: presence.clone(),
@@ -67,13 +65,11 @@ async fn identity_without_native_work(
             machine,
             clock: actors.runtime_clock(),
         },
-        None,
     )
     .unwrap()
     .without_registered_task_for_test();
     ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
         .unwrap()
-        .with_subscription_delivery_service(actors, presence)
         .with_interaction_store(owner)
         .with_installation_peer(peer)
         .unwrap()

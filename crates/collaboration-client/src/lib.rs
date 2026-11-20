@@ -3,17 +3,10 @@
 pub use collaboration_protocol as protocol;
 /// Message-board request, result and validated domain types.
 pub mod board {
-    pub use board_sync_protocol::{ProjectClaimRefusal, ProjectClaimReply, ProjectClaimRequest};
-    pub use message_board::public_replies::{
-        DecisionEffectsPage, RequestDecision, RequestEffectsRead, RequestEffectsRequest,
-        RequestResult, WriteReply,
-    };
     pub use message_board::*;
 }
 mod admission_overload;
 mod api_connection;
-#[cfg(test)]
-mod board_project_read_timeout_test;
 mod collaboration_access;
 mod collaboration_client;
 mod message_operation;
@@ -180,11 +173,6 @@ pub use conversation_contract::{
 };
 mod acp_transport_connection;
 pub use acp_transport_connection::AcpTransportConnection;
-mod board_operations;
-pub use board_operations::BoardClientError;
-
-mod board_repository;
-pub use board_repository::{BoardRepositoryError, BoardRepositoryLocation};
 
 mod service_directory;
 pub use service_directory::{

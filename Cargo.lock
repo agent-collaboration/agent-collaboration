@@ -199,8 +199,6 @@ dependencies = [
  "agent-session-inventory",
  "agent-session-tui",
  "axum",
- "board-fleet-sync",
- "board-sync-protocol",
  "chrono",
  "clap",
  "claude-code-peer-messaging",
@@ -217,13 +215,8 @@ dependencies = [
  "comfy-table",
  "crossterm",
  "durable-steps",
- "fleet-admission",
  "fleet-sync-delivery",
- "fleet-sync-lease",
  "fleet-sync-protocol",
- "fleet-sync-session",
- "fleet-sync-tokio-runner",
- "fleet-sync-writer",
  "futures-util",
  "interaction-storage",
  "iocraft",
@@ -231,7 +224,6 @@ dependencies = [
  "jsonschema",
  "lifecycle-observation",
  "message-board",
- "message-board-storage",
  "node-test-fixture",
  "owned-process-test-support",
  "reqwest 0.12.28",
@@ -732,7 +724,6 @@ dependencies = [
  "tower",
  "tower-layer",
  "tower-service",
- "tracing",
 ]
 
 [[package]]
@@ -751,7 +742,6 @@ dependencies = [
  "sync_wrapper",
  "tower-layer",
  "tower-service",
- "tracing",
 ]
 
 [[package]]
@@ -876,47 +866,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "board-fleet-sync"
-version = "0.1.156"
-dependencies = [
- "axum",
- "board-sync-protocol",
- "chrono",
- "durable-steps",
- "fleet-admission",
- "fleet-sync-delivery",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-receiver",
- "fleet-sync-service",
- "fleet-sync-session",
- "fleet-sync-tokio-runner",
- "fleet-sync-writer",
- "futures-util",
- "message-board",
- "message-board-storage",
- "reqwest 0.12.28",
- "reqwest-websocket",
- "runtime-primitives",
- "serde",
- "serde_json",
- "sqlx",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "board-sync-protocol"
 version = "0.1.156"
 dependencies = [
- "chrono",
  "collaboration-mail-protocol",
  "fleet-sync-protocol",
  "message-board",
- "schemars 1.2.2",
  "serde",
  "serde_json",
 ]
@@ -1338,7 +1293,6 @@ dependencies = [
  "iocraft",
  "jsonc-parser",
  "message-board",
- "message-board-storage",
  "nix",
  "opentelemetry",
  "opentelemetry-appender-tracing",
@@ -1422,8 +1376,6 @@ dependencies = [
  "agent-automation",
  "agent-client-protocol",
  "axum",
- "board-fleet-sync",
- "board-sync-protocol",
  "chrono",
  "claude-code-peer-messaging",
  "codex-acp-adapter",
@@ -1433,9 +1385,6 @@ dependencies = [
  "codex-router-secret-store",
  "codex-router-state",
  "codex-router-test-support",
- "collaboration-application-test-support",
- "collaboration-central-conformance",
- "collaboration-central-tokio",
  "collaboration-client",
  "collaboration-contracts",
  "collaboration-mail-protocol",
@@ -1444,28 +1393,20 @@ dependencies = [
  "collaboration-runtime",
  "collaboration-service",
  "durable-steps",
- "fleet-admission",
  "fleet-sync-delivery",
- "fleet-sync-lease",
  "fleet-sync-protocol",
- "fleet-sync-receiver",
- "fleet-sync-service",
- "fleet-sync-session",
  "fleet-sync-tokio-runner",
- "fleet-sync-writer",
  "futures-util",
  "httparse",
  "interaction-storage",
  "jsonc-parser",
  "lifecycle-observation",
  "message-board",
- "message-board-storage",
  "nix",
  "node-test-fixture",
  "opentelemetry",
  "owned-process-test-support",
  "reqwest 0.12.28",
- "reqwest-websocket",
  "router-clock",
  "runtime-primitives",
  "rustix 1.1.6",
@@ -1631,13 +1572,7 @@ name = "codex-router-tailnet-verification-host"
 version = "0.1.156"
 dependencies = [
  "axum",
- "board-fleet-sync",
  "chrono",
- "codex-native-integration",
- "codex-router-host",
- "collaboration-runtime",
- "fleet-sync-protocol",
- "fleet-sync-session",
  "fs2",
  "nix",
  "reqwest 0.12.28",
@@ -1691,34 +1626,10 @@ dependencies = [
 name = "collaboration-application-test-support"
 version = "0.1.156"
 dependencies = [
- "board-fleet-sync",
- "board-sync-protocol",
- "codex-native-integration",
- "collaboration-contracts",
- "collaboration-mail-protocol",
- "collaboration-mcp",
- "collaboration-protocol",
- "collaboration-runtime",
  "collaboration-service",
- "durable-steps",
- "fleet-admission",
- "fleet-sync-lease",
  "fleet-sync-protocol",
- "fleet-sync-receiver",
- "fleet-sync-tokio-runner",
- "fleet-sync-writer",
- "futures-util",
  "interaction-storage",
- "message-board",
- "message-board-storage",
- "router-clock",
- "runtime-primitives",
- "serde_json",
- "tempfile",
  "tokio",
- "tokio-tungstenite",
- "tokio-util",
- "uuid",
 ]
 
 [[package]]
@@ -1827,6 +1738,7 @@ dependencies = [
  "chrono",
  "collaboration-central-conformance",
  "collaboration-central-core",
+ "collaboration-central-tokio",
  "fleet-identity-protocol",
  "futures-util",
  "hegeltest",
@@ -1853,27 +1765,18 @@ dependencies = [
 name = "collaboration-client"
 version = "0.1.156"
 dependencies = [
- "board-fleet-sync",
- "board-sync-protocol",
  "codex-acp-adapter",
  "codex-native-integration",
- "collaboration-application-test-support",
- "collaboration-contracts",
  "collaboration-mcp",
  "collaboration-protocol",
  "collaboration-runtime",
  "collaboration-service",
- "fleet-admission",
- "fleet-sync-protocol",
- "fleet-sync-writer",
  "futures-util",
  "http",
  "message-board",
- "message-board-storage",
  "reqwest 0.12.28",
  "rmcp",
  "router-clock",
- "runtime-primitives",
  "schemars 1.2.2",
  "serde",
  "serde_json",
@@ -1896,9 +1799,7 @@ dependencies = [
  "collaboration-protocol",
  "fleet-sync-delivery",
  "fleet-sync-protocol",
- "fleet-sync-writer",
  "message-board",
- "message-board-storage",
  "nix",
  "runtime-primitives",
  "serde",
@@ -1929,8 +1830,6 @@ dependencies = [
  "acp-provider-adapters",
  "agent-collaboration",
  "axum",
- "board-fleet-sync",
- "board-sync-protocol",
  "codex-acp-adapter",
  "codex-native-integration",
  "codex-router-host",
@@ -1942,15 +1841,12 @@ dependencies = [
  "collaboration-runtime",
  "collaboration-service",
  "durable-steps",
- "fleet-admission",
  "fleet-sync-protocol",
- "fleet-sync-writer",
  "futures-util",
  "http",
  "interaction-storage",
  "jsonschema",
  "message-board",
- "message-board-storage",
  "node-test-fixture",
  "reqwest 0.12.28",
  "rmcp",
@@ -1975,7 +1871,6 @@ name = "collaboration-protocol"
 version = "0.1.156"
 dependencies = [
  "agent-automation",
- "board-sync-protocol",
  "chrono",
  "collaboration-mail-protocol",
  "fleet-identity-protocol",
@@ -1999,7 +1894,6 @@ dependencies = [
  "acp-provider-adapters",
  "agent-automation",
  "base64 0.22.1",
- "board-fleet-sync",
  "board-sync-protocol",
  "chrono",
  "codex-acp-adapter",
@@ -2009,18 +1903,12 @@ dependencies = [
  "collaboration-mail-protocol",
  "collaboration-protocol",
  "durable-steps",
- "fleet-admission",
  "fleet-sync-delivery",
- "fleet-sync-lease",
  "fleet-sync-protocol",
- "fleet-sync-tokio-runner",
- "fleet-sync-writer",
  "futures-util",
- "getrandom 0.3.4",
  "interaction-storage",
  "lifecycle-observation",
  "message-board",
- "message-board-storage",
  "nix",
  "router-clock",
  "runtime-primitives",
@@ -2046,7 +1934,6 @@ version = "0.1.156"
 dependencies = [
  "agent-automation",
  "base64 0.22.1",
- "board-fleet-sync",
  "board-sync-protocol",
  "chrono",
  "claude-code-peer-messaging",
@@ -2060,30 +1947,22 @@ dependencies = [
  "collaboration-protocol",
  "collaboration-runtime",
  "durable-steps",
- "fleet-admission",
  "fleet-sync-delivery",
- "fleet-sync-lease",
  "fleet-sync-protocol",
- "fleet-sync-receiver",
- "fleet-sync-session",
  "fleet-sync-tokio-runner",
- "fleet-sync-writer",
  "futures-util",
  "getrandom 0.3.4",
  "interaction-storage",
  "lifecycle-observation",
  "message-board",
- "message-board-storage",
  "nix",
  "node-test-fixture",
- "petgraph",
  "proptest",
  "router-clock",
  "runtime-primitives",
  "serde",
  "serde_json",
  "session-event-model",
- "sha2 0.10.9",
  "sqlx",
  "sqlx-turso",
  "tempfile",
@@ -2840,19 +2719,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fleet-admission"
-version = "0.1.156"
-dependencies = [
- "chrono",
- "fleet-sync-protocol",
- "message-board",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror 2.0.18",
-]
-
-[[package]]
 name = "fleet-identity-protocol"
 version = "0.1.156"
 dependencies = [
@@ -2941,31 +2807,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fleet-sync-service"
-version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687#b75d072c116afa46cfa82facd34db6317f380687"
-dependencies = [
- "axum",
- "durable-steps",
- "fleet-sync-delivery",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-receiver",
- "fleet-sync-session",
- "fleet-sync-tokio-runner",
- "fleet-sync-transport-websocket",
- "runtime-primitives",
- "serde",
- "serde_json",
- "sqlx",
- "sqlx-core",
- "sqlx-turso",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "fleet-sync-session"
 version = "0.4.0"
 source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687#b75d072c116afa46cfa82facd34db6317f380687"
@@ -3005,20 +2846,6 @@ dependencies = [
  "tokio",
  "tracing",
  "turso",
-]
-
-[[package]]
-name = "fleet-sync-transport-websocket"
-version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687#b75d072c116afa46cfa82facd34db6317f380687"
-dependencies = [
- "axum",
- "fleet-sync-protocol",
- "fleet-sync-session",
- "futures-util",
- "serde_json",
- "tokio",
- "tokio-tungstenite",
 ]
 
 [[package]]
@@ -4364,39 +4191,6 @@ dependencies = [
  "sha2 0.10.9",
  "thiserror 2.0.18",
  "url",
- "uuid",
-]
-
-[[package]]
-name = "message-board-storage"
-version = "0.1.156"
-dependencies = [
- "base64 0.22.1",
- "board-fleet-sync",
- "board-sync-protocol",
- "chrono",
- "collaboration-mail-protocol",
- "durable-steps",
- "fleet-admission",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-receiver",
- "fleet-sync-session",
- "fleet-sync-writer",
- "hmac 0.12.1",
- "message-board",
- "runtime-primitives",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "sqlite-storage-maintenance",
- "sqlx",
- "sqlx-turso",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "turso_parser",
  "uuid",
 ]
 
@@ -6889,7 +6683,6 @@ dependencies = [
  "tokio",
  "tower-layer",
  "tower-service",
- "tracing",
 ]
 
 [[package]]

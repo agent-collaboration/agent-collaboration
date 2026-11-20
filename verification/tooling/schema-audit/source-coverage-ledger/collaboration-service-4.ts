@@ -436,24 +436,6 @@ export const section: LedgerSection = {
       note: "unit-test code over Router-internal board/mail/delivery fixtures; no Codex, ACP or MCP frame is built, sent or decoded",
     },
     {
-      file: "crates/collaboration-service/src/test_project_runtime.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          "cfg(test) module declared at crates/collaboration-service/src/lib.rs:70-71 (#[cfg(test)] mod test_project_runtime)",
-      },
-      note: "test composition of ProjectStoreRegistry and fleet lease observations (FleetRequest l69, LeaseStatus l99, RenewAnswer l150); central fleet protocol, not an outside edge",
-    },
-    {
-      file: "crates/collaboration-service/src/test_subject_workstream.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          "cfg(test) module declared at crates/collaboration-service/src/lib.rs:72-73 (#[cfg(test)] mod test_subject_workstream)",
-      },
-      note: "test fixture appending a message_board Workstream record (l21); board storage, no protocol shape",
-    },
-    {
       file: "crates/collaboration-service/src/wakeup_projection.rs",
       disposition: { kind: "converts", owners: ["router-vocabulary"] },
       note: "projects agent_automation WakeRecord into the MCP wake_send/wake_show/wake_pause/resume/cancel output WakeSnapshot / WakeMutationResult (collaboration-mcp catalog_tools.rs:118-124): FireReceipt copy l17, WakeState enum mapping l26, latest_event_cursor JSON-in-string l34, TimingRule->TimingRequest serde round trip l48, retained DeliveryRecord<Value,..>->DeliveryRecord<SessionRef,..> serde round trip l74",

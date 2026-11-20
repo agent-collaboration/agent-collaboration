@@ -10,15 +10,13 @@ use collaboration_contracts::TargetPresence;
 use collaboration_contracts::UnsentCause;
 use collaboration_contracts::layer_zero::DeliveryRequest;
 use collaboration_contracts::layer_zero::PreparedPush;
-use collaboration_mail_protocol::NotificationSource;
 use collaboration_protocol::{
     AttemptId, DeliveryCorrelationId, DeliveryNextAction, DeliveryOutcome, DeliveryReceipt,
-    DeliveryRejection, DeliveryRejectionReason, MachineId, MessageDelivery, MessageText,
-    PushHeaderFacts, PushKind, PushLineInput, PushRecord, RouterLink, render_push_line,
+    DeliveryRejection, DeliveryRejectionReason, MachineId, MessageDelivery, MessageText, PushKind,
+    PushLineInput, PushRecord, RouterLink, render_push_line,
 };
 use fleet_sync_delivery::DeliveryError;
 use fleet_sync_protocol::DeliveryItem;
-use message_board::{SubscriptionMode, WhenIdle};
 use runtime_primitives::CallId;
 
 /// The library caller owns admission, attempt journaling and outcome persistence.
@@ -28,9 +26,6 @@ pub enum MailPushPreparation {
         request: Box<DeliveryRequest>,
     },
     Hold {
-        receipt: DeliveryReceipt,
-    },
-    Drop {
         receipt: DeliveryReceipt,
     },
     Refuse {
@@ -54,8 +49,8 @@ pub fn direct_message_load_policy(
     }
 }
 
-/// Poll batches have no native push and must use the waiter handoff instead.
-pub fn prepare_mail_push(
+#[cfg(test)]
+fn prepare_mail_push(
     item: &DeliveryItem<RouterDeliveryTypes>,
     working_copy: &PushRecord,
     machine: &MachineIdentity,
@@ -80,7 +75,10 @@ pub fn prepare_mail_push_with_load_policy(
     call: &CallId,
     direct_load_policy: LoadPolicy,
 ) -> Result<Option<MailPushPreparation>, DeliveryError> {
-    let Some(mut draft) = received_mail_push(item, working_copy.created_at)? else {
+    if !matches!(item.body(), BoardDeliveryBody::Message(_)) {
+        return Err(invalid_preparation());
+    }
+    let Some(draft) = received_mail_push(item, working_copy.created_at)? else {
         return Ok(None);
     };
     if draft.push_id != working_copy.push_id
@@ -90,104 +88,43 @@ pub fn prepare_mail_push_with_load_policy(
     {
         return Err(invalid_preparation());
     }
-    let load_policy = match item.body() {
-        BoardDeliveryBody::Wake(_) => {
-            return Err(DeliveryError::Corrupt {
-                field: "wake cannot become a direct push",
-            });
+    let policy = direct_load_policy;
+    // Unreachable is ambiguous: the native router must classify live-elsewhere
+    // and permanent route failures, just as the existing direct-message owner does.
+    if matches!(presence, TargetPresence::Wakeable) {
+        if draft.guard.is_some() || draft.mode == Some(MessageDelivery::Steer) {
+            let (reason, detail) = if draft.guard.is_some() {
+                (
+                    DeliveryRejectionReason::StaleGeneration,
+                    "guarded direct message requires a running target generation",
+                )
+            } else {
+                (
+                    DeliveryRejectionReason::SteerUnsupported,
+                    "steer direct message requires a running target",
+                )
+            };
+            return Ok(Some(MailPushPreparation::Refuse {
+                delivery: NativeDeliveryResult::rejected(
+                    DeliveryRejection {
+                        native_failure: None,
+                        reason,
+                        next_action: DeliveryNextAction::InspectTarget,
+                        client_code: None,
+                        detail: Some(detail.to_owned()),
+                        claims: None,
+                    },
+                    UnsentCause::for_rejection(reason),
+                ),
+            }));
         }
-        BoardDeliveryBody::Notification(notification) => match &notification.source {
-            NotificationSource::FollowBatch { policy, .. } => {
-                if policy.mode() != SubscriptionMode::Deliver {
-                    return Err(invalid_preparation());
-                }
-                match (presence, policy.when_idle()) {
-                    (TargetPresence::Running, _) => LoadPolicy::LoadedOnly,
-                    // Nothing will start the target or say it started: refused at once,
-                    // whatever the policy. The posts stay unread on the board.
-                    (TargetPresence::NotRunning, _) => {
-                        return Ok(Some(MailPushPreparation::Drop {
-                            receipt: not_submitted(
-                                false,
-                                "target is not running; follow batch refused",
-                            ),
-                        }));
-                    }
-                    (_, WhenIdle::Drop) => {
-                        return Ok(Some(MailPushPreparation::Drop {
-                            receipt: not_submitted(false, "mail dropped by recipient policy"),
-                        }));
-                    }
-                    (TargetPresence::Wakeable, WhenIdle::Wake) => LoadPolicy::MayLoad,
-                    _ => {
-                        return Ok(Some(MailPushPreparation::Hold {
-                            receipt: not_submitted(
-                                true,
-                                "target is not running; follow batch held",
-                            ),
-                        }));
-                    }
-                }
-            }
-            NotificationSource::Intent { .. } => {
-                if matches!(presence, TargetPresence::Wakeable) {
-                    return Ok(Some(MailPushPreparation::Hold {
-                        receipt: not_submitted(true, "target is not running; notification held"),
-                    }));
-                }
-                LoadPolicy::LoadedOnly
-            }
-        },
-        BoardDeliveryBody::Message(_) => {
-            let policy = direct_load_policy;
-            // Unreachable is ambiguous: the native router must classify live-elsewhere
-            // and permanent route failures, just as the existing direct-message owner does.
-            if matches!(presence, TargetPresence::Wakeable) {
-                if draft.guard.is_some() || draft.mode == Some(MessageDelivery::Steer) {
-                    let (reason, detail) = if draft.guard.is_some() {
-                        (
-                            DeliveryRejectionReason::StaleGeneration,
-                            "guarded direct message requires a running target generation",
-                        )
-                    } else {
-                        (
-                            DeliveryRejectionReason::SteerUnsupported,
-                            "steer direct message requires a running target",
-                        )
-                    };
-                    return Ok(Some(MailPushPreparation::Refuse {
-                        delivery: NativeDeliveryResult::rejected(
-                            DeliveryRejection {
-                                native_failure: None,
-                                reason,
-                                next_action: DeliveryNextAction::InspectTarget,
-                                client_code: None,
-                                detail: Some(detail.to_owned()),
-                                claims: None,
-                            },
-                            UnsentCause::for_rejection(reason),
-                        ),
-                    }));
-                }
-                if policy != LoadPolicy::MayLoad {
-                    return Ok(Some(MailPushPreparation::Hold {
-                        receipt: not_submitted(true, "target is not running; direct message held"),
-                    }));
-                }
-            }
-            policy
+        if policy != LoadPolicy::MayLoad {
+            return Ok(Some(MailPushPreparation::Hold {
+                receipt: not_submitted(true, "target is not running; direct message held"),
+            }));
         }
-    };
-    if let (
-        PushHeaderFacts::SubscriptionActivity { held_since, .. },
-        PushHeaderFacts::SubscriptionActivity {
-            held_since: local_held_since,
-            ..
-        },
-    ) = (&mut draft.header_facts, &working_copy.header_facts)
-    {
-        held_since.clone_from(local_held_since);
     }
+    let load_policy = policy;
     let line = render_push_line(&PushLineInput {
         link: RouterLink::new(
             MachineId::from(machine.service_id().clone()),

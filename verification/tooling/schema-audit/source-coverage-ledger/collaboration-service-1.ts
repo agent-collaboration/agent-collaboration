@@ -41,31 +41,6 @@ export const section: LedgerSection = {
       note: "storage l21 maps automation_storage StorageError onto AutomationInspectionFailureKind/NextAction (catch-all l36); invalid l6, unavailable l55 build typed failures",
     },
     {
-      file: "crates/collaboration-service/src/board_views/card_projection.rs",
-      disposition: { kind: "none" },
-      note: "continuation_card l11: typed projection of message_board view records into ContinuationCard; no serde round trip or hand JSON",
-    },
-    {
-      file: "crates/collaboration-service/src/board_views/mod.rs",
-      disposition: { kind: "none" },
-      note: "module wiring; resolve l14 builds a typed message_board RoleResolution",
-    },
-    {
-      file: "crates/collaboration-service/src/board_views/pending_projection.rs",
-      disposition: { kind: "none" },
-      note: "pending_work l17, lead_owed l78, owner_waiting l143: typed derivations from trail metadata; 'handback'/'owner-question' l57, l65 are board tags, not protocol vocabulary",
-    },
-    {
-      file: "crates/collaboration-service/src/board_views/view_snapshot.rs",
-      disposition: { kind: "none" },
-      note: "ViewSnapshot::load l32 reads typed project records for the views; no message shape defined or converted",
-    },
-    {
-      file: "crates/collaboration-service/src/board_views/work_projection.rs",
-      disposition: { kind: "none" },
-      note: "work_view l11: typed WorkView derivation (dependency order, blockers); no message shape",
-    },
-    {
       file: "crates/collaboration-service/src/codex_session_inventory.rs",
       disposition: { kind: "sends", owners: ["codex", "router-vocabulary"] },
       note: "sends thread/loaded/list (l474), thread/read (l490), thread/turns/list (l612) via request_validated; decodes Codex replies by hand (l481-551, l623 ThreadTurnsPage l22, l633 error text); builds Router session records as json! l440, l540 and the NativeSessionListResult as json! l652 then from_value l659; thread id to SessionRef l384, l515",
@@ -84,131 +59,6 @@ export const section: LedgerSection = {
       file: "crates/collaboration-service/src/collaboration_application/automation_operations.rs",
       disposition: { kind: "converts", owners: ["router-vocabulary"] },
       note: "automation_status l83 hand-encodes earliest_retained_event_cursor as a JSON tuple string l97 (second copy of automation_event_cursor.rs:5); StorageError mapped to RunFailureKind l368 and InstructionFailureKind l475",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_adr_operations.rs",
-      disposition: { kind: "none" },
-      note: "adr_create l12 / adr_transition l33 copy MCP request fields into fleet_admission FleetOperation (central fleet request, not one of the four protocols); typed",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_discovery_reads.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "discovery_search l32 assembles typed DiscoveryHit from fleet records; discovery_hit_key l141 spells the 0:/1:/2: ordering key put in the signed page cursor (duplicate of message-board-storage fleet_discovery_pages.rs:18-25); fleet_record_key l171 is an in-memory map key",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_entity_operations.rs",
-      disposition: { kind: "none" },
-      note: "named project tools gated by ProjectTool::accepts l19; typed record show/list pages",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_fleet_operations.rs",
-      disposition: { kind: "none" },
-      note: "workspace/board/repository writes copy MCP request fields into fleet_admission FleetRequest l41 (central fleet request, not one of the four protocols); typed",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_fleet_pages.rs",
-      disposition: { kind: "none" },
-      note: "fleet_list_page l7: typed fleet record pages under a byte bound",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_forwarded_posts.rs",
-      disposition: { kind: "none" },
-      note: "BoardPayload encode l41 / decode l60 and ForwardOutcome l57-94 are the central board payload (board-sync-protocol, central link, not one of the six edges), matched typed onto message_board RequestResult",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_inbox_events.rs",
-      disposition: { kind: "none" },
-      note: "inbox_activity l6: typed FeedEntry to InboxActivity projection",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_inbox_reads.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "InboxReadFilter l13 serialized by fingerprint into the signed cursor filter string (l24-29); InboxScope to PostListScope l76-82",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_non_post_refusals.rs",
-      disposition: { kind: "none" },
-      note: "cached_non_post_refusal l9: typed CurrentWriter to RequestResult::NotWriter",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_operations.rs",
-      disposition: { kind: "converts", owners: ["mcp", "router-vocabulary"] },
-      note: "thread_wait_root_notice_limit l256 hand-builds a worst-case thread_wait notice (json! l261, l284) to size the byte budget, never sent; presence_for_reader l385 converts message_board SessionRef to protocol SessionRef by serde_json round trip and maps TargetPresence onto ThreadSubscriptionPresence l402; SubscriptionState mapped l345",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_paging.rs",
-      disposition: { kind: "defines", owners: ["router-vocabulary"] },
-      note: "MetadataCursor l12, ProjectReadCursor l19: signed opaque board cursor payloads encoded l66-75, l134-143 and decoded l97, l168; fingerprint l25 serializes the request into the cursor's filter string (boundary-encoding inventory row)",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_participant_pages.rs",
-      disposition: { kind: "defines", owners: ["router-vocabulary"] },
-      note: "ParticipantPageCursor l16 (nested message-board-storage ParticipantIntervalKey) signed into the opaque participant page cursor l142-149, decoded l52 (boundary-encoding inventory row)",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_post_reads.rs",
-      disposition: { kind: "none" },
-      note: "post_list l34 / post_search l71: typed post pages",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_project_operations.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "thread/project requests copied typed into message_board ProjectRequest/BoardOperation; post_references l348 maps ReferenceTarget Post/Thread onto RecordRef; project_claim l15 passes board_sync_protocol ProjectClaimRequest/Reply through unchanged",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_read_marks.rs",
-      disposition: { kind: "none" },
-      note: "finish_project_read l5: typed ReadMarkOutcome",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_read_operations.rs",
-      disposition: { kind: "none" },
-      note: "typed show/list reads; thread_show board_status words l295 are message text",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_receipt_pages.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "ReceiptContinuation l13 is a signed opaque cursor; public_write_reply l79 copies message_board RequestResult onto public_replies RequestResult variant for variant (l86-106)",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_record_paging.rs",
-      disposition: { kind: "none" },
-      note: "project_feed_page l41: typed keyset merge over project feeds",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_session_context.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "card_session_state l11 maps ThreadSubscriptionPresence onto SessionRunningState l20; view_session_context l32 typed",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_subscription_operations.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "subscription requests copied typed into BoardOperation; MCP ThreadSubscriptionWaitFilter mapped onto internal SubscriptionWaitFilter l169-177",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_thread_pages.rs",
-      disposition: { kind: "none" },
-      note: "thread_list l25: typed thread pages",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_thread_subjects.rs",
-      disposition: { kind: "none" },
-      note: "ThreadSubjectBatch::take l19: typed subject titles",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_trail_pages.rs",
-      disposition: { kind: "none" },
-      note: "trail_read_prefix l10: typed trail rows",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_trail_reads.rs",
-      disposition: { kind: "none" },
-      note: "feed_read l12 / work_trail_show l62: typed reads",
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/board_view_operations.rs",
-      disposition: { kind: "none" },
-      note: "view_card/view_owner/view_lead_load/view_work: typed view projections",
     },
     {
       file: "crates/collaboration-service/src/collaboration_application/conversation_operations.rs",
@@ -251,11 +101,6 @@ export const section: LedgerSection = {
       note: "schedule definitions converted by serde_json round trip l49, l101; l250 hand-builds a jsonrpc 2.0 schedule/import envelope only to measure the response byte budget, never sent; StorageError mapped onto ScheduleFailure l412",
     },
     {
-      file: "crates/collaboration-service/src/collaboration_application/session_context_reader.rs",
-      disposition: { kind: "sends", owners: ["codex", "router-vocabulary"] },
-      note: "repository l30 converts message_board SessionRef to protocol SessionRef by serde_json round trip l31; triggers thread/read through codex_session_inspect l41 and reads result.thread.cwd l47; endpoint_id literals select the provider l37, l49",
-    },
-    {
       file: "crates/collaboration-service/src/collaboration_application/session_native_control.rs",
       disposition: { kind: "sends", owners: ["codex"] },
       note: "native_call l273 and rename l141 send thread/read (params json! l51, l172), turn/interrupt (l112) and thread/name/set (l196) through NativeProtocolConnection::request_validated (l174, l193, l209, l312); replies decoded by hand l74-80, l125, l188, l223, l416; classify_native_call_failure l402",
@@ -294,14 +139,6 @@ export const section: LedgerSection = {
       file: "crates/collaboration-service/src/delivery_projection.rs",
       disposition: { kind: "converts", owners: ["router-vocabulary"] },
       note: "snapshot l8 maps the stored mode string auto/steer/queue onto MessageDelivery l15; DeliveryStatus to DeliveryDisposition l21 and AttemptOutcome to DeliveryEvidence l30 typed",
-    },
-    {
-      file: "crates/collaboration-service/src/frozen_mail_query_fixture.rs",
-      disposition: {
-        kind: "excluded",
-        reason: "cfg(test) module declared at crates/collaboration-service/src/lib.rs:61",
-      },
-      note: "fake fleet-sync relay answering fleet_sync_protocol ClientFrame/ServerFrame (central link)",
     },
     {
       file: "crates/collaboration-service/src/instruction_projection.rs",
@@ -351,16 +188,6 @@ export const section: LedgerSection = {
       file: "crates/collaboration-service/src/mail_delivery_runtime/custody_backfill.rs",
       disposition: { kind: "none" },
       note: "fleet_sync_delivery startup backfill (central fleet mail custody, not one of the four protocols): admit_existing_record_removals l14, backfill_submitters l39",
-    },
-    {
-      file: "crates/collaboration-service/src/mail_delivery_runtime/frozen_cancel_outcome.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "DeliveryCancel envelope (recipient address carries the SessionRef) converted between delivery type parameters by serde_json to_value/from_value l56, l158; fleet Query l188 is the central link",
-    },
-    {
-      file: "crates/collaboration-service/src/mail_delivery_runtime/frozen_handoff_status.rs",
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "fleet ItemId to PushId through its UUID string l11; the rest reads fleet_sync_protocol DeliveryEnvelope/ItemStatusState (central link)",
     },
     {
       file: "crates/collaboration-service/src/mail_delivery_runtime/held_readiness.rs",
@@ -438,19 +265,6 @@ export const section: LedgerSection = {
       owner: { part: "N10" },
       origin: "product",
       coverage: { kind: "uncovered", reason: "N10 tap does not record this caller" },
-    },
-    {
-      file: "crates/collaboration-service/src/collaboration_application/session_context_reader.rs",
-      line: 41,
-      edge: "managed-codex",
-      sends:
-        "thread/read {threadId, includeTurns:false} via codex_session_inspect for a codex-local session's cwd",
-      owner: { part: "N10" },
-      origin: "product",
-      coverage: {
-        kind: "uncovered",
-        reason: "no tap drives view_session_context/repository to the managed Codex wire",
-      },
     },
     {
       file: "crates/collaboration-service/src/codex_session_inventory.rs",

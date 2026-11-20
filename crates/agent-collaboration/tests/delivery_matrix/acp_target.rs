@@ -1,6 +1,6 @@
 //! Recipient-observed matrix for a Router-hosted scripted ACP session.
 use super::{
-    board_subscription_push_targets, cli_send, cli_send_receipt,
+    cli_send, cli_send_receipt,
     delivery_matrix_support::ConfigHashGuard,
     matrix_marker, mcp_send,
     proof_context::{ProofContext, ProofResult},
@@ -43,26 +43,6 @@ pub(super) async fn exercise_acp_target_matrix(config_guard: &ConfigHashGuard) -
             &marker,
         )?;
     }
-
-    let marker = matrix_marker("boardSubscription", "providerAcp");
-    board_subscription_push_targets(&mut proof, &sender, &[(&target, &marker)]).await?;
-    observe_single_prompt(
-        &receipt_path,
-        &target,
-        super::SUBSCRIPTION_NOTICE_LABEL,
-        Duration::from_secs(120),
-    )
-    .await?;
-    let notice = read_prompt_text(&receipt_path, &target, super::SUBSCRIPTION_NOTICE_LABEL)?;
-    super::verify_subscription_notice(&mut proof, &target, &notice, &marker).await?;
-    record_cell(
-        &mut proof,
-        &mut cells,
-        &mut markers,
-        config_guard,
-        "boardSubscription",
-        super::SUBSCRIPTION_NOTICE_LABEL,
-    )?;
 
     let request_id = deliver_pending_approval(&mut proof, &sender, &target, &receipt_path).await?;
     record_cell(
@@ -326,29 +306,6 @@ fn prompt_count(path: &Path, target: &SessionRef, marker: &str) -> ProofResult<u
         }
     }
     Ok(count)
-}
-
-#[expect(
-    clippy::indexing_slicing,
-    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
-)]
-fn read_prompt_text(path: &Path, target: &SessionRef, marker: &str) -> ProofResult<String> {
-    for line in std::fs::read_to_string(path)?.lines() {
-        let frame: Value = serde_json::from_str(line)?;
-        if frame["params"]["sessionId"] != json!(String::from(target.session_id.clone())) {
-            continue;
-        }
-        if let Some(text) = frame["params"]["prompt"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|part| part["text"].as_str())
-            .find(|text| text.contains(marker))
-        {
-            return Ok(text.to_owned());
-        }
-    }
-    Err("Observed subscription prompt text missing".into())
 }
 
 async fn observe_single_prompt(

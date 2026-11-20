@@ -14,18 +14,8 @@ pub fn start(
     peer: PeerId,
     props: MailPushDeliveryProps,
 ) -> Result<(ApplicationFixture, NativeMailOwner), FixtureError> {
-    start_with_session(identity, peer, props, None)
-}
-
-// Host publisher proofs borrow their one actual prepared session.
-pub fn start_with_session(
-    identity: ApplicationFixture,
-    peer: PeerId,
-    props: MailPushDeliveryProps,
-    session: Option<collaboration_runtime::MailDeliverySession>,
-) -> Result<(ApplicationFixture, NativeMailOwner), FixtureError> {
     let interactions = props.interactions.clone();
-    let mail = Arc::new(MailDeliveryRuntime::new(peer, props, session)?);
+    let mail = Arc::new(MailDeliveryRuntime::new(peer, props)?);
     start_prepared(identity, peer, interactions, mail)
 }
 
@@ -40,14 +30,13 @@ pub fn start_prepared(
     start_prepared_after(identity, peer, interactions, mail, None)
 }
 
-pub fn start_deferred_with_session(
+pub fn start_deferred(
     identity: ApplicationFixture,
     peer: PeerId,
     props: MailPushDeliveryProps,
-    session: Option<collaboration_runtime::MailDeliverySession>,
 ) -> Result<(ApplicationFixture, NativeMailOwner), FixtureError> {
     let interactions = props.interactions.clone();
-    let mail = Arc::new(MailDeliveryRuntime::new(peer, props, session)?);
+    let mail = Arc::new(MailDeliveryRuntime::new(peer, props)?);
     let (release, waiting) = tokio::sync::oneshot::channel();
     start_prepared_after(identity, peer, interactions, mail, Some((release, waiting)))
 }

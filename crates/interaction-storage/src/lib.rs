@@ -50,15 +50,16 @@ mod mail_retirement_progress;
 mod pending_poll_mail;
 pub use pending_poll_mail::{
     PendingPollMail, delete_pending_poll_in_scope, insert_pending_poll_in_scope,
-    read_pending_poll_in_scope,
 };
 mod mail_read_contexts;
 mod mail_submission_epochs;
-pub use mail_read_contexts::{StoredMailReadContext, record_mail_read_context_in_scope};
+#[cfg(test)]
+use mail_read_contexts::record_mail_read_context_in_scope;
 mod message_send_answers;
 pub use installation_peer_directory::{InstallationPeerBinding, installation_peer_in_scope};
-pub use mail_submission_epochs::{
-    MailSubmissionEpoch, read_mail_submission_epoch_in_scope, record_mail_submission_epoch_in_scope,
+#[cfg(test)]
+use mail_submission_epochs::{
+    read_mail_submission_epoch_in_scope, record_mail_submission_epoch_in_scope,
 };
 pub use message_send_answers::{
     MessageSendAnswer, read_message_send_answer_in_scope, record_message_send_admission,

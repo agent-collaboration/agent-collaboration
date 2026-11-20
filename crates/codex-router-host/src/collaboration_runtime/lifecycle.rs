@@ -26,9 +26,6 @@ impl CollaborationRuntime {
             };
             self.manifest.take();
             self.shutdown.cancel();
-            if let Some(publisher) = &self.notification_publisher {
-                publisher.cancel();
-            }
             if let Some(service) = &self.subscription_delivery {
                 service.cancel();
             }
@@ -45,14 +42,8 @@ impl CollaborationRuntime {
         {
             failure.get_or_insert(error);
         }
-        // Cancel before draining the publisher: a delivery cut off here ends outcome-unknown, which reconcile handles.
-        if let Some(service) = &self.subscription_delivery {
-            service.cancel();
-        }
-        if let Some(publisher) = self.notification_publisher.take() {
-            publisher.shutdown().await;
-        }
         if let Some(service) = self.subscription_delivery.take() {
+            // Held-mail signals own a journal reference even after their tasks stop.
             service.shutdown().await;
         }
         if let Err(error) = self.collaboration_api.stopped().await {
@@ -60,34 +51,6 @@ impl CollaborationRuntime {
         }
         if let Err(error) = self.publication.admission_gate().retire() {
             failure.get_or_insert(error);
-        }
-        if let Some(session) = self.board_session.take()
-            && let Err(error) = session.shutdown().await
-        {
-            let refusal_observed =
-                if super::board_composition::RunningMachineSession::is_expected_refusal_error(
-                    &error,
-                ) {
-                    match self.fleet_link.read().await {
-                        Ok(Some(record)) => {
-                            super::board_composition::RunningMachineSession::is_observed_refusal(
-                                &error, &record,
-                            )
-                        }
-                        Err(observation_error) => {
-                            tracing::warn!(%observation_error, session_error = %error, "Fleet link observation failed during shutdown; retaining session failure");
-                            false
-                        }
-                        Ok(None) => false,
-                    }
-                } else {
-                    false
-                };
-            if refusal_observed {
-                tracing::info!(event = "fleet.link.refusalObservedAtShutdown", %error, "Fleet refusal was already observed; Host cleanup completed");
-            } else {
-                failure.get_or_insert(error);
-            }
         }
         if let Some(route) = self.provider_delivery_route.take() {
             route.shutdown_queue().await;
@@ -140,11 +103,6 @@ impl CollaborationRuntime {
         {
             failure.get_or_insert(io::Error::other("interaction retention shutdown failed"));
         }
-        if let Some(task) = self.fleet_outbox_maintenance.take()
-            && task.await.is_err()
-        {
-            failure.get_or_insert(io::Error::other("fleet outbox maintenance shutdown failed"));
-        }
         if let Some(task) = self.provider_retention.take()
             && task.await.is_err()
         {
@@ -170,25 +128,6 @@ impl CollaborationRuntime {
                     ));
                 }
             }
-        }
-        if let Some(store) = self.project_admission.take() {
-            match std::sync::Arc::try_unwrap(store) {
-                Ok(store) => {
-                    if store.close().await.is_err() {
-                        failure.get_or_insert(io::Error::other("board storage close failed"));
-                    }
-                }
-                Err(_) => {
-                    failure.get_or_insert(io::Error::other(
-                        "board storage still owned after listener shutdown",
-                    ));
-                }
-            }
-        }
-        // Last user gone: the link owner ended with the board session and the Fleet
-        // client with admission, so nothing can still write through a view.
-        if let Some(fleet_store) = self.fleet_store.take() {
-            fleet_store.close().await;
         }
         if let Some(journal) = self.journal.take() {
             match std::sync::Arc::try_unwrap(journal) {

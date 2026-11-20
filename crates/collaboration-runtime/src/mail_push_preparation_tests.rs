@@ -1,13 +1,8 @@
 //! Literal native policy and header expectations, without a sender-project lookup.
 use super::*;
-use collaboration_mail_protocol::{
-    FollowDeliveryPolicy, MailSender, MessageBody, NotificationBody, RecordPointer, RootRange,
-};
-use collaboration_protocol::{CodexGeneration, PushDeliveryState};
+use collaboration_mail_protocol::{MailSender, MessageBody};
+use collaboration_protocol::{CodexGeneration, PushDeliveryState, PushHeaderFacts};
 use fleet_sync_protocol::{ItemId, PeerId, Recipient};
-use message_board::{
-    BatchTiming, FeedCursor, Identity, SubscriptionGeneration, SubscriptionLifetime,
-};
 use runtime_primitives::{OperationId, StepName};
 use serde_json::json;
 
@@ -54,59 +49,6 @@ fn message(
             sender_display_name: Some("Frozen Sender".to_owned().try_into().unwrap()),
             delivery: mode.into(),
             guard: guard.map(TryInto::try_into).transpose().unwrap(),
-        }),
-    )
-    .unwrap()
-}
-fn cursor(position: u64) -> FeedCursor {
-    FeedCursor {
-        epoch: message_board::EpochNumber::INITIAL,
-        position: position.try_into().unwrap(),
-    }
-}
-fn follow(mode: SubscriptionMode, idle: WhenIdle) -> DeliveryItem<RouterDeliveryTypes> {
-    let recipient = recipient();
-    let project: message_board::ProjectId = uuid::Uuid::now_v7().to_string().try_into().unwrap();
-    let root: message_board::ThreadId = uuid::Uuid::now_v7().to_string().try_into().unwrap();
-    let roots = if mode == SubscriptionMode::Poll {
-        vec![RootRange::new(root.clone(), cursor(2), cursor(500), 7).unwrap()]
-    } else {
-        vec![
-            RootRange::new(root.clone(), cursor(2), cursor(300), 7).unwrap(),
-            RootRange::new(root.clone(), cursor(400), cursor(500), 11).unwrap(),
-        ]
-    };
-    DeliveryItem::new(
-        ItemId::new(uuid::Uuid::now_v7()).unwrap(),
-        MailSender::Project {
-            project: project.clone(),
-        },
-        recipient.clone(),
-        None,
-        BoardDeliveryBody::Notification(NotificationBody {
-            excerpt: "frozen follow".to_owned().try_into().unwrap(),
-            pointer: RecordPointer {
-                project,
-                subject: serde_json::from_value(json!({"kind":"post","id":root.as_str()})).unwrap(),
-                position: cursor(500),
-            },
-            source: NotificationSource::FollowBatch {
-                membership: uuid::Uuid::now_v7().to_string().try_into().unwrap(),
-                activated_at: cursor(1),
-                generation: SubscriptionGeneration::new(1).unwrap(),
-                roots,
-                policy: FollowDeliveryPolicy::new(
-                    &Identity::Session {
-                        session: recipient.address,
-                    },
-                    mode,
-                    idle,
-                    BatchTiming::new(2, 10).unwrap(),
-                    SubscriptionLifetime::new(600).unwrap(),
-                )
-                .unwrap(),
-                draining: true,
-            },
         }),
     )
     .unwrap()
@@ -263,119 +205,8 @@ fn new_auto_wakes_unloaded_while_held_queue_and_guarded_policies_stay_strict() {
 }
 
 #[test]
-fn follow_policy_keeps_frozen_counts_and_draining_and_only_uses_local_hold_time() {
-    let item = follow(SubscriptionMode::Deliver, WhenIdle::Drop);
-    let mut local = working(&item);
-    if let PushHeaderFacts::SubscriptionActivity {
-        held_since,
-        message_count,
-        ..
-    } = &mut local.header_facts
-    {
-        *held_since = Some("2026-10-19T12:00:00Z".to_owned());
-        *message_count = 999;
-    }
-    let Some(MailPushPreparation::Attempt { request, .. }) =
-        prepare_mail_push(&item, &local, &machine(), &TargetPresence::Running, &call()).unwrap()
-    else {
-        panic!("running reader ignores idle drop");
-    };
-    assert_eq!(request.payload.load_policy, LoadPolicy::LoadedOnly);
-    assert_eq!(request.mode, MessageDelivery::Auto);
-    assert!(
-        request
-            .payload
-            .line
-            .as_str()
-            .contains("1 thread · 18 messages")
-    );
-    assert!(
-        request
-            .payload
-            .line
-            .as_str()
-            .contains("held since 2026-10-19T12:00:00Z")
-    );
-    assert!(request.payload.line.as_str().contains("thread resolved"));
-    assert!(matches!(
-        prepare(&item, TargetPresence::Wakeable),
-        MailPushPreparation::Drop { .. }
-    ));
-    assert!(matches!(
-        prepare(
-            &item,
-            TargetPresence::Unreachable {
-                reason: "ambiguous".to_owned()
-            }
-        ),
-        MailPushPreparation::Drop { .. }
-    ));
-}
-
-#[test]
-fn follow_wakes_only_known_wakeable_and_poll_never_prepares_a_native_push() {
-    let wake = follow(SubscriptionMode::Deliver, WhenIdle::Wake);
-    let MailPushPreparation::Attempt { request, .. } = prepare(&wake, TargetPresence::Wakeable)
-    else {
-        panic!("wake policy must load");
-    };
-    assert_eq!(request.payload.load_policy, LoadPolicy::MayLoad);
-    assert!(matches!(
-        prepare(
-            &wake,
-            TargetPresence::Unreachable {
-                reason: "ambiguous".to_owned()
-            }
-        ),
-        MailPushPreparation::Hold { .. }
-    ));
-    let hold = follow(SubscriptionMode::Deliver, WhenIdle::Hold);
-    assert!(matches!(
-        prepare(&hold, TargetPresence::Wakeable),
-        MailPushPreparation::Hold { .. }
-    ));
-    let poll = follow(SubscriptionMode::Poll, WhenIdle::Hold);
-    assert!(
-        prepare_mail_push(
-            &poll,
-            &working(&wake),
-            &machine(),
-            &TargetPresence::Running,
-            &call()
-        )
-        .unwrap()
-        .is_none()
-    );
-}
-
-#[test]
-fn intent_is_loaded_only_and_mismatched_push_or_router_is_refused_before_dispatch() {
-    let template = follow(SubscriptionMode::Deliver, WhenIdle::Wake);
-    let mut body = template.body().clone();
-    let BoardDeliveryBody::Notification(notification) = &mut body else {
-        panic!("notification");
-    };
-    notification.source = NotificationSource::Intent {
-        intent: uuid::Uuid::now_v7().to_string().try_into().unwrap(),
-    };
-    let item = DeliveryItem::new(
-        template.id(),
-        template.sender().clone(),
-        template.recipient().clone(),
-        None,
-        body,
-    )
-    .unwrap();
-    assert!(matches!(
-        prepare(&item, TargetPresence::Wakeable),
-        MailPushPreparation::Hold { .. }
-    ));
-    let MailPushPreparation::Attempt { request, kind } = prepare(&item, TargetPresence::Running)
-    else {
-        panic!("loaded intent must attempt");
-    };
-    assert_eq!(request.payload.load_policy, LoadPolicy::LoadedOnly);
-    assert_eq!(kind, PushKind::BoardNotification);
+fn mismatched_direct_push_or_router_is_refused_before_dispatch() {
+    let item = message(MessageDelivery::Auto, None);
     let mut wrong = working(&item);
     wrong.push_id = uuid::Uuid::now_v7().to_string().try_into().unwrap();
     assert!(
@@ -400,20 +231,4 @@ fn intent_is_loaded_only_and_mismatched_push_or_router_is_refused_before_dispatc
         .is_err()
     );
     assert_eq!(working(&item).delivery_state, PushDeliveryState::Pending);
-}
-
-#[test]
-fn a_follow_batch_for_a_target_its_route_cannot_start_is_refused_whatever_its_idle_policy() {
-    for idle in [WhenIdle::Hold, WhenIdle::Wake, WhenIdle::Drop] {
-        let item = follow(SubscriptionMode::Deliver, idle);
-        let MailPushPreparation::Drop { receipt } = prepare(&item, TargetPresence::NotRunning)
-        else {
-            panic!("a closed Claude Code peer's batch must be refused, not held or attempted");
-        };
-        assert!(matches!(
-            &receipt.outcome,
-            collaboration_protocol::DeliveryOutcome::NotSubmitted { retryable: false, reason }
-                if reason == "target is not running; follow batch refused"
-        ));
-    }
 }

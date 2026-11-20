@@ -14,9 +14,6 @@ use collaboration_protocol::{
     ProviderInspectFailureKind, ProviderOperationEffect, ProviderSettingsFailure,
     ProviderSettingsFailureKind,
 };
-use message_board::{
-    BoardError, BoardErrorDetails, BoardFailureKind, BoardFailureStage, BoardNextAction,
-};
 use serde_json::{Value, json};
 
 fn wire_kind(failure: &impl serde::Serialize) -> String {
@@ -43,63 +40,6 @@ fn every_reason_carries_its_spec_name() {
     // Act & assert.
     for (reason, spec_name) in table {
         assert_eq!(reason.spec_name(), spec_name);
-    }
-}
-
-#[test]
-fn board_failures_map_by_kind() {
-    // Arrange: today's board kinds and the spec reason each one is, if any.
-    let table = [
-        (
-            BoardFailureKind::Overloaded,
-            "overloaded",
-            Some(Reason::Overloaded),
-        ),
-        (
-            BoardFailureKind::ArchivedBoard,
-            "archivedBoard",
-            Some(Reason::Archived),
-        ),
-        (
-            BoardFailureKind::InvalidField,
-            "invalidField",
-            Some(Reason::InvalidShape),
-        ),
-        (
-            BoardFailureKind::InvalidIdentity,
-            "invalidIdentity",
-            Some(Reason::InvalidShape),
-        ),
-        (
-            BoardFailureKind::InvalidCursor,
-            "invalidCursor",
-            Some(Reason::CursorInvalid),
-        ),
-        (BoardFailureKind::ThreadResolved, "threadResolved", None),
-        (BoardFailureKind::OutcomeUnknown, "outcomeUnknown", None),
-        (
-            BoardFailureKind::ResourceAlreadyExists,
-            "resourceAlreadyExists",
-            None,
-        ),
-        (
-            BoardFailureKind::StaleOrchestrator,
-            "staleOrchestrator",
-            None,
-        ),
-    ];
-    for (kind, wire, reason) in table {
-        let failure = BoardError {
-            kind,
-            stage: BoardFailureStage::Validation,
-            message: "failure".into(),
-            next_action: BoardNextAction::CorrectRequest,
-            details: BoardErrorDetails::None,
-        };
-
-        // Act & assert.
-        assert_eq!(failure.rejection_reason(), reason, "{wire}");
-        assert_eq!(wire_kind(&failure), wire);
     }
 }
 

@@ -52,9 +52,6 @@
     "metadata": {
       "crates/interaction-storage/.sqlx": {
         "query-original.json": "original"
-      },
-      "crates/message-board-storage/.sqlx": {
-        "query-original.json": "original"
       }
     },
     "stderr": ""

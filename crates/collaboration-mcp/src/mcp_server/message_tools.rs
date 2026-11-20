@@ -11,7 +11,7 @@ use collaboration_service::collaboration_application::{MessageFailure, MessageFa
 
 #[tool_router(router = message_tool_router, vis = "pub(super)")]
 impl CollaborationMcpServer {
-    #[tool(name = "message_send", description = "Submits one agent-authored or explicit human message using auto, queue, or steer delivery. Queue falls back to steer when the selected target does not support queueing. Agent sender identity is reported by the request's client, not authenticated. Supply itemId for safe same-content replay; different content under that ID is itemConflict. If omitted, the Router mints and returns an ID, and retrying an omitted-ID call after a lost local answer may duplicate. A local result includes the stored push id (the itemId), link, target and recorded delivery receipt. A remote result is queued with the item and frozen target once the sender outbox has custody; accepted input or a peer write does not prove completion or an agent reply. Router-authored content is not a public caller input, and uncertain dispatch is never replayed automatically.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<MessageSendResult>>())]
+    #[tool(name = "message_send", description = "Submits one agent-authored or explicit human message using auto, queue, or steer delivery. Queue falls back to steer when the selected target does not support queueing. Agent sender identity is reported by the request's client, not authenticated. Supply itemId for safe same-content replay; different content under that ID is itemConflict. If omitted, the Router mints and returns an ID, and retrying an omitted-ID call after a lost local answer may duplicate. The target must belong to this Router. The result includes the stored push id (the itemId), link, target and recorded delivery receipt. An accepted input or a peer write confirms delivery only. Router-authored content is not a public caller input, and uncertain dispatch is never replayed automatically.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<MessageSendResult>>())]
     pub(super) async fn message_send(
         &self,
         Parameters(arguments): Parameters<UndecodedMessageSend>,
@@ -56,7 +56,7 @@ impl CollaborationMcpServer {
         }
     }
 
-    #[tool(name = "router_show", description = "Shows one stored Router push or the sender Outbox status of a remote message by item id. Push results include body and expanded activity; outgoing remote mail has custody status and no sender-side push. Caller identity is reported, not authenticated, and checked as a confusion guard. Showing a direct message to its target marks it read.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<collaboration_protocol::MessageShowResult>>())]
+    #[tool(name = "router_show", description = "Shows one retained local Router push by item id or Router link. The result includes the stored record and its body, when present. Caller identity is reported, not authenticated, and checked as a confusion guard. Showing a direct message to its target marks it read.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<collaboration_protocol::MessageShowResult>>())]
     pub(super) async fn router_show(
         &self,
         Parameters(request): Parameters<collaboration_protocol::MessageShowRequest>,
@@ -78,7 +78,7 @@ impl CollaborationMcpServer {
         )
     }
 
-    #[tool(name = "message_history", description = "Lists retained direct messages between the reported caller session and the explicit with session, including canonical sender status for outgoing remote mail. Caller identity is reported, not authenticated, and checked as a confusion guard. Read context is checked before SDK status; no sender push is invented.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<collaboration_protocol::MessageHistoryResult>>())]
+    #[tool(name = "message_history", description = "Lists retained local direct messages between the reported caller session and the session supplied in with. Caller identity is reported, not authenticated, and checked as a confusion guard.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<collaboration_protocol::MessageHistoryResult>>())]
     pub(super) async fn message_history(
         &self,
         Parameters(request): Parameters<PushRecordHistoryParams>,

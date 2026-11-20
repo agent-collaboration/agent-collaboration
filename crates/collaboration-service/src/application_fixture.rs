@@ -4,19 +4,10 @@ use collaboration_runtime::EndpointDirectory;
 
 #[derive(Clone)]
 pub struct ApplicationFixture {
-    pub(crate) notification_publisher: Option<std::sync::Arc<crate::NotificationPublisher>>,
     pub(crate) mail_delivery: Option<std::sync::Arc<crate::MailDeliveryRuntime>>,
-    pub(crate) project_claim: Option<std::sync::Arc<dyn collaboration_contracts::ProjectClaim>>,
-    pub(crate) project_replication:
-        std::sync::Arc<dyn collaboration_contracts::ProjectReplicationPosition>,
-    pub(crate) project_admission: Option<std::sync::Arc<crate::ProjectAdmission>>,
-    pub(crate) subscription_delivery: Option<crate::SubscriptionDeliveryService>,
-    pub(crate) subscription_presence:
-        Option<std::sync::Arc<dyn collaboration_contracts::TargetPresenceProbe>>,
     pub(crate) runtime_clock: std::sync::Arc<dyn router_clock::RuntimeClock>,
     pub(crate) service_id: UuidIdentity,
     pub(crate) installation_peer: Option<fleet_sync_protocol::PeerId>,
-    pub(crate) fleet_link: board_fleet_sync::FleetLinkObservation,
     pub(crate) machine_identity: collaboration_contracts::MachineIdentity,
     pub(crate) service_epoch: UuidIdentity,
     pub(crate) display_names: collaboration_runtime::SessionDisplayNameCache,
@@ -40,18 +31,12 @@ pub struct ApplicationFixture {
         Option<std::sync::Arc<dyn collaboration_contracts::ProviderConversationBackend>>,
 }
 impl ApplicationFixture {
-    pub fn with_fleet_link(mut self, observation: board_fleet_sync::FleetLinkObservation) -> Self {
-        self.fleet_link = observation;
-        self
-    }
-
     pub fn with_mail_delivery_runtime(
         mut self,
         runtime: std::sync::Arc<crate::MailDeliveryRuntime>,
     ) -> Result<Self, String> {
         runtime.validate_owner(&self.router_identity(), self.interaction_store.as_ref())?;
         runtime.attach_reader_readiness()?;
-        runtime.attach_project_replication(self.project_replication.clone())?;
         self.mail_delivery = Some(runtime);
         Ok(self)
     }
@@ -75,21 +60,6 @@ impl ApplicationFixture {
         self.installation_peer
     }
 
-    pub fn with_project_claim(
-        mut self,
-        claim: std::sync::Arc<dyn collaboration_contracts::ProjectClaim>,
-    ) -> Self {
-        self.project_claim = Some(claim);
-        self
-    }
-
-    pub fn with_project_replication(
-        mut self,
-        replication: std::sync::Arc<dyn collaboration_contracts::ProjectReplicationPosition>,
-    ) -> Self {
-        self.project_replication = replication;
-        self
-    }
     pub fn with_machine_identity(
         mut self,
         machine_identity: collaboration_contracts::MachineIdentity,
@@ -101,35 +71,6 @@ impl ApplicationFixture {
         Ok(self)
     }
 
-    pub fn with_notification_publisher(
-        mut self,
-        publisher: std::sync::Arc<crate::NotificationPublisher>,
-    ) -> Self {
-        self.notification_publisher = Some(publisher);
-        self.attach_follow_admission();
-        self
-    }
-
-    pub fn with_project_admission(
-        mut self,
-        admission: std::sync::Arc<crate::ProjectAdmission>,
-    ) -> Self {
-        self.runtime_clock = admission.clock.clone();
-        self.project_admission = Some(admission);
-        self.attach_follow_admission();
-        self
-    }
-    pub fn with_subscription_delivery_service(
-        mut self,
-        service: crate::SubscriptionDeliveryService,
-        presence: std::sync::Arc<dyn collaboration_contracts::TargetPresenceProbe>,
-    ) -> Self {
-        self.runtime_clock = service.runtime_clock();
-        self.subscription_delivery = Some(service);
-        self.subscription_presence = Some(presence);
-        self.attach_follow_admission();
-        self
-    }
     pub fn runtime_clock(&self) -> std::sync::Arc<dyn router_clock::RuntimeClock> {
         self.runtime_clock.clone()
     }
@@ -140,19 +81,6 @@ impl ApplicationFixture {
         self.runtime_clock = clock;
         self
     }
-    fn attach_follow_admission(&self) {
-        if let (Some(service), Some(admission), Some(publisher)) = (
-            &self.subscription_delivery,
-            &self.project_admission,
-            &self.notification_publisher,
-        ) {
-            service.attach_follow_admission(
-                std::sync::Arc::downgrade(admission),
-                std::sync::Arc::downgrade(publisher),
-            );
-        }
-    }
-
     pub fn with_interaction_store(
         mut self,
         store: std::sync::Arc<interaction_storage::InteractionStore>,
@@ -267,14 +195,8 @@ impl ApplicationFixture {
             collaboration_contracts::MachineIdentity::new(service_id.clone(), None)
                 .map_err(|error| error.to_string())?;
         Ok(Self {
-            notification_publisher: None,
-            project_replication: std::sync::Arc::new(
-                collaboration_contracts::UnacknowledgedProjectReplication,
-            ),
-            project_claim: None,
             service_id: service_id.clone(),
             installation_peer: None,
-            fleet_link: board_fleet_sync::FleetLinkObservation::Unconfigured,
             mail_delivery: None,
             machine_identity,
             service_epoch: UuidIdentity::try_from(service_epoch.to_owned())
@@ -290,9 +212,6 @@ impl ApplicationFixture {
             claude_background_jobs: None,
             codex_conversation_recorder: None,
             provider_conversations: None,
-            project_admission: None,
-            subscription_delivery: None,
-            subscription_presence: None,
             runtime_clock: std::sync::Arc::new(
                 router_clock::ManualClock::starting_at(
                     runtime_primitives::SyncTime::from_unix_millis(1792432800000),
@@ -331,12 +250,6 @@ impl ApplicationFixture {
                 recorder as std::sync::Arc<dyn collaboration_runtime::CodexPermissionModes>
             }),
         );
-        let session_context = crate::collaboration_application::SessionContextReader::new(
-            self.router_identity(),
-            native_control.clone(),
-            self.provider_operations.clone(),
-            self.claude_code_sessions.clone(),
-        );
         let codex_inventory = crate::CodexSessionInventory::new(
             self.router_identity(),
             self.directory.clone(),
@@ -365,31 +278,12 @@ impl ApplicationFixture {
             codex_inventory,
             provider_inventory,
             journal_operations,
-        )
-        .with_fleet_link(self.fleet_link.clone());
-        let board = crate::collaboration_application::BoardOperations::new(
-            self.router_identity(),
-            self.project_admission.clone(),
-            self.project_claim.clone(),
-            self.notification_publisher.clone(),
-            self.subscription_delivery.clone(),
-            self.subscription_presence.clone(),
-            self.runtime_clock.clone(),
-            self.interaction_store.clone(),
-            self.project_replication.clone(),
-            session_context,
-            self.project_admission
-                .as_ref()
-                .map(|admission| admission.registry.clone()),
         );
         let messages = crate::collaboration_application::MessageOperations::new(
             self.router_identity(),
             self.interaction_store.clone(),
             self.mail_delivery.clone(),
             self.display_names.clone(),
-            self.project_admission
-                .as_ref()
-                .map(|admission| admission.registry.clone()),
         );
         let conversations = crate::collaboration_application::ConversationOperations::new(
             self.router_identity(),
@@ -408,7 +302,6 @@ impl ApplicationFixture {
         );
         crate::CollaborationApplication::new(
             self.router_identity(),
-            board,
             conversations,
             messages,
             observation,

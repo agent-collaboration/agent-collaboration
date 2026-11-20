@@ -24,8 +24,7 @@ async fn readiness_release_then_unload_does_not_load_or_submit_a_held_auto_again
     let presence = Arc::new(ReadinessPresence(std::sync::atomic::AtomicBool::new(true)));
     let mut props = runtime.local_mail_props();
     props.presence = presence.clone();
-    let mail =
-        MailDeliveryRuntime::new(runtime.fixture.host.config.local.owner, props, None).unwrap();
+    let mail = MailDeliveryRuntime::new(runtime.fixture.host.config.local.owner, props).unwrap();
     let draft = runtime.fixture.draft();
     let item = runtime.fixture.item(&draft).id();
     runtime.client.script(

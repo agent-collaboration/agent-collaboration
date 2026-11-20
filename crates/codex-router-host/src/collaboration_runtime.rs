@@ -16,8 +16,6 @@ use tokio_util::sync::CancellationToken;
 mod fleet_observation;
 
 pub struct CollaborationRuntimeInputs {
-    /// Enrollment/configuration supplies inputs; this Host owns the session itself.
-    pub board_session: Option<board_fleet_sync::BoardSessionInputs>,
     pub owner_human_id: Option<message_board::HumanId>,
     pub directory: PathBuf,
     pub codex_home: PathBuf,
@@ -33,7 +31,6 @@ pub struct CollaborationRuntimeInputs {
 
 /// Host-owned startup facts that are not part of the public collaboration runtime inputs.
 pub(crate) struct HostCollaborationInputs {
-    pub enrollment_reset_directory: PathBuf,
     pub collaboration_runtime: CollaborationRuntimeInputs,
     pub router_proxy_endpoint: SocketAddr,
     pub remote_access: Option<crate::RemoteAccess>,
@@ -113,20 +110,14 @@ pub enum CollaborationFailure {
 }
 pub struct CollaborationRuntime {
     clock: std::sync::Arc<dyn router_clock::RuntimeClock>,
-    fleet_link: board_fleet_sync::FleetLinkObservation,
     interactions: std::sync::Weak<interaction_storage::InteractionStore>,
     #[cfg(test)]
     startup_test_broker: std::sync::Weak<collaboration_runtime::ServiceInteractionBroker>,
     #[cfg(test)]
     startup_test_display_names: collaboration_runtime::SessionDisplayNameCache,
     #[cfg(feature = "runtime-test-support")]
-    runtime_test_mail: Option<std::sync::Weak<collaboration_service::MailDeliveryRuntime>>,
-    notification_publisher: Option<std::sync::Arc<collaboration_service::NotificationPublisher>>,
-    board_session: Option<board_composition::RunningMachineSession>,
-    /// The Host's one Fleet database, closed after every user of its connection stops.
-    fleet_store: Option<message_board_storage::FleetStore>,
+    runtime_test_mail: std::sync::Weak<collaboration_service::MailDeliveryRuntime>,
     owner_human_id: Option<message_board::HumanId>,
-    project_admission: Option<std::sync::Arc<collaboration_service::ProjectAdmission>>,
     subscription_delivery: Option<collaboration_service::SubscriptionDeliveryService>,
     provider_store:
         Option<std::sync::Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>>,
@@ -152,7 +143,6 @@ pub struct CollaborationRuntime {
     maintenance: Option<tokio::task::JoinHandle<Result<(), lifecycle_observation::JournalError>>>,
     /// Trims settled interaction records and history; runs for the Host's whole life.
     interaction_retention: Option<tokio::task::JoinHandle<()>>,
-    fleet_outbox_maintenance: Option<tokio::task::JoinHandle<()>>,
     current_generation: Option<CodexGeneration>,
     observer_task: Option<tokio::task::JoinHandle<()>>,
     /// One re-check per observation retry while lifecycle observation is unavailable.
@@ -174,43 +164,11 @@ impl CollaborationRuntime {
     }
 
     pub(crate) fn observe_fleet(&self) -> FleetObservationFuture {
-        let link = self.fleet_link.clone();
         let interactions = self.interactions.clone();
-        Box::pin(
-            async move { fleet_observation::observe_fleet_sources(&link, &interactions).await },
-        )
+        Box::pin(async move { fleet_observation::observe_fleet_sources(&interactions).await })
     }
     pub(crate) const fn mcp_listen_address(&self) -> std::net::SocketAddr {
         self.collaboration_api.local_address()
-    }
-
-    #[cfg(feature = "runtime-test-support")]
-    pub async fn runtime_test_drain_project_publisher(
-        &self,
-        project: &message_board::ProjectId,
-    ) -> io::Result<()> {
-        let publisher = self
-            .notification_publisher
-            .as_ref()
-            .ok_or_else(|| io::Error::other("test project publisher is unavailable"))?;
-        publisher
-            .queue_project(project.clone())
-            .await
-            .map_err(io::Error::other)?;
-        publisher.wait_project_idle_for_test(project).await;
-        Ok(())
-    }
-
-    #[cfg(feature = "runtime-test-support")]
-    pub async fn runtime_test_replicate_project(
-        &self,
-        project: &message_board::ProjectId,
-    ) -> io::Result<()> {
-        self.board_session
-            .as_ref()
-            .ok_or_else(|| io::Error::other("test project runtime is unavailable"))?
-            .replicate_project_for_test(project)
-            .await
     }
 
     #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
@@ -219,8 +177,7 @@ impl CollaborationRuntime {
         cancel: fleet_sync_protocol::ItemId,
     ) -> io::Result<bool> {
         self.runtime_test_mail
-            .as_ref()
-            .and_then(std::sync::Weak::upgrade)
+            .upgrade()
             .ok_or_else(|| io::Error::other("test mail runtime is unavailable"))?
             .runtime_test_has_local_cancel_delivery(cancel)
             .await
@@ -239,20 +196,11 @@ impl CollaborationRuntime {
         fault: interaction_storage::MailStoreTestFault,
     ) -> io::Result<()> {
         self.runtime_test_mail
-            .as_ref()
-            .and_then(std::sync::Weak::upgrade)
+            .upgrade()
             .ok_or_else(|| io::Error::other("test mail runtime is unavailable"))?
             .runtime_test_install_mail_fault(fault)
             .await
             .map_err(io::Error::other)
-    }
-
-    #[cfg(feature = "runtime-test-support")]
-    #[must_use]
-    pub fn runtime_test_project_admission(
-        &self,
-    ) -> Option<std::sync::Arc<collaboration_service::ProjectAdmission>> {
-        self.project_admission.clone()
     }
 
     #[must_use]
@@ -277,8 +225,6 @@ impl CollaborationRuntime {
 #[path = "collaboration_runtime/collaboration_api_serving.rs"]
 mod collaboration_api_serving;
 use collaboration_api_serving::{BoundCollaborationApi, ServedCollaborationApi};
-#[path = "collaboration_runtime/board_composition.rs"]
-mod board_composition;
 #[path = "collaboration_runtime/lifecycle.rs"]
 mod lifecycle;
 #[path = "collaboration_runtime/mail_delivery_composition.rs"]
@@ -298,9 +244,6 @@ impl Drop for CollaborationRuntime {
     fn drop(&mut self) {
         self.manifest.take();
         self.shutdown.cancel();
-        if let Some(publisher) = &self.notification_publisher {
-            publisher.cancel();
-        }
         if let Some(service) = &self.subscription_delivery {
             service.cancel();
         }

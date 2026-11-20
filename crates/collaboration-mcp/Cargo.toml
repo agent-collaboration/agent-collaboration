@@ -16,7 +16,6 @@ test-support = ["collaboration-service/test-support"]
 [dependencies]
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
-board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
 axum = { workspace = true, features = ["http1", "tokio"] }
 collaboration-client = { path = "../collaboration-client", version = "0.1.30" }
 collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.30" }
@@ -43,9 +42,6 @@ node-test-fixture = { version = "0.1.105", path = "../node-test-fixture" }
 collaboration-service = { path = "../collaboration-service", version = "0.1.30", features = ["test-support"] }
 durable-steps.workspace = true
 interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
-fleet-admission = { path = "../fleet-admission", version = "0.1.96" }
-fleet-sync-writer.workspace = true
-board-fleet-sync = { path = "../board-fleet-sync", version = "0.1.96" }
 fleet-sync-protocol.workspace = true
 runtime-primitives.workspace = true
 uuid.workspace = true
@@ -55,7 +51,6 @@ codex-router-host = { path = "../codex-router-host", version = "0.1.31" }
 codex-native-integration.workspace = true
 futures-util.workspace = true
 jsonschema.workspace = true
-message-board-storage = { path = "../message-board-storage", version = "0.1.20" }
 reqwest = { workspace = true, features = ["json"] }
 rmcp = { workspace = true, features = ["client", "transport-streamable-http-client-reqwest", "transport-streamable-http-client-unix-socket"] }
 tempfile = "3.27.0"

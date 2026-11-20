@@ -1,7 +1,7 @@
 //! Real native protocol, reader actor and SDK custody; the external native server stands in.
 use crate::mail_delivery_projection_tests::fixture::{Fixture, ProjectionTask};
 use crate::{
-    BoardAvailability, MailPushDelivery, MailPushDeliveryProps, SubscriptionDeliveryService,
+    MailPushDelivery, MailPushDeliveryProps, SubscriptionDeliveryService,
     SubscriptionDeliveryServiceProps,
 };
 use collaboration_contracts::{MachineIdentity, SessionDeliveryRoute};
@@ -46,7 +46,6 @@ async fn materialized_unloaded_session_holds_mail_then_delivers_after_readiness(
     let route = native_route(&target, socket, root.path());
     let delivery = Arc::new(SessionDeliveryRouter::new(vec![route]));
     let actors = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
-        board_availability: BoardAvailability::Unavailable,
         push_store: fixture.owner.clone(),
         delivery: delivery.clone(),
         presence: delivery.clone(),

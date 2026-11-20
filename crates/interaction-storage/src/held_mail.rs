@@ -24,7 +24,7 @@ impl InteractionStore {
     pub async fn held_mail_targets(&self) -> Result<Vec<SessionRef>, StorageError> {
         let mut connection = self.writer.lock().await;
         let rows = sqlx_turso::query!(
-            "SELECT DISTINCT target_service_id AS \"service!: String\",target_endpoint_id AS \"endpoint!: String\",target_session_id AS \"session!: String\" FROM router_pushes WHERE retention='mailTerminalAge' AND delivery_state='held' ORDER BY target_service_id,target_endpoint_id,target_session_id"
+            "SELECT DISTINCT target_service_id AS \"service!: String\",target_endpoint_id AS \"endpoint!: String\",target_session_id AS \"session!: String\" FROM router_pushes WHERE retention='mailTerminalAge' AND delivery_state='held' AND kind='direct-message' ORDER BY target_service_id,target_endpoint_id,target_session_id"
         ).fetch_all(&mut *connection).await?;
         rows.into_iter()
             .map(|row| push_record_rows::session_from_parts(row.service, row.endpoint, row.session))

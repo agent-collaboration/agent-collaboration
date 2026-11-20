@@ -273,7 +273,7 @@ async fn sigkill_before_backfill_commit_retries_both_marker_and_admissions() {
     );
     let mut props = runtime.local_mail_props();
     props.interactions = owner.clone();
-    let mail = crate::MailDeliveryRuntime::new(peer, props, None).unwrap();
+    let mail = crate::MailDeliveryRuntime::new(peer, props).unwrap();
     assert_eq!(mail.initialize_record_removals().await.unwrap(), 1);
     assert_eq!(mail.initialize_record_removals().await.unwrap(), 0);
     assert_eq!(

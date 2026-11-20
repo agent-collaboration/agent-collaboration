@@ -87,13 +87,14 @@ fn advertised_native_bundle_is_loaded_into_discovered_tool_schema() {
     });
     assert!(validator.is_valid(&result));
 
-    let board = surface
+    let endpoint = surface
         .tools()
         .iter()
-        .find(|tool| tool.name == "board_list")
+        .find(|tool| tool.name == "endpoints_list")
         .expect("board list tool");
-    let board_schema = serde_json::to_string(&board.input_schema).expect("board schema encoding");
-    assert!(!board_schema.contains("codexNative"));
+    let endpoint_schema =
+        serde_json::to_string(&endpoint.input_schema).expect("endpoint schema encoding");
+    assert!(!endpoint_schema.contains("codexNative"));
 }
 
 #[test]
@@ -123,7 +124,7 @@ fn advertised_tool_output_schemas_have_object_roots() {
 #[test]
 fn described_success_types_keep_their_output_root_description() {
     let server = CollaborationMcpServer::catalog_only();
-    for name in ["post_show", "thread_show"] {
+    for name in ["message_send", "message_reply"] {
         let schema = server
             .resolved_tools()
             .into_iter()
@@ -137,9 +138,14 @@ fn described_success_types_keep_their_output_root_description() {
         let definition = schema
             .pointer(success_ref.trim_start_matches('#'))
             .expect("success definition");
+        let description = definition
+            .get("description")
+            .and_then(Value::as_str)
+            .filter(|description| !description.trim().is_empty())
+            .unwrap_or_else(|| panic!("{name} success definition needs a description"));
         assert_eq!(
-            schema.get("description"),
-            definition.get("description"),
+            schema.get("description").and_then(Value::as_str),
+            Some(description),
             "{name} root description moved into $defs"
         );
     }
@@ -262,38 +268,8 @@ fn advertised_tool_schemas_validate_available_success_and_every_error_sample() {
         .into_iter()
         .filter_map(|tool| tool.output_schema.map(|schema| (tool.name, schema)))
         .collect::<std::collections::BTreeMap<_, _>>();
-    assert_eq!(advertised.len(), 129);
+    assert_eq!(advertised.len(), 33);
 
-    let position = serde_json::json!({"kind":"project","position":{
-        "cursor":{"epoch":1,"position":1},
-        "origin":{"installation":"00000000-0000-4000-8000-000000000001","machine":"schema-test"}
-    }});
-    let message = serde_json::json!({
-        "postId":"019f0000-0000-7000-8000-000000000001",
-        "boardId":"019f0000-0000-7000-8000-000000000002",
-        "projectId":"019f0000-0000-7000-8000-000000000003",
-        "placement":{"kind":"thread","threadId":"019f0000-0000-7000-8000-000000000001"},
-        "actor":{"kind":"human","humanId":"schema-test"},"actingFor":null,
-        "text":"schema test","references":[],"position":position,
-        "envelope":{"id":"019f0000-0000-7000-8000-000000000001",
-            "scope":{"workspace":"019f0000-0000-7000-8000-000000000007",
-                "board":"019f0000-0000-7000-8000-000000000002","project":"019f0000-0000-7000-8000-000000000003"},
-            "actor":{"kind":"human","humanId":"schema-test"},
-            "request":null,"position":position,"time":{"kind":"router","value":"2026-10-12T00:00:00Z"}}
-    });
-    let pending_root = serde_json::json!({
-        "threadId":"019f0000-0000-7000-8000-000000000006",
-        "projectId":"019f0000-0000-7000-8000-000000000007",
-        "from":{"epoch":1,"position":1},"through":{"epoch":1,"position":1},"postCount":1
-    });
-    let wait_notice = serde_json::json!({"renewals":[],"outcome":{"kind":"batch","batch":{
-        "kind":"notice","pushId":"019f0000-0000-7000-8000-000000000004",
-        "line":"🧵 Router: new thread activity @fixture · 1 thread · 1 message · router://fixture/push/019f0000-0000-7000-8000-000000000004",
-        "held":false,"draining":false,"roots":[pending_root]
-    }}});
-    let wait_ranges = serde_json::json!({"renewals":[],"outcome":{"kind":"batch","batch":{
-        "kind":"ranges","held":true,"heldSince":"2026-10-01T00:00:00Z","draining":false,"roots":[pending_root]
-    }}});
     let provider_endpoint = serde_json::json!({
         "serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"
     });
@@ -318,31 +294,8 @@ fn advertised_tool_schemas_validate_available_success_and_every_error_sample() {
     });
     let mut close_operation = provider_operation.clone();
     close_operation["operation"] = serde_json::json!("conversationClose");
-    let active_subscription = serde_json::json!({
-        "projectId":"019f0000-0000-7000-8000-000000000007",
-        "scope":{"kind":"thread","threadId":"019f0000-0000-7000-8000-000000000005"},
-        "policy":{"mode":"deliver","whenIdle":"hold",
-            "timing":{"quietSeconds":120,"capSeconds":600},"lifetime":86400},
-        "state":"active","expiresAt":"2026-09-28T00:00:00Z","pendingCount":0,
-        "presence":{"kind":"running"}
-    });
-    let recorded_write = serde_json::json!({"result":{"kind":"decided","decision":{
-        "kind":"accepted","effects":{"entries":[],"totalCount":0,
-            "digest":message_board::DecisionEffectsHeader::from_full(&[]).digest,"next":null},
-        "change":"alreadySo"}},"reader":null});
     let valid_instances = std::collections::BTreeMap::from([
         ("approval_list", serde_json::json!({"approvals":[]})),
-        ("post_show", message),
-        ("thread_subscribe", recorded_write.clone()),
-        ("thread_unsubscribe", recorded_write),
-        (
-            "thread_subscriptions",
-            serde_json::json!({"subscriptions":[active_subscription],"unavailable":[]}),
-        ),
-        (
-            "thread_wait",
-            serde_json::json!({"renewals":[],"outcome":{"kind":"timedOut"}}),
-        ),
         (
             "conversation_create",
             serde_json::json!({"kind":"pending","operationId":OperationId::generate()}),
@@ -449,13 +402,6 @@ fn advertised_tool_schemas_validate_available_success_and_every_error_sample() {
                     panic!("success result narrowed for {name}: {error}; {valid}")
                 });
         }
-        if name.as_ref() == "thread_wait" {
-            for valid in [&wait_notice, &wait_ranges] {
-                advertised_validator
-                    .validate(valid)
-                    .unwrap_or_else(|error| panic!("wait batch result narrowed: {error}; {valid}"));
-            }
-        }
         if name.as_ref() == "approval_list" {
             let requester = serde_json::json!({
                 "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
@@ -536,4 +482,36 @@ fn advertised_load_input_accepts_established_human_or_session_identity_shapes() 
         !validator.is_valid(&invalid),
         "a bare string is not a provider identity"
     );
+}
+
+#[tokio::test]
+async fn real_tools_list_reports_input_and_output_bytes_separately() {
+    use crate::api_test_harness::{ServedApi, api_config, test_identity};
+
+    let directory = tempfile::tempdir().unwrap();
+    let config = api_config((test_identity()).build(), directory.path());
+    let api = ServedApi::tcp(&config).await;
+    let (status, response) = api
+        .post(&serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}))
+        .await;
+    assert!(status.is_success());
+    let tools = response
+        .pointer("/result/tools")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    let mut input_bytes = 0;
+    let mut output_bytes = 0;
+    for tool in tools {
+        let input_size = serde_json::to_vec(&tool["inputSchema"]).unwrap().len();
+        input_bytes += input_size;
+        output_bytes += serde_json::to_vec(&tool["outputSchema"]).unwrap().len();
+        jsonschema::validator_for(&tool["inputSchema"]).expect("all local references resolve");
+    }
+    assert_eq!(tools.len(), 33);
+    println!(
+        "tools={} input_bytes={input_bytes} output_bytes={output_bytes}",
+        tools.len()
+    );
+    api.stop().await;
 }

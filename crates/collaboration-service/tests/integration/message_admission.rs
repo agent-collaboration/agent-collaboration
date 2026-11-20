@@ -5,7 +5,6 @@ use collaboration_contracts::SessionMessageDelivery;
 use collaboration_contracts::TargetPresenceProbe;
 use collaboration_runtime::SessionDeliveryRouter;
 use collaboration_service::ApplicationFixture;
-use collaboration_service::BoardAvailability;
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
 
@@ -30,7 +29,6 @@ async fn message_to_missing_endpoint_reports_no_native_effects() {
     let clock = identity.runtime_clock();
     let subscription_delivery =
         SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
-            board_availability: BoardAvailability::Unavailable,
             push_store: interactions.clone(),
             delivery: Arc::clone(&delivery),
             presence: Arc::clone(&presence),
@@ -38,8 +36,7 @@ async fn message_to_missing_endpoint_reports_no_native_effects() {
             clock: clock.clone(),
         });
     subscription_delivery.start().await.unwrap();
-    let identity = identity
-        .with_subscription_delivery_service(subscription_delivery.clone(), presence.clone());
+    let identity = identity;
 
     let (identity, native_mail) = native_mail_owner::start(
         identity,

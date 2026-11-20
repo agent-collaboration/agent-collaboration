@@ -2,9 +2,7 @@
 //! build" and exit 2, so a retired command never falls through to the session picker.
 use std::ffi::OsString;
 
-/// The local wake and schedule command groups. They come back with central wakes and
-/// schedules.
-pub const RETIRED_COMMAND_GROUPS: [&str; 8] = [
+const RETIRED_COMMAND_GROUPS: &[&str] = &[
     "automation",
     "delivery",
     "revision",
@@ -13,6 +11,27 @@ pub const RETIRED_COMMAND_GROUPS: [&str; 8] = [
     "schedule",
     "wake",
     "instruction",
+    "board",
+    "request-effects",
+    "workspace",
+    "project",
+    "repository",
+    "post",
+    "thread",
+    "inbox",
+    "search",
+    "workstream",
+    "task",
+    "subtask",
+    "work-trail",
+    "adr",
+    "fact",
+    "feed",
+    "role",
+    "view",
+    "process",
+    "move",
+    "hook",
 ];
 
 const NOT_AVAILABLE: &str = "not available in this build";

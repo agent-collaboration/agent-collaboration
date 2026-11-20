@@ -149,22 +149,6 @@ fn receipt_error<TReceipt: serde::Serialize>(
 }
 
 /// A subscription wait whose caller went away: a batch may already have been handed to it.
-pub(super) fn thread_wait_outcome_unknown(
-    actor: &message_board::Identity,
-    filter: &collaboration_protocol::ThreadSubscriptionWaitFilter,
-    renewals: &[collaboration_protocol::SubscriptionRenewalEntry],
-) -> CallToolResult {
-    structured_tool_error(serde_json::json!({
-        "kind": "outcomeUnknown",
-        "stage": "response",
-        "effect": "unknown",
-        "message": "The wait result was lost; activity may have been handed off. Inspect the Reader's subscriptions and unread inbox (run thread subscriptions, then inbox fetch) before waiting again.",
-        "actor": actor,
-        "filter": filter,
-        "renewals": renewals,
-    }))
-}
-
 pub(super) fn failure(error: ClientError, possible_effect: OperationEffect) -> CallToolResult {
     operation_failure_result(&operation_failure_from_client_error(error, possible_effect))
 }

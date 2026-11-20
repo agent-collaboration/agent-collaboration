@@ -2,6 +2,7 @@
 use crate::{InteractionStore, StorageError, push_record_rows};
 use chrono::{DateTime, Utc};
 use collaboration_protocol::MailItemId;
+#[cfg(test)]
 use durable_steps::{Host, storage::TransactionScope, turso_store::TursoScope};
 use message_board::{EpochNumber, ProjectId};
 use sqlx_turso::TursoConnection;
@@ -86,7 +87,8 @@ impl InteractionStore {
     }
 }
 
-pub async fn read_mail_submission_epoch_in_scope<THost: Host>(
+#[cfg(test)]
+pub(crate) async fn read_mail_submission_epoch_in_scope<THost: Host>(
     scope: &mut TursoScope<'_, THost>,
     item: &MailItemId,
 ) -> Result<Option<MailSubmissionEpoch>, StorageError> {
@@ -94,7 +96,8 @@ pub async fn read_mail_submission_epoch_in_scope<THost: Host>(
 }
 
 /// Record only Project mail, in the native transaction admitting its SDK Outbox row.
-pub async fn record_mail_submission_epoch_in_scope<THost: Host>(
+#[cfg(test)]
+pub(crate) async fn record_mail_submission_epoch_in_scope<THost: Host>(
     scope: &mut TursoScope<'_, THost>,
     item: &MailItemId,
     project: &ProjectId,

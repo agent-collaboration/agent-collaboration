@@ -226,86 +226,63 @@ async fn holdable_native_answer_obeys_frozen_steer_and_guard_without_losing_its_
 }
 
 #[tokio::test]
-async fn direct_defects_are_terminal_but_follow_defects_keep_item_backoff_and_full_receipts() {
+async fn direct_defects_are_terminal_and_keep_full_receipts() {
     for cause in [UnsentCause::InvalidInput, UnsentCause::ProcessingFailure] {
-        for is_follow in [false, true] {
-            // Arrange: identical classified no-effect failure through the real actor and SDK task.
-            let runtime = Runtime::new().await;
-            let item = if is_follow {
-                follow(&runtime, 2, 10)
-            } else {
-                runtime.fixture.item(&runtime.fixture.draft())
-            };
-            let id = item.id();
-            let delivery = if cause == UnsentCause::ProcessingFailure {
-                NativeDeliveryResult::rejected(
-                    DeliveryRejection {
-                        native_failure: None,
-                        reason: DeliveryRejectionReason::UnsupportedCapability,
-                        next_action: DeliveryNextAction::CorrectRequest,
-                        client_code: None,
-                        detail: Some("same complete native detail".to_owned()),
-                        claims: None,
-                    },
-                    cause,
-                )
-            } else {
-                NativeDeliveryResult::not_submitted("same complete native detail", false, cause)
-            };
-            let receipt = serde_json::to_value(delivery.receipt()).unwrap();
-            runtime.client.script_results(id, vec![delivery]);
-            runtime.fixture.receive_items(vec![item]).await.unwrap();
-            // Act.
-            let engine = runtime.engine();
-            engine.drive_due().await.unwrap();
-            // Assert: 507 keeps legacy Follow retry; 487 gives direct defects their precise home.
-            let outcome = runtime.fixture.local_outcome(id).await.unwrap();
-            if is_follow {
-                assert!(matches!(outcome, RecipientOutcome::Held));
-                assert_eq!(runtime.count(id).await, 1);
-                // The new attempt is admitted now with a not_before input.
-                // Its first real check schedules that deadline without I/O.
-                engine.drive_due().await.unwrap();
-                assert_eq!(runtime.client.calls(id), 1);
-                assert_eq!(
-                    runtime.next_attempt(id, 1).await,
-                    recorded_at().timestamp_millis() + 30_000
-                );
-                assert_eq!(
-                    read_native_push_record(&runtime, id).await.delivery_state,
-                    PushDeliveryState::Held
-                );
-            } else {
-                let expected = if cause == UnsentCause::InvalidInput {
-                    DeliveryFailureKind::InvalidPayload
-                } else {
-                    DeliveryFailureKind::ExecutionFailed
-                };
-                assert!(
-                    matches!(outcome, RecipientOutcome::Refused {reason: DeliveryRefusal::ProcessingFailed {kind}} if kind==expected)
-                );
-                assert_eq!(runtime.count(id).await, 0);
-                assert_eq!(
-                    read_native_push_record(&runtime, id).await.delivery_state,
-                    PushDeliveryState::Rejected
-                );
-            }
-            assert_eq!(
-                serde_json::to_value(
-                    read_native_push_record(&runtime, id)
-                        .await
-                        .last_outcome
-                        .unwrap()
-                )
-                .unwrap(),
-                receipt
-            );
-            assert_eq!(runtime.client.calls(id), 1);
-            drop(engine);
-            let runtime = runtime.reopen().await;
-            assert_eq!(runtime.count(id).await, u32::from(is_follow));
-            runtime.close().await;
-        }
+        // Arrange: identical classified no-effect failure through the real actor and SDK task.
+        let runtime = Runtime::new().await;
+        let item = runtime.fixture.item(&runtime.fixture.draft());
+        let id = item.id();
+        let delivery = if cause == UnsentCause::ProcessingFailure {
+            NativeDeliveryResult::rejected(
+                DeliveryRejection {
+                    native_failure: None,
+                    reason: DeliveryRejectionReason::UnsupportedCapability,
+                    next_action: DeliveryNextAction::CorrectRequest,
+                    client_code: None,
+                    detail: Some("same complete native detail".to_owned()),
+                    claims: None,
+                },
+                cause,
+            )
+        } else {
+            NativeDeliveryResult::not_submitted("same complete native detail", false, cause)
+        };
+        let receipt = serde_json::to_value(delivery.receipt()).unwrap();
+        runtime.client.script_results(id, vec![delivery]);
+        runtime.fixture.receive_items(vec![item]).await.unwrap();
+        // Act.
+        let engine = runtime.engine();
+        engine.drive_due().await.unwrap();
+        // The terminal result keeps the original classified receipt.
+        let outcome = runtime.fixture.local_outcome(id).await.unwrap();
+        let expected = if cause == UnsentCause::InvalidInput {
+            DeliveryFailureKind::InvalidPayload
+        } else {
+            DeliveryFailureKind::ExecutionFailed
+        };
+        assert!(
+            matches!(outcome, RecipientOutcome::Refused {reason: DeliveryRefusal::ProcessingFailed {kind}} if kind==expected)
+        );
+        assert_eq!(runtime.count(id).await, 0);
+        assert_eq!(
+            read_native_push_record(&runtime, id).await.delivery_state,
+            PushDeliveryState::Rejected
+        );
+        assert_eq!(
+            serde_json::to_value(
+                read_native_push_record(&runtime, id)
+                    .await
+                    .last_outcome
+                    .unwrap()
+            )
+            .unwrap(),
+            receipt
+        );
+        assert_eq!(runtime.client.calls(id), 1);
+        drop(engine);
+        let runtime = runtime.reopen().await;
+        assert_eq!(runtime.count(id).await, 0);
+        runtime.close().await;
     }
 }
 

@@ -14,19 +14,6 @@ const toolNames = (file: string, line: number, names: string): InventoryRow => (
   disposition: "duplicate",
   fixedBy: "D1",
 });
-/** A family call that hand-matches the -32050 rejection code and decodes its data as the family failure. */
-const rejectionDecode = (file: string, line: number, failure: string): InventoryRow => ({
-  file: `${R}${file}`,
-  line,
-  owner: "mcp",
-  kind: "content-parser",
-  defines: `tool error with literal code -32050 decoded from its data as ${failure}; the overload body rebuilt through admission_overload`,
-  usedBy: [CLIENT],
-  duplicateGroup: "mcp-tool-error-bodies",
-  disposition: "duplicate",
-  fixedBy: "D1",
-});
-
 export const rows: InventoryRow[] = [
   {
     file: `${R}acp_conversation.rs`,
@@ -248,48 +235,6 @@ export const rows: InventoryRow[] = [
     disposition: "duplicate",
     fixedBy: "D1",
   },
-  toolNames(
-    "board_fleet_calls.rs",
-    19,
-    "project_show, adr_create, workspace_create, board_create, project_claim, ... (23)",
-  ),
-  rejectionDecode(
-    "board_operations.rs",
-    50,
-    "BoardError (board_mutation_call; L105 board_call_with_timeout repeats it)",
-  ),
-  toolNames(
-    "board_project_calls.rs",
-    17,
-    "workstream_create, task_create, subtask_add, role_grant, fact_record, feed_read, ... (43)",
-  ),
-  toolNames(
-    "board_read_calls.rs",
-    16,
-    "request_effects, discovery_search, post_search, post_list, inbox_fetch, ... (11 sites)",
-  ),
-  {
-    file: `${R}board_repository.rs`,
-    line: 77,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "the client's verified service id (UuidIdentity) converted by string to a message_board ServiceId for RepositoryRef::Local (L77-L85): a service identity, not a SessionRef",
-    usedBy: [CLIENT],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  toolNames(
-    "board_thread_calls.rs",
-    24,
-    "thread_renew, thread_post, thread_create, thread_subscribe, thread_wait, ... (17)",
-  ),
-  rejectionDecode("board_thread_calls.rs", 176, "BoardError (thread_wait)"),
-  toolNames(
-    "board_view_calls.rs",
-    12,
-    "view_work, view_card, view_owner, view_lead_load, view_session_context",
-  ),
   {
     file: `${R}collaboration_client.rs`,
     line: 50,

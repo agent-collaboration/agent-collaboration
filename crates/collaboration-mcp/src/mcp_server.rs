@@ -23,8 +23,7 @@ use collaboration_protocol::{
     ProviderSessionInspectResult, ProviderSessionListParams, ProviderSessionListResult,
     ProviderSettingsAcceptRequest, ProviderSettingsFailure, ProviderSettingsResult,
     ProviderSettingsSetRequest, PushDeliveryState, PushMessageSendResult, PushRecordHistoryParams,
-    PushRecordListParams, PushRecordListResult, SessionMessageReplyResult,
-    ThreadSubscriptionWaitRequest, ThreadSubscriptionWaitResult, router_build_warning,
+    PushRecordListParams, PushRecordListResult, SessionMessageReplyResult, router_build_warning,
 };
 use collaboration_service::CollaborationApplication;
 use collaboration_service::collaboration_application::API_RESULT_BUDGET;
@@ -43,27 +42,22 @@ use serde::Deserialize;
 use std::{sync::Arc, time::Duration};
 
 mod application_tool_results;
-mod board_argument_classification;
 mod carrier_tools;
 mod catalog_descriptions;
-mod catalog_tools;
 mod conversation_operation_tools;
 mod conversation_tool_requests;
 mod conversation_tool_results;
 mod interaction_tools;
 mod message_tools;
-mod project_tool_schemas;
 mod result_converters;
 mod schema_binding;
 mod session_tools;
 mod tool_output_contract;
-mod wait_tools;
 use application_tool_results::{
-    application_result, call_abandoned_at_shutdown, caller_cancelled, domain_result,
-    operation_failure_result, rejection_failure, success_result, typed_failure_result,
+    application_result, call_abandoned_at_shutdown, caller_cancelled, operation_failure_result,
+    rejection_failure, success_result, typed_failure_result,
 };
 use catalog_descriptions::operation_description;
-use catalog_tools::{EmptyToolInput, register_board_tools};
 use conversation_operation_tools::register_conversation_operation_tools;
 use conversation_tool_requests::{
     ConversationCreatePromptToolRequest, ConversationCreateToolRequest,
@@ -79,11 +73,14 @@ use message_tools::message_failure_result;
 pub(crate) use result_converters::structured_tool_error;
 use result_converters::{
     failure, failure_naming, message_receipt_result, message_reply_receipt_result,
-    operation_error_result, structured_argument_refusal, structured_result,
-    thread_wait_outcome_unknown, validation_failure,
+    operation_error_result, structured_argument_refusal, structured_result, validation_failure,
 };
 use schema_binding::bind_native_schema_refs;
 use tool_output_contract::{McpToolError, McpToolOutput};
+
+#[derive(Debug, Default, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct EmptyToolInput {}
 
 /// The tools every server copy offers, routed and with their schemas bound once.
 pub(crate) struct ToolSurface {
@@ -96,9 +93,7 @@ impl ToolSurface {
         let mut router = CollaborationMcpServer::session_tool_router()
             + CollaborationMcpServer::message_tool_router()
             + CollaborationMcpServer::interaction_tool_router()
-            + CollaborationMcpServer::wait_tool_router()
             + CollaborationMcpServer::carrier_tool_router();
-        register_board_tools(&mut router);
         register_conversation_operation_tools(&mut router);
         let tools = resolve_tool_schemas(
             &router,

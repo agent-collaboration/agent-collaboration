@@ -359,7 +359,6 @@ async fn exercise_held_empty_thread() -> Result<(), Box<dyn std::error::Error + 
     );
     let subscription_delivery = collaboration_service::SubscriptionDeliveryService::new(
         collaboration_service::SubscriptionDeliveryServiceProps {
-            board_availability: collaboration_service::BoardAvailability::Unavailable,
             push_store: interactions.clone(),
             delivery: Arc::clone(&delivery),
             presence: Arc::clone(&presence),
@@ -374,8 +373,7 @@ async fn exercise_held_empty_thread() -> Result<(), Box<dyn std::error::Error + 
     )
     .map_err(std::io::Error::other)?
     .with_endpoints(vec![description])
-    .map_err(std::io::Error::other)?
-    .with_subscription_delivery_service(subscription_delivery.clone(), presence.clone());
+    .map_err(std::io::Error::other)?;
     let (identity, native_mail) = native_mail_owner::start(
         identity,
         fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7())?,

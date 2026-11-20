@@ -3,7 +3,6 @@
 pub mod bounded_command;
 pub mod d1_host_lifecycle;
 pub mod d1_host_plan;
-pub mod d1_native_runtime;
 pub mod driver_error;
 pub mod driver_records;
 pub mod host_lifecycle;

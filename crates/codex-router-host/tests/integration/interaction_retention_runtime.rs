@@ -97,7 +97,6 @@ async fn host_trims_a_settled_push_at_its_cutoff_on_its_clock_and_keeps_current_
     let current = seed_delivered(&root, direct_message("2026-11-03T00:00:00Z")?).await?;
     let clock_listener = crate::host_clock_control::prepare(&root)?;
     let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
-        board_session: None,
         directory: root.clone(),
         codex_home: root.clone(),
         backend_socket: root.join("unavailable.sock"),

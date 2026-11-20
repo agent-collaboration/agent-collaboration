@@ -1,7 +1,6 @@
 //! Startup attachments retain physical ownership and weak lifetimes.
 use super::MailDeliveryRuntime;
 use crate::ApplicationFixture;
-use crate::BoardAvailability;
 use crate::MailPushDeliveryProps;
 use crate::SubscriptionDeliveryService;
 use crate::SubscriptionDeliveryServiceProps;
@@ -29,7 +28,6 @@ async fn fixture() -> (
         .expect("machine");
     let router = Arc::new(SessionDeliveryRouter::new(Vec::new()));
     let actors = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
-        board_availability: BoardAvailability::Unavailable,
         push_store: interactions.clone(),
         delivery: router.clone(),
         presence: router.clone(),
@@ -52,7 +50,6 @@ async fn fixture() -> (
                 machine,
                 clock: actors.runtime_clock(),
             },
-            None,
         )
         .expect("mail runtime"),
     );
@@ -88,58 +85,6 @@ async fn startup_mail_refuses_a_different_physical_interaction_store() {
         )
         .is_ok()
     );
-    drop(mail);
-    drop(construction);
-    actors.shutdown().await;
-}
-
-#[tokio::test]
-async fn startup_follow_attachment_keeps_neither_admission_nor_publisher_alive() {
-    let (directory, construction, mail, actors) = fixture().await;
-    let registry = Arc::new(collaboration_runtime::ProjectStoreRegistry::new(
-        directory.path(),
-        construction.installation_peer,
-        construction.runtime_clock(),
-        message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
-            .expect("32-byte fixture cursor key"),
-    ));
-    let fleet = Arc::new(collaboration_runtime::FleetClient::new(
-        &message_board_storage::FleetStore::open(
-            &(directory.path()).join(message_board_storage::FleetStore::FILE_NAME),
-        )
-        .await
-        .expect("fleet"),
-        Arc::new(crate::test_project_runtime::PendingRegistration),
-        None,
-    ));
-    let admission = Arc::new(
-        crate::ProjectAdmission::new(crate::ProjectAdmissionProps {
-            clock: construction.runtime_clock(),
-            registry,
-            fleet,
-            identity: construction.machine_identity.clone(),
-        })
-        .expect("admission"),
-    );
-    let publisher = Arc::new(crate::NotificationPublisher::new(
-        admission.clone(),
-        construction
-            .interaction_store
-            .as_ref()
-            .expect("physical owner")
-            .clone(),
-        Arc::downgrade(&mail),
-    ));
-    let admission_weak = Arc::downgrade(&admission);
-    let publisher_weak = Arc::downgrade(&publisher);
-
-    actors.attach_follow_admission(admission_weak.clone(), publisher_weak.clone());
-    publisher.shutdown().await;
-    drop(publisher);
-    drop(admission);
-
-    assert!(publisher_weak.upgrade().is_none());
-    assert!(admission_weak.upgrade().is_none());
     drop(mail);
     drop(construction);
     actors.shutdown().await;

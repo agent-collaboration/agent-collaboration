@@ -2,7 +2,6 @@
 
 #[path = "../support/acp_provider_backend.rs"]
 mod acp_provider_backend;
-use collaboration_application_test_support::board_fixture;
 #[path = "../support/native_delivery.rs"]
 mod native_delivery;
 use codex_acp_adapter::test_support::native_permission_echo;
@@ -11,7 +10,7 @@ mod read_cost_counter;
 #[path = "../support/served_api.rs"]
 mod served_api;
 
-use board_fixture::native_mail_owner;
+use collaboration_application_test_support::native_mail_owner;
 use read_cost_counter::sql_cost_classification;
 
 mod acp_listener_admission;
@@ -41,8 +40,6 @@ mod native_generation_admission;
 mod native_inspect_permission_mode;
 mod native_listener_recovery;
 mod native_relay_handshake;
-mod project_registry;
-mod project_store_registry;
 mod provider_conversation_dispatch;
 mod provider_operation_store;
 mod provider_session_control;
@@ -54,7 +51,6 @@ mod public_process_recovery;
 mod push_surface;
 mod question_api_path;
 mod read_cost_counter_contracts;
-mod reader_state_corrections;
 mod service_identity_storage;
 mod session_delivery_contract;
 mod session_delivery_dependency_boundaries;

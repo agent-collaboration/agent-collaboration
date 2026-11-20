@@ -177,18 +177,6 @@ impl ProofContext {
         .await
     }
 
-    // Shared helper is also compiled by scripted acceptance binaries without DX tasks.
-
-    pub async fn start_skill_thread(&mut self, role: &str) -> ProofResult<SessionRef> {
-        self.start_thread_with_instructions(
-            role,
-            format!(
-                "You are {role} in an isolated local developer-experience evaluation. Work from the supplied project context and installed skill guidance. Choose and execute the appropriate workflow yourself. Never inspect credentials, change service configuration, access production services or existing user threads, or spawn other agents. Create or change only the disposable board resources explicitly authorized by your task; otherwise preserve existing resources. Report access or capability failures directly."
-            ),
-        )
-        .await
-    }
-
     pub async fn start_messaging_skill_thread(
         &mut self,
         role: &str,
@@ -375,31 +363,6 @@ impl ProofContext {
             .cloned()
             .ok_or_else(|| "native turn history missing".into())
     }
-    pub async fn wait_for_text(
-        &mut self,
-        target: &SessionRef,
-        text: &str,
-    ) -> ProofResult<Vec<Value>> {
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(180);
-        let mut interval = tokio::time::interval(Duration::from_millis(500));
-        loop {
-            interval.tick().await;
-            let turns = self.turns(target).await?;
-            if turns.iter().any(|turn| agent_text(turn).contains(text)) {
-                return Ok(turns);
-            }
-            if tokio::time::Instant::now() >= deadline {
-                self.record(
-                    "waitExpired",
-                    json!({"target":target,"expectedMarker":text,"observedTurns":turns}),
-                )?;
-                return Err(format!(
-                    "Luna did not emit expected marker {text}; inspect the private proof events"
-                )
-                .into());
-            }
-        }
-    }
     pub fn record(&self, event: &str, details: Value) -> ProofResult<()> {
         let mut file = std::fs::OpenOptions::new()
             .append(true)
@@ -423,7 +386,4 @@ pub fn agent_text(turn: &Value) -> String {
                 .join("\n")
         })
         .unwrap_or_default()
-}
-pub fn shell_quote(text: &str) -> String {
-    format!("'{}'", text.replace('\'', "'\\''"))
 }

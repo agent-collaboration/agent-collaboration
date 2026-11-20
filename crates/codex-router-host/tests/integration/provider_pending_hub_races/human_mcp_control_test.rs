@@ -363,7 +363,6 @@ async fn dropped_human_mcp_waiter_does_not_cancel_or_redispatch_the_released_tur
     let release = root.path().join("release");
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
-            board_session: None,
             owner_human_id: Some(message_board::HumanId::try_from(
                 "fixture-operator".to_owned(),
             )?),

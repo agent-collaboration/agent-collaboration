@@ -16,59 +16,6 @@ fn main() {
         print!("{}", agent_collaboration::command_help());
         return;
     }
-    if let Some(argument) = arguments.first().and_then(|argument| argument.to_str())
-        && argument.starts_with("board ")
-    {
-        let message = "The board command was passed as one argument. Pass each word as a separate argument, for example: agent-collaboration workspace list --json";
-        if argument
-            .split_ascii_whitespace()
-            .any(|word| word == "--json")
-            || arguments
-                .iter()
-                .skip(1)
-                .any(|argument| argument == "--json")
-        {
-            println!(
-                "{}",
-                serde_json::json!({"kind":"error","error":{"kind":"invalidUsage","stage":"validation","message":message,"nextAction":"correctRequest","details":{"kind":"none"}}})
-            );
-        } else {
-            eprintln!("{message}");
-        }
-        std::process::exit(2);
-    }
-    if arguments
-        .first()
-        .and_then(|arg| arg.to_str())
-        .is_some_and(|arg| {
-            matches!(
-                arg,
-                "board"
-                    | "request-effects"
-                    | "workspace"
-                    | "project"
-                    | "repository"
-                    | "post"
-                    | "thread"
-                    | "inbox"
-                    | "search"
-                    | "workstream"
-                    | "task"
-                    | "subtask"
-                    | "work-trail"
-                    | "adr"
-                    | "process"
-                    | "move"
-                    | "fact"
-                    | "feed"
-                    | "role"
-                    | "view"
-                    | "hook"
-            )
-        })
-    {
-        std::process::exit(agent_collaboration::run_board_command(arguments));
-    }
     if let Some(exit) = agent_collaboration::refuse_retired_command_group(&arguments) {
         std::process::exit(exit);
     }

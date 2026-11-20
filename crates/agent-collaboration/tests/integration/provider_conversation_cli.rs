@@ -352,7 +352,6 @@ async fn live_cursor_create_wait_prompt_wait_through_compiled_cli() {
 
     let runtime = Box::pin(CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
-            board_session: None,
             directory: service_directory.clone(),
             codex_home: std::env::var_os("CODEX_HOME")
                 .map(std::path::PathBuf::from)
@@ -830,4 +829,23 @@ async fn run_cli(root: &std::path::Path, arguments: Vec<String>) -> std::process
 )]
 fn cleanup_unpublished_fixture(root: &std::path::Path) {
     std::fs::remove_dir(root).expect("directory cleanup");
+}
+
+#[test]
+fn conversation_create_help_explains_codex_and_provider_setting_rules() {
+    use std::process::Command;
+    let output = Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
+        .args(["conversation", "create", "--help"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let help = String::from_utf8_lossy(&output.stdout);
+    assert!(help.contains("required for Codex endpoints"), "{help}");
+    assert!(
+        help.contains("provider endpoints accept advertised"),
+        "{help}"
+    );
+    assert!(help.contains("--mode <MODE>"), "{help}");
+    assert!(help.contains("--model <MODEL>"), "{help}");
+    assert!(help.contains("--effort <EFFORT>"), "{help}");
 }

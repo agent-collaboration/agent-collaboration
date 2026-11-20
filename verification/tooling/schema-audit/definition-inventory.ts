@@ -12,8 +12,6 @@ import { rows as agentCollaboration2 } from "./definition-inventory/agent-collab
 import { rows as agentCollaboration } from "./definition-inventory/agent-collaboration.ts";
 import { rows as agentSessionInventory } from "./definition-inventory/agent-session-inventory.ts";
 import { rows as agentSessionTui } from "./definition-inventory/agent-session-tui.ts";
-import { rows as boardFleetSync } from "./definition-inventory/board-fleet-sync.ts";
-import { rows as boardSyncProtocol } from "./definition-inventory/board-sync-protocol.ts";
 import { rows as claudeCodePeerMessaging } from "./definition-inventory/claude-code-peer-messaging.ts";
 import { rows as codexAcpAdapter } from "./definition-inventory/codex-acp-adapter.ts";
 import { rows as codexNativeIntegration } from "./definition-inventory/codex-native-integration.ts";
@@ -42,7 +40,6 @@ import { rows as collaborationService } from "./definition-inventory/collaborati
 import { rows as fleetIdentityProtocol } from "./definition-inventory/fleet-identity-protocol.ts";
 import { rows as interactionStorage } from "./definition-inventory/interaction-storage.ts";
 import { rows as lifecycleObservation } from "./definition-inventory/lifecycle-observation.ts";
-import { rows as messageBoardStorage } from "./definition-inventory/message-board-storage.ts";
 import { rows as messageBoard2 } from "./definition-inventory/message-board-2.ts";
 import { rows as messageBoard } from "./definition-inventory/message-board.ts";
 import { rows as providersClaudeAcp } from "./definition-inventory/providers-claude-acp.ts";
@@ -57,8 +54,6 @@ export const DEFINITION_INVENTORY: readonly InventoryRow[] = [
   ...agentCollaboration,
   ...agentSessionInventory,
   ...agentSessionTui,
-  ...boardFleetSync,
-  ...boardSyncProtocol,
   ...claudeCodePeerMessaging,
   ...codexAcpAdapter,
   ...codexNativeIntegration,
@@ -87,7 +82,6 @@ export const DEFINITION_INVENTORY: readonly InventoryRow[] = [
   ...fleetIdentityProtocol,
   ...interactionStorage,
   ...lifecycleObservation,
-  ...messageBoardStorage,
   ...messageBoard,
   ...messageBoard2,
   ...providersClaudeAcp,

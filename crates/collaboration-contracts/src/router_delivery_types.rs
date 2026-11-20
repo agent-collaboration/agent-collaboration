@@ -1,5 +1,5 @@
 //! Router-local evidence changes no board delivery payload or wire identity.
-use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
+use board_sync_protocol::BoardDeliveryTypes;
 use collaboration_protocol::{DeliveryReceipt, ProviderAcpRouteEvidence};
 use fleet_sync_protocol::{ConsumerProtocol, DeliveryTypes};
 use runtime_primitives::SyncTime;
@@ -54,12 +54,12 @@ pub struct RouterConsumerProtocol;
 
 impl ConsumerProtocol for RouterConsumerProtocol {
     type Delivery = RouterDeliveryTypes;
-    type Request = <BoardConsumerProtocol as ConsumerProtocol>::Request;
-    type Answer = <BoardConsumerProtocol as ConsumerProtocol>::Answer;
-    type ServerRequest = <BoardConsumerProtocol as ConsumerProtocol>::ServerRequest;
-    type ClientAnswer = <BoardConsumerProtocol as ConsumerProtocol>::ClientAnswer;
-    type Notice = <BoardConsumerProtocol as ConsumerProtocol>::Notice;
-    type Annotation = <BoardConsumerProtocol as ConsumerProtocol>::Annotation;
+    type Request = ();
+    type Answer = ();
+    type ServerRequest = ();
+    type ClientAnswer = ();
+    type Notice = ();
+    type Annotation = ();
 }
 
 #[cfg(test)]

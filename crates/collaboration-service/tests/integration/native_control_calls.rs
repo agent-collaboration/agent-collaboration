@@ -7,7 +7,6 @@ use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::{CodexGeneration, EndpointDescription, SessionRef};
 use collaboration_runtime::CodexAppServerDeliveryRoute;
 use collaboration_service::ApplicationFixture;
-use collaboration_service::BoardAvailability;
 
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
@@ -162,7 +161,6 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
     .unwrap_or_else(|error| panic!("machine identity: {error}"));
     let subscription_delivery =
         SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
-            board_availability: BoardAvailability::Unavailable,
             push_store: broker.interaction_store(),
             delivery: Arc::clone(&delivery),
             presence: Arc::clone(&presence),
@@ -177,9 +175,7 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
         .install_session_delivery(Arc::clone(&delivery))
         .unwrap_or_else(|error| panic!("broker delivery: {error}"));
     let interactions = broker.interaction_store();
-    let identity = identity
-        .with_subscription_delivery_service(subscription_delivery.clone(), presence.clone())
-        .with_approval_broker(broker);
+    let identity = identity.with_approval_broker(broker);
     let (identity, native_mail) = native_mail_owner::start(
         identity,
         fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).unwrap(),

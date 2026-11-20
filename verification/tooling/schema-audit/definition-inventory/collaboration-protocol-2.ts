@@ -150,37 +150,6 @@ export const rows: InventoryRow[] = [
     disposition: "boundary-encoding",
   },
   {
-    file: `${P}thread_subscription_contract.rs`,
-    line: 12,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP thread_subscribe / thread_unsubscribe / thread_subscriptions: ThreadSubscribeRequest L12, ThreadUnsubscribeRequest L23, ThreadSubscriptionsRequest L33, ThreadSubscriptionsResult L39, ThreadSubscriptionState L46, ThreadSubscriptionPresence L59, ThreadSubscriptionView L67",
-    usedBy: [
-      { part: "N11" },
-      { crate: "collaboration-service" },
-      { crate: "collaboration-client" },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
-    file: `${P}thread_subscription_wait.rs`,
-    line: 33,
-    owner: "router-vocabulary",
-    kind: "rust-type",
-    defines:
-      "MCP thread_wait: ThreadSubscriptionWaitFilter L21, ThreadSubscriptionWaitRequest L33, InvalidSubscriptionWait L57, SubscriptionWaitBatch L106, ThreadSubscriptionWaitResult L127, SubscriptionRenewalEntry L134, SubscriptionRenewalOutcome L140, ThreadSubscriptionWaitOutcome L152",
-    usedBy: [
-      { part: "N11" },
-      { crate: "collaboration-service" },
-      { crate: "collaboration-client" },
-      { crate: "agent-collaboration" },
-    ],
-    duplicateGroup: null,
-    disposition: "boundary-encoding",
-  },
-  {
     file: `${P}address_book_contract.rs`,
     line: 67,
     owner: "router-vocabulary",

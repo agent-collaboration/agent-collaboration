@@ -37,7 +37,6 @@ async fn collaboration_api_reaches_host_owned_provider_and_reuses_target() {
 
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
-            board_session: None,
             directory: root.path().to_owned(),
             codex_home: root.path().to_owned(),
             backend_socket: root.path().join("backend.sock"),
@@ -223,7 +222,6 @@ async fn provider_process_exit_retires_advertisement_and_rejects_new_admission()
         .expect("provider executable");
     let start = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
-            board_session: None,
             directory: root.path().to_owned(),
             codex_home: root.path().to_owned(),
             backend_socket: root.path().join("backend.sock"),

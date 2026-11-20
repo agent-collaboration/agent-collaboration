@@ -1,38 +1,22 @@
 //! Original test roots retain their case namespaces.
 
-use collaboration_application_test_support::board_fixture;
-#[path = "../support/host_clock_control.rs"]
-mod host_clock_control;
-#[path = "../support/host_replacement_cleanup.rs"]
-mod host_replacement_cleanup;
-#[path = "../support/operator_client.rs"]
-mod operator_client;
-#[path = "../support/provider_acp_message_fifo_support.rs"]
-mod provider_acp_message_fifo_support;
-#[path = "../support/provider_conversation_submission.rs"]
-mod provider_conversation_submission;
-#[path = "../support/provider_fixture_launch.rs"]
-mod provider_fixture_launch;
-#[cfg(test)]
-#[path = "../support/registered_route_project.rs"]
-mod registered_route_project;
-#[path = "../support/session_follow_fixture.rs"]
-mod session_follow_fixture;
-
 mod acp_client_dependency_structure;
 mod acp_metadata_projection;
 mod auth_file_reload;
 mod backend_publication;
-mod board_failure_isolation;
 mod claude_code_peer_delivery_route;
 mod claude_peer_not_running_dm;
-mod claude_peer_subscription_resume;
+mod claude_peer_subscription_clock;
 mod collaboration_runtime;
 mod external_provider_composition;
 mod external_provider_recovery;
 mod external_provider_supervisor;
 mod fixed_mcp_bind;
 mod global_harness_selection;
+#[path = "../support/host_clock_control.rs"]
+mod host_clock_control;
+#[path = "../support/host_replacement_cleanup.rs"]
+mod host_replacement_cleanup;
 mod host_replacement_failures;
 mod interaction_retention_runtime;
 mod journal_failure_isolation;
@@ -40,17 +24,24 @@ mod local_mail_cancellation;
 mod maintenance_authority;
 mod native_claude_catalogue;
 mod native_observer_restart;
+#[path = "../support/operator_client.rs"]
+mod operator_client;
 mod operator_transport_contract;
 mod process_lifecycle;
-mod production_enrollment;
 mod provider_acp_delivery_route;
 mod provider_acp_loaded_only_races;
 mod provider_acp_message_fifo;
+#[path = "../support/provider_acp_message_fifo_support.rs"]
+mod provider_acp_message_fifo_support;
 mod provider_acp_queue_route;
 mod provider_acp_steering_route;
 mod provider_content_commands;
+#[path = "../support/provider_conversation_submission.rs"]
+mod provider_conversation_submission;
 mod provider_endpoint_routing_structure;
 mod provider_face_composition;
+#[path = "../support/provider_fixture_launch.rs"]
+mod provider_fixture_launch;
 mod provider_native_models;
 mod provider_native_skills;
 mod provider_pending_hub_races;
@@ -61,7 +52,6 @@ mod runtime_lifecycle;
 mod runtime_restart;
 mod runtime_status_retirement;
 mod session_message_route_composition;
-mod shared_fleet_store;
 mod singleton_authority;
 mod stale_endpoint_sockets;
 mod update_reexec;

@@ -121,14 +121,6 @@ export const section: LedgerSection = {
       note: "Redacted human doctor report rendering (DoctorReport 42, render 55); no message shapes.",
     },
     {
-      file: "crates/codex-router-cli/src/fleet_command/arguments.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          "central-only: clap arguments for `codex-router fleet enroll|status` (FleetCommand 6, EnrollArguments 52, StatusArguments 82); central enrollment inputs, no message on the six edges or four protocols",
-      },
-    },
-    {
       file: "crates/codex-router-cli/src/fleet_command/enrollment_credentials.rs",
       disposition: {
         kind: "excluded",
@@ -159,14 +151,6 @@ export const section: LedgerSection = {
         kind: "excluded",
         reason:
           "central-only: maps EnrollmentDecision::MachineEnrolled (21-31) into the local FleetEnrollmentDocument (68-87) and staged secrets; central enrollment state, not one of the six edges or four protocols",
-      },
-    },
-    {
-      file: "crates/codex-router-cli/src/fleet_command/mod.rs",
-      disposition: {
-        kind: "excluded",
-        reason:
-          "central-only: Serialize stdout replies for fleet commands (Activation 55, FileStatus 61, StatusReply 69, EnrollmentReply 76 re-serializing EnrollmentDecision) written at 186-191; central enrollment status output, not one of the six edges or four protocols",
       },
     },
     {

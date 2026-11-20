@@ -7,7 +7,6 @@ use collaboration_mail_protocol::CarrierAcceptance;
 use collaboration_protocol::DeliveryOutcome;
 use fleet_sync_delivery::{DeliveryError, LocalDelivery, LocalOutcome};
 use fleet_sync_protocol::{DeliveryFailureKind, DeliveryRefusal, RecipientRefusalCode};
-use runtime_primitives::SyncTime;
 
 pub(crate) fn local_message_outcome(
     delivery: NativeDeliveryResult,
@@ -73,50 +72,6 @@ fn recipient_refused(
 fn processing_failed(kind: DeliveryFailureKind) -> LocalOutcome<CarrierAcceptance> {
     LocalOutcome::Refused {
         reason: DeliveryRefusal::ProcessingFailed { kind },
-    }
-}
-
-pub(crate) fn local_follow_outcome(
-    mut observation: collaboration_contracts::RouterLocalObservation,
-    retry_attempts: u32,
-    now: SyncTime,
-) -> LocalDelivery<RouterDeliveryTypes> {
-    let outcome = match &observation.receipt.outcome {
-        DeliveryOutcome::Started => LocalOutcome::Delivered {
-            acceptance: CarrierAcceptance::Started,
-        },
-        DeliveryOutcome::Steered => LocalOutcome::Delivered {
-            acceptance: CarrierAcceptance::Steered,
-        },
-        DeliveryOutcome::StartedOrSteered => LocalOutcome::Delivered {
-            acceptance: CarrierAcceptance::StartedOrSteered,
-        },
-        DeliveryOutcome::Queued => LocalOutcome::Delivered {
-            acceptance: CarrierAcceptance::Queued,
-        },
-        DeliveryOutcome::PeerMessageWritten => LocalOutcome::Delivered {
-            acceptance: CarrierAcceptance::PeerMessageWritten,
-        },
-        DeliveryOutcome::Unknown => LocalOutcome::Uncertain,
-        DeliveryOutcome::NotSubmitted {
-            retryable: true, ..
-        } => LocalOutcome::Held { until: None },
-        DeliveryOutcome::NotSubmitted { .. } | DeliveryOutcome::Rejected(_) => LocalOutcome::Held {
-            until: Some(
-                now.after(crate::subscription_delivery::delivery_retry_delay(
-                    retry_attempts,
-                )),
-            ),
-        },
-    };
-    let scheduled_retry_at = match &outcome {
-        LocalOutcome::Held { until } => *until,
-        _ => None,
-    };
-    observation.scheduled_retry_at = scheduled_retry_at;
-    LocalDelivery {
-        outcome,
-        observation,
     }
 }
 

@@ -13,7 +13,7 @@ fn a_journal_write_signal_releases_the_pending_prompt_read() -> FixtureResult {
         .build()?
         .block_on(async {
     let directory = tempfile::tempdir()?;
-    let recipient = AcpRecipient::arm(directory.path(), &identity(), "journal-signal-reader")?;
+    let recipient = AcpRecipient::arm(directory.path(), &uuid::Uuid::now_v7().to_string(), "journal-signal-reader")?;
     let mut provider = tokio::process::Command::new(node_test_fixture::node_executable()?)
         .arg(node_test_fixture::fixture_program(
             "provider-loaded-route-agent.ts",
@@ -74,8 +74,11 @@ fn an_already_written_prompt_needs_no_later_notification() -> FixtureResult {
         .build()?
         .block_on(async {
             let directory = tempfile::tempdir()?;
-            let recipient =
-                AcpRecipient::arm(directory.path(), &identity(), "journal-existing-reader")?;
+            let recipient = AcpRecipient::arm(
+                directory.path(),
+                &uuid::Uuid::now_v7().to_string(),
+                "journal-existing-reader",
+            )?;
             let line = json!({"method":"session/prompt","params": {
                 "sessionId":recipient.target.session_id,
                 "prompt":[{"type":"text","text":"existing literal prompt"}]

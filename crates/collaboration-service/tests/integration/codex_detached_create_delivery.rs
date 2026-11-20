@@ -13,7 +13,6 @@ use collaboration_runtime::CodexAppServerDeliveryRoute;
 use collaboration_runtime::CodexConversationOperationRecorder;
 use collaboration_runtime::EndpointDirectory;
 use collaboration_service::ApplicationFixture;
-use collaboration_service::BoardAvailability;
 
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
@@ -138,7 +137,6 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
     );
     let subscription_delivery =
         SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
-            board_availability: BoardAvailability::Unavailable,
             push_store: interactions.clone(),
             delivery: Arc::clone(&delivery),
             presence: Arc::clone(&presence),
@@ -152,8 +150,7 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
             .with_endpoints(vec![description])?
             .with_native_backend(backend_config)?
             .with_provider_operation_store(Arc::clone(&store))
-            .with_codex_conversation_recorder(Arc::clone(&recorder))
-            .with_subscription_delivery_service(subscription_delivery.clone(), presence.clone());
+            .with_codex_conversation_recorder(Arc::clone(&recorder));
     let (identity, native_mail) = native_mail_owner::start(
         identity,
         fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7())?,

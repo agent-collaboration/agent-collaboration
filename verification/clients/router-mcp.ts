@@ -3,7 +3,7 @@ import { decode, encode } from "../exact-json.ts";
 import { Remote } from "../machines/remote.ts";
 import { shellQuote } from "../machines/owned-process.ts";
 import { ObservationOpen } from "../receipt.ts";
-import { boardIdentity } from "./board-requests.ts";
+import { requestIdentity } from "./request-identity.ts";
 
 export type McpOutcome =
   | { readonly kind: "answered"; readonly value: unknown }
@@ -104,7 +104,7 @@ export class RouterMcp {
     seconds = 30,
   ): Promise<McpOutcome> {
     z.number().int().positive().max(120).parse(seconds);
-    const id = boardIdentity();
+    const id = requestIdentity();
     let reply: HttpReply;
     try {
       reply = await this.request(

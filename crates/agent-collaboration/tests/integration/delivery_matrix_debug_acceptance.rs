@@ -57,16 +57,10 @@ use delivery_matrix_support::{
 #[path = "../delivery_matrix/acp_target.rs"]
 mod delivery_matrix_acp_target;
 use proof_context::{ProofContext, ProofResult};
-#[path = "../delivery_matrix/subscription.rs"]
-mod subscription;
 use serde_json::{Value, json};
 use std::time::Duration;
-use subscription::{
-    board_subscription_push, board_subscription_push_targets, verify_subscription_notice,
-};
 
 const ACP_TARGET_EXPECTED_PROMPTS: usize = 6;
-pub(super) const SUBSCRIPTION_NOTICE_LABEL: &str = "🧵 Router: new thread activity";
 
 #[tokio::test]
 #[ignore = "requires an owned isolated CLI Host with scripted provider fixture"]
@@ -206,34 +200,6 @@ async fn exercise_delivery_matrix(config_guard: &ConfigHashGuard) -> ProofResult
         config_guard.verify()?;
     }
 
-    let codex = proof.start_thread("Board subscription recipient").await?;
-    let codex_marker = matrix_marker("boardSubscription", "codex");
-    let peer_marker = matrix_marker("boardSubscription", "claude");
-    board_subscription_push(
-        &mut proof,
-        &sender,
-        &codex,
-        &peer.target,
-        &codex_marker,
-        &peer_marker,
-    )
-    .await?;
-    let codex_notice = wait_for_input_marker(
-        &mut proof,
-        &codex,
-        SUBSCRIPTION_NOTICE_LABEL,
-        Duration::from_secs(120),
-    )
-    .await?;
-    verify_subscription_notice(&mut proof, &codex, &codex_notice, &codex_marker).await?;
-    records.push(json!({"producer":"boardSubscription","target":"codex","status":"pass","evidence":"neutral thread/read notice and stored-range fetch"}));
-    config_guard.verify()?;
-    let peer_notice = peer
-        .expect_text_with_timeout(SUBSCRIPTION_NOTICE_LABEL, Duration::from_secs(120))
-        .await?;
-    let peer_target = peer.target.clone();
-    verify_subscription_notice(&mut proof, &peer_target, &peer_notice, &peer_marker).await?;
-    records.push(json!({"producer":"boardSubscription","target":"claudeCodePeer","status":"pass","evidence":"neutral peer input and stored-range fetch"}));
     config_guard.verify()?;
 
     let codex = create_empty_conversation(&proof, &sender).await?;

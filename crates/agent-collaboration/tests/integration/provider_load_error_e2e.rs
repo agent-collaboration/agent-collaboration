@@ -84,7 +84,6 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
         .expect("private Host root");
     let runtime = Box::pin(CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
-            board_session: None,
             directory: root.path().to_owned(),
             codex_home: root.path().to_owned(),
             backend_socket: root.path().join("backend.sock"),

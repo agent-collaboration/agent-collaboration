@@ -26,7 +26,6 @@ mod central_command;
 mod credential_runtime;
 mod credential_upkeep_worker;
 pub mod doctor;
-mod fleet_command;
 mod host_command;
 mod live;
 mod presentation;
@@ -38,7 +37,6 @@ mod telemetry;
 pub mod token;
 
 use account::AccountCommand;
-use fleet_command::FleetCommand;
 use host_command::HostCommand;
 use live::LiveCommand;
 use profile::CodexRouterProfile;
@@ -100,10 +98,7 @@ pub async fn run_async() -> i32 {
     let context = CliContext::from_process();
     let parsed_command = CliCommand::parse(args.clone());
     let uses_async_dispatch = matches!(&parsed_command, Ok(CliCommand::Quota(_)))
-        || matches!(
-            &parsed_command,
-            Ok(CliCommand::Host(_) | CliCommand::Fleet(_))
-        );
+        || matches!(&parsed_command, Ok(CliCommand::Host(_)));
     #[cfg(unix)]
     let uses_async_dispatch =
         uses_async_dispatch || matches!(&parsed_command, Ok(CliCommand::Central(_)));
@@ -216,10 +211,6 @@ where
         #[cfg(unix)]
         CliCommand::Central(command) => {
             central_command::run_central_command(command, stdout).await?;
-            stderr.flush().map_err(CliError::Stderr)
-        }
-        CliCommand::Fleet(command) => {
-            fleet_command::run_fleet_command(command, stdout).await?;
             stderr.flush().map_err(CliError::Stderr)
         }
         CliCommand::Host(command) => {
@@ -643,9 +634,6 @@ where
         CliCommand::Central(_) => {
             return Err(central_command::CentralCommandError::AsyncDispatchRequired.into());
         }
-        CliCommand::Fleet(_) => {
-            return Err(fleet_command::FleetCommandError::AsyncDispatchRequired.into());
-        }
         CliCommand::Version => {
             writeln!(stdout, "codex-router {}", env!("CARGO_PKG_VERSION"))
                 .map_err(CliError::Stdout)?;
@@ -853,7 +841,6 @@ commands:
   host app-server restart        Restart managed Codex without updating it
   host app-server update         Update managed Codex and activate it if changed
   host router restart            Restart the router when host-owned
-  fleet status                  Inspect enrollment metadata without restarting
   central serve --config FILE   Run a self-hosted central
   doctor                        Diagnose local router setup
   profile print                 Print the Codex profile snippet

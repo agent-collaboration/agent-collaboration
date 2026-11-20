@@ -4,7 +4,6 @@ use std::{net::SocketAddr, os::unix::fs::PermissionsExt as _};
 
 fn runtime_inputs(directory: &std::path::Path) -> CollaborationRuntimeInputs {
     CollaborationRuntimeInputs {
-        board_session: None,
         directory: directory.to_owned(),
         codex_home: directory.to_owned(),
         backend_socket: directory.join("backend.sock"),
@@ -21,47 +20,6 @@ fn service_manifest(directory: &std::path::Path) -> ServiceManifest {
         &std::fs::read(directory.join("service.json")).expect("published service manifest"),
     )
     .expect("typed service manifest")
-}
-
-#[tokio::test]
-async fn differing_enrollment_peer_refuses_before_publishing_the_host() {
-    let root = tempfile::tempdir().expect("peer mismatch Host fixture");
-    std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
-        .expect("private Host fixture");
-    let original = collaboration_runtime::load_installation_peer(root.path()).expect("owned peer");
-    let other =
-        fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).expect("other enrollment peer");
-    assert_ne!(original, other);
-    let mut inputs = runtime_inputs(root.path());
-    inputs.board_session = Some(board_fleet_sync::BoardSessionInputs {
-        peer: other,
-        relay: "0192a1b2-c3d4-7000-8000-000000000003"
-            .parse()
-            .expect("configured fixture relay"),
-        receiver: fleet_sync_protocol::ReceiverId::new(uuid::Uuid::now_v7())
-            .expect("enrollment receiver"),
-        endpoint: fleet_sync_session::Endpoint::new("ws://127.0.0.1:9/session")
-            .expect("fixture endpoint"),
-        access: board_fleet_sync::AccessServiceToken::new("fixture-access", "fixture-secret")
-            .expect("fixture access"),
-        credential: fleet_sync_session::PeerCredential::new("Bearer peer-mismatch-fixture")
-            .expect("fixture credential"),
-    });
-    let error = match CollaborationRuntime::start(inputs).await {
-        Err(error) => error,
-        Ok(runtime) => {
-            runtime.shutdown().await.expect("unexpected Host cleanup");
-            panic!("Host accepted a different enrollment peer");
-        }
-    };
-    assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
-    assert!(error.to_string().contains("enrollment peer differs"));
-    assert!(!root.path().join("service.json").exists());
-    assert!(!root.path().join("control.sock").exists());
-    assert_eq!(
-        collaboration_runtime::load_installation_peer(root.path()).expect("unchanged peer"),
-        original
-    );
 }
 
 #[tokio::test]
@@ -112,7 +70,6 @@ async fn host_startup_publishes_the_configured_router_proxy_port() {
 
     let runtime = CollaborationRuntime::start_for_host_with_router_proxy_endpoint(
         HostCollaborationInputs {
-            enrollment_reset_directory: root.path().to_owned(),
             remote_access: None,
             collaboration_runtime: runtime_inputs(root.path()),
             router_proxy_endpoint,

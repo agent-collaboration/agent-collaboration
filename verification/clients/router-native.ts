@@ -3,7 +3,7 @@ import { decode, encode } from "../exact-json.ts";
 import { OwnedProcess, shellQuote } from "../machines/owned-process.ts";
 import { Remote } from "../machines/remote.ts";
 import type { Artifact, Machine } from "../declaration.ts";
-import { boardIdentity } from "./board-requests.ts";
+import { requestIdentity } from "./request-identity.ts";
 import type { Receipt } from "../receipt.ts";
 
 const frameSchema = z.object({
@@ -67,7 +67,7 @@ export class RouterNative {
       arguments: argumentsList,
       environment: globalThis.process.env,
       cwd: input.repository,
-      name: `native-${input.machine.name}-${boardIdentity()}`,
+      name: `native-${input.machine.name}-${requestIdentity()}`,
       receipt: input.receipt,
     });
     const connection = new RouterNative(process);
@@ -106,7 +106,7 @@ export class RouterNative {
       ],
       environment: input.environment,
       cwd: input.repository,
-      name: `d1-native-${boardIdentity()}`,
+      name: `d1-native-${requestIdentity()}`,
       receipt: input.receipt,
     });
     const connection = new RouterNative(process);
@@ -135,7 +135,7 @@ export class RouterNative {
   }
   async rpc(method: string, params: Readonly<Record<string, unknown>>): Promise<unknown> {
     this.healthy();
-    const id = boardIdentity();
+    const id = requestIdentity();
     return new Promise<unknown>((resolve, reject): void => {
       const timer = setTimeout((): void => {
         this.pending.delete(id);
