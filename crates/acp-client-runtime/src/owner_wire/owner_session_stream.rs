@@ -428,6 +428,7 @@ impl OwnerOpenedSession {
             &mut self.catalog,
             self.behavior.as_ref(),
             &self.buffer,
+            |tool| target.wire.transport.tool_in_current_turn(target.run, tool),
             #[cfg(any(test, feature = "test-observation"))]
             |update| {
                 if let Some(response) = current.as_deref_mut() {
@@ -465,6 +466,7 @@ fn project_update(
     catalog: &mut ProviderSettingsCatalog,
     behavior: &dyn ProviderBehavior,
     buffer: &ProjectionBuffer,
+    tool_in_current_turn: impl FnOnce(&str) -> bool,
     #[cfg(any(test, feature = "test-observation"))] observe_tool: impl FnOnce(&SessionUpdate),
 ) -> Result<(Option<String>, bool), ExternalProviderRuntimeError> {
     let SessionMessage::SessionMessage(dispatch) = update else {
@@ -504,6 +506,14 @@ fn project_update(
         }
         return Ok((None, false));
     };
+    if let SessionUpdate::ToolCallUpdate(tool) = &typed.update {
+        let id = tool.tool_call_id.0.as_ref();
+        // A continuation without an exact current-turn claim can only
+        // update an item this run's projection already retains.
+        if !projection.has_tool_item(id) && !tool_in_current_turn(id) {
+            return Ok((None, false));
+        }
+    }
     #[cfg(any(test, feature = "test-observation"))]
     observe_tool(&typed.update);
     let prior = catalog.to_session_settings();

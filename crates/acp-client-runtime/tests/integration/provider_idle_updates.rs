@@ -180,5 +180,14 @@ async fn idle_mode_config_unknown_and_late_tool_updates_are_projected() {
         .position(|event| matches!(event, SessionEvent::TurnEnded { .. }))
         .expect("Turn ended before late update");
     assert!(end_index + 1 < later_events.len());
+    assert!(
+        later_events.iter().all(|event| match event {
+            SessionEvent::ItemStarted { item } | SessionEvent::ItemUpdated { item } => {
+                item.item_id != "malformed-late-tool"
+            }
+            _ => true,
+        }),
+        "an idle continuation created an item from a malformed announcement: {later_events:?}",
+    );
     client.shutdown().await;
 }

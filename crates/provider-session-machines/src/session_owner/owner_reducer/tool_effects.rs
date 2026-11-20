@@ -24,16 +24,6 @@ impl OwnerTransition {
                     tool_id,
                 })
             }
-            RoutedTool::ExactIdle { run, item_id } => {
-                if self.tool_phase(run) != Some(ToolSessionPhase::LiveIdle { generation: run }) {
-                    return Err(OwnerRejection::IgnoredLate);
-                }
-                self.apply_tool(RoutedSessionToolEvent::RetiredUpdate {
-                    generation: run,
-                    item_exists: self.next.ports.retained_items.contains(&item_id),
-                    tool_id: item_id,
-                })
-            }
             RoutedTool::Observed {
                 run,
                 turn,
@@ -69,22 +59,12 @@ impl OwnerTransition {
                     .push(session_event_model::SessionEvent::ItemStarted { item });
                 Ok(())
             }
-            RoutedTool::ItemRetained { run, item_id } => {
-                self.require_live(run)?;
-                self.next.ports.retained_items.insert(item_id);
-                Ok(())
-            }
         }
     }
 
     pub(super) fn apply_tool(&mut self, event: RoutedSessionToolEvent) -> OwnerResult {
         let (expected, tool_id) = match &event {
             RoutedSessionToolEvent::Observed {
-                generation,
-                tool_id,
-                ..
-            }
-            | RoutedSessionToolEvent::RetiredUpdate {
                 generation,
                 tool_id,
                 ..
@@ -101,9 +81,6 @@ impl OwnerTransition {
             RoutedSessionToolEvent::Observed { observation, .. } => {
                 ToolOwnershipEvent::Observe { phase, observation }
             }
-            RoutedSessionToolEvent::RetiredUpdate { item_exists, .. } => {
-                ToolOwnershipEvent::ProjectRetiredUpdate { phase, item_exists }
-            }
             RoutedSessionToolEvent::RoutedCallback { .. } => ToolOwnershipEvent::Callback { phase },
         };
         let (owner, effect) =
@@ -112,20 +89,13 @@ impl OwnerTransition {
             self.next.tools.insert(tool_id.clone(), owner);
         }
         match effect {
-            ToolOwnershipEffect::None => {}
+            ToolOwnershipEffect::None | ToolOwnershipEffect::CheckRetainedItem => {}
             ToolOwnershipEffect::ForwardFrame { .. }
                 if matches!(phase, ToolSessionPhase::Loading { .. }) =>
             {
                 // Replay publication is staged on the stamped restore attempt.
             }
-            ToolOwnershipEffect::CheckRetainedItem => {
-                self.release(SessionOwnerEffect::CheckRetainedTool {
-                    generation: expected,
-                    tool_id,
-                })
-            }
             ToolOwnershipEffect::ForwardFrame { generation }
-            | ToolOwnershipEffect::ContinueRetainedItem { generation }
             | ToolOwnershipEffect::ResolveOwner { generation }
             | ToolOwnershipEffect::UseSoleRunningTurn { generation } => {
                 self.release(SessionOwnerEffect::ForwardTool {

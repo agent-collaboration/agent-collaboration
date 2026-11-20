@@ -729,8 +729,7 @@ impl<P: InteractionPort> SessionOwnerPorts for FixturePorts<P> {
             | OwnerEffect::InputQueued(_)
             | OwnerEffect::SettingQueued { .. }
             | OwnerEffect::IdleSteerUsesPrompt(_)
-            | OwnerEffect::ForwardTool { .. }
-            | OwnerEffect::CheckRetainedTool { .. } => Ok(None),
+            | OwnerEffect::ForwardTool { .. } => Ok(None),
         }
     }
 }

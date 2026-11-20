@@ -240,6 +240,15 @@ impl<Frame> AcpTransport<Frame> {
         self.state().callbacks.resolve(tool_id, kind)
     }
 
+    pub(crate) fn tool_in_current_turn(&self, run: TransportRun, tool: &str) -> bool {
+        let state = self.state();
+        state.routes.get(&run).is_some_and(|route| {
+            state
+                .callbacks
+                .tool_in_current_turn(&route.session, run, tool)
+        })
+    }
+
     pub fn offer(
         &self,
         authorization: DispatchAuthorization,

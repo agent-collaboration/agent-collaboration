@@ -76,7 +76,6 @@ impl OwnerTransition {
         self.next.ports.mode_reason = None;
         self.next.ports.admitted_inputs.clear();
         self.next.ports.replay.clear();
-        self.next.ports.retained_items.clear();
         self.next.ports.route_ready = false;
         self.next.ports.fast_reapply = None;
         let Some(generation) = self.next.cell.run_generation() else {

@@ -241,19 +241,9 @@ fn a_retired_tool_update_cannot_project_into_a_newer_idle_session() {
         &state,
         tool_update(previous.generation, ToolObservation::Continuation),
     );
-    apply(
-        &mut state,
-        OwnerEvent::RoutedTool(RoutedTool::ItemRetained {
-            run: newer.generation,
-            item_id: "provider-tool-id".to_owned(),
-        }),
-    );
     let continued = apply(
         &mut state,
-        OwnerEvent::RoutedTool(RoutedTool::ExactIdle {
-            run: newer.generation,
-            item_id: "provider-tool-id".to_owned(),
-        }),
+        tool_update(newer.generation, ToolObservation::Continuation),
     );
     assert!(!tool_forwarded(&continued, newer.generation));
 }

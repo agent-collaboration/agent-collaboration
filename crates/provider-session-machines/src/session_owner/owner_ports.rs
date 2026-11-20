@@ -276,10 +276,6 @@ pub enum RoutedTool {
         turn: TurnId,
         tool_id: String,
     },
-    ExactIdle {
-        run: SessionGeneration,
-        item_id: String,
-    },
     Replay {
         run: RunAttempt<LoadAttempt>,
         item: SessionItem,
@@ -289,10 +285,6 @@ pub enum RoutedTool {
         turn: Option<TurnId>,
         tool_id: String,
         observation: super::ToolObservation,
-    },
-    ItemRetained {
-        run: SessionGeneration,
-        item_id: String,
     },
 }
 
@@ -770,10 +762,6 @@ pub enum OwnerEffect {
         turn: Option<TurnId>,
         tool_id: String,
     },
-    CheckRetainedTool {
-        run: SessionGeneration,
-        tool_id: String,
-    },
 }
 
 /// Placement stamped before Host evidence or any durable dispatch mark.
@@ -822,7 +810,6 @@ pub(in crate::session_owner) struct PendingPorts {
     pub history: HistoryAvailability,
     pub last_restore: Option<RestoreResult>,
     pub replay: Vec<SessionEvent>,
-    pub retained_items: BTreeSet<String>,
     pub observed: BTreeMap<ProviderSettingKind, SettingEvidence>,
     pub mode_reason: Option<PermissionModeReason>,
     pub last_live_turn: Option<LastLiveTurn>,
@@ -867,7 +854,6 @@ impl PendingPorts {
             history: HistoryAvailability::Unavailable,
             last_restore: None,
             replay: Vec::new(),
-            retained_items: BTreeSet::new(),
             observed: BTreeMap::new(),
             mode_reason: None,
             last_live_turn: None,

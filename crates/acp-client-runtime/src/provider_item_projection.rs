@@ -348,6 +348,10 @@ impl ProviderItemProjection {
         Ok(())
     }
 
+    pub(crate) fn has_tool_item(&self, id: &str) -> bool {
+        self.tool_items.contains_key(id)
+    }
+
     fn observe_tool_call(&mut self, tool_call: &ToolCall) -> Result<(), ItemProjectionError> {
         let item_id = tool_call.tool_call_id.0.to_string();
         let item = SessionItem {

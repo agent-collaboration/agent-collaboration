@@ -152,9 +152,6 @@ fn tool_frames_and_callbacks_stay_with_the_generation_that_observed_them(case: h
                             observation: ToolObservation::Continuation,
                         } if matches!(previous, Some(ToolOwnership::Retired { generation: prior }) if prior == generation)
                     )),
-                    ToolOwnershipEffect::ContinueRetainedItem { .. } => {
-                        panic!("a frame published before consulting the projection")
-                    }
                     ToolOwnershipEffect::None => {}
                 }
                 if let Some(next) = next {
@@ -231,7 +228,7 @@ fn an_owned_id_cannot_publish_in_another_generation() {
 }
 
 #[hegel::test]
-fn only_same_generation_idle_completion_of_an_existing_item_publishes(case: hegel::TestCase) {
+fn only_same_generation_idle_continuation_reaches_the_projection_check(case: hegel::TestCase) {
     let prior = u64::from(case.draw(gs::integers::<u8>()));
     let newer = prior + u64::from(case.draw(gs::integers::<u8>().min_value(1)));
     let owner = Some(ToolOwnership::Retired {
@@ -249,28 +246,20 @@ fn only_same_generation_idle_completion_of_an_existing_item_publishes(case: hege
             turn,
         };
         for phase in [idle, running] {
-            for item_exists in [true, false] {
-                let (after, effect) = reduce_tool_ownership(
-                    owner,
-                    ToolOwnershipEvent::ProjectRetiredUpdate { phase, item_exists },
-                );
-                assert_eq!(after, owner);
-                if current == generation(prior) && phase == idle && item_exists {
-                    assert_eq!(
-                        effect,
-                        ToolOwnershipEffect::ContinueRetainedItem {
-                            generation: current
-                        },
-                        "same-generation idle completion must publish"
-                    );
-                } else {
-                    assert_eq!(
-                        effect,
-                        ToolOwnershipEffect::None,
-                        "an older, running, or absent item must never publish"
-                    );
-                }
-            }
+            let (after, effect) = reduce_tool_ownership(
+                owner,
+                ToolOwnershipEvent::Observe {
+                    phase,
+                    observation: ToolObservation::Continuation,
+                },
+            );
+            assert_eq!(after, owner);
+            let expected = if current == generation(prior) && phase == idle {
+                ToolOwnershipEffect::CheckRetainedItem
+            } else {
+                ToolOwnershipEffect::None
+            };
+            assert_eq!(effect, expected);
             for event in [
                 ToolOwnershipEvent::Observe {
                     phase,

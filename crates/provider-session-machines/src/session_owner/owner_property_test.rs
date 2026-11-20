@@ -240,8 +240,7 @@ impl Mailbox {
             | OwnerEffect::SteerSubmitted(_)
             | OwnerEffect::ProviderStartedTurn(_)
             | OwnerEffect::ReopenRoute(_)
-            | OwnerEffect::ForwardTool { .. }
-            | OwnerEffect::CheckRetainedTool { .. } => {}
+            | OwnerEffect::ForwardTool { .. } => {}
         }
     }
 

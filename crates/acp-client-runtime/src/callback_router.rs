@@ -82,6 +82,24 @@ impl CallbackRouter {
         self.routes.get(&run)?.turn?.eligible()
     }
 
+    pub(crate) fn tool_in_current_turn(
+        &self,
+        session: &str,
+        run: TransportRun,
+        tool: &str,
+    ) -> bool {
+        let Some(turn) = self.current_turn(run) else {
+            return false;
+        };
+        self.claims
+            .get(tool)
+            .and_then(|claims| claims.get(session))
+            .is_some_and(|claim| {
+                claim.run == run
+                    && matches!(claim.ownership, ToolOwnership::Owned { turn: Some(owner), .. } if owner == turn)
+            })
+    }
+
     pub(crate) fn provider_started_turn(&self, run: TransportRun) -> Option<TurnId> {
         match self.routes.get(&run)?.turn? {
             Membership::ProviderStarted(turn) => Some(turn),

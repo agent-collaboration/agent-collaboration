@@ -759,8 +759,7 @@ impl SessionOwnerPorts for SessionOwnerExecution {
             OwnerEffect::Arm { .. }
             | OwnerEffect::AdoptProviderId { .. }
             | OwnerEffect::CreateSettled { .. }
-            | OwnerEffect::ForwardTool { .. }
-            | OwnerEffect::CheckRetainedTool { .. } => Ok(None),
+            | OwnerEffect::ForwardTool { .. } => Ok(None),
         }
     }
 }

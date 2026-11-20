@@ -321,15 +321,6 @@ impl OwnerTransition {
                     tool_id,
                 });
             }
-            SessionOwnerEffect::CheckRetainedTool {
-                generation,
-                tool_id,
-            } => {
-                self.effects.push(OwnerEffect::CheckRetainedTool {
-                    run: generation,
-                    tool_id,
-                });
-            }
         }
     }
 }

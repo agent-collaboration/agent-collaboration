@@ -257,11 +257,6 @@ pub(in crate::session_owner) enum RoutedSessionToolEvent {
         tool_id: String,
         observation: ToolObservation,
     },
-    RetiredUpdate {
-        generation: SessionGeneration,
-        tool_id: String,
-        item_exists: bool,
-    },
     /// The connection has already resolved the callback to this session.
     RoutedCallback {
         generation: SessionGeneration,
@@ -518,10 +513,6 @@ pub(in crate::session_owner) enum SessionOwnerEffect {
     RetireRoute(SessionGeneration),
     PrepareHost(RunAttempt<LoadAttempt>),
     ForwardTool {
-        generation: SessionGeneration,
-        tool_id: String,
-    },
-    CheckRetainedTool {
         generation: SessionGeneration,
         tool_id: String,
     },
