@@ -1,11 +1,18 @@
-// Unconfirmed cancel through local close. Successful cancel acknowledgement alone must fail.
+// Unconfirmed cancel, local close and explicit reconciliation in a single Host lifetime.
 import { z } from "zod";
 import type { SessionRef } from "../observations/observation-models.ts";
 import * as requests from "../transport/journey-requests.ts";
-import { baseline, createSession, type CaseInputs, type CaseResult } from "./journey-cases.ts";
+import {
+  baseline,
+  createSession,
+  restoreDeclaredModel,
+  type CaseInputs,
+  type CaseResult,
+} from "./journey-cases.ts";
 import { answered, callTool, record } from "./journey-steps.ts";
 import {
   APPLIED,
+  completePrompt,
   control,
   holdWire,
   inspect,
@@ -13,10 +20,12 @@ import {
   observed,
   preparePrompt,
   promptFrame,
+  reattach,
   requireAdmission,
   requireFailure,
   requireHeldReply,
   requireOperation,
+  startRestore,
   startClose,
   startPrompt,
   UNKNOWN,
@@ -26,6 +35,61 @@ import {
 } from "./session-control-steps.ts";
 
 const NAME = "unconfirmedCancel";
+
+async function verifySameLifetimeHold(inputs: CaseInputs, target: SessionRef, foreground: string) {
+  const expectedRefusal =
+    "an earlier prompt's outcome is unknown; check the session, then run operation reconcile for " +
+    foreground;
+  const restoreId = requests.newOperationId();
+  const restore = await startRestore(inputs, "cancel-reopen-before-reconcile", target, restoreId);
+  const restoreRefusal = requireFailure(restore, restoreId, target, "busy", expectedRefusal);
+  if (restoreRefusal.effect !== "none")
+    throw new Error("the held restore reported a possible remote effect");
+  const blockedId = requests.newOperationId();
+  const token = "session-control-" + blockedId;
+  const refusal = requireFailure(
+    await startPrompt(inputs, "cancel-blocked-prompt", target, {
+      operationId: blockedId,
+      token,
+      text: inputs.promptText + " [" + token + "]",
+    }),
+    blockedId,
+    target,
+    "busy",
+    expectedRefusal,
+  );
+  const stored = inputs.store
+    .operations(target)
+    .find((operation) => operation.operationId === blockedId);
+  const wireCount = wireEntries(inputs).filter(promptFrame(target, token)).length;
+  record(inputs.context, {
+    step: "cancel-blocked-proof",
+    target,
+    blockedId,
+    foreground,
+    wireCount,
+    stored: stored ?? null,
+  });
+  if (refusal.effect !== "none" || stored !== undefined || wireCount !== 0)
+    throw new Error("the held prompt reached admission or the ACP wire");
+  answered(
+    await callTool(
+      inputs.context,
+      "cancel-reconcile",
+      "conversation_operation_reconcile",
+      { operationId: foreground },
+      { timeoutMs: 15_000 },
+    ),
+    "reconciliation",
+  );
+  await requireOperation(inputs, "cancel-reconciled", target, foreground, "conversationPrompt", {
+    effect: "unknown",
+    reconciliation: "notReconcilable",
+  });
+  await reattach(inputs, "cancel-restore-after-reconcile", target);
+  await restoreDeclaredModel(inputs, target, "cancel-restore-after-reconcile");
+  await completePrompt(inputs, "cancel-prompt-after-reconcile", target);
+}
 
 async function requestCancellation(
   inputs: CaseInputs,
@@ -92,6 +156,30 @@ export async function unconfirmedCancelCase(inputs: CaseInputs): Promise<CaseRes
   const target = await createSession(inputs, "cancel-create", control(inputs).savedMode);
   const before = await baseline(inputs, "cancel-baseline", target);
   const prompt = await preparePrompt(inputs, target, "cancel-prompt");
+  const recovery = await holdAndClose(inputs, target, prompt, before.result.generation);
+  if (recovery === "alreadyEnded")
+    return {
+      name: NAME,
+      target,
+      verdict: {
+        kind: "inconclusive",
+        reason: "the real harness had already ended the prompt before cancel crossed the pipe",
+      },
+    };
+  await verifySameLifetimeHold(inputs, target, prompt.operationId);
+  return observed(
+    NAME,
+    target,
+    "uncertainty blocked a new prompt until explicit reconciliation; the original effect stayed unknown",
+  );
+}
+
+async function holdAndClose(
+  inputs: CaseInputs,
+  target: SessionRef,
+  prompt: Awaited<ReturnType<typeof preparePrompt>>,
+  generation: unknown,
+): Promise<"held" | "alreadyEnded"> {
   const release = holdWire(inputs, {
     method: "session/prompt",
     sessionId: target.sessionId,
@@ -104,14 +192,18 @@ export async function unconfirmedCancelCase(inputs: CaseInputs): Promise<CaseRes
       "original prompt dispatch",
       promptFrame(target, prompt.token),
     );
-    requireAdmission(await starting, prompt.operationId, target);
-    const wireCancel = await requestCancellation(
+    const cancelling = requestCancellation(
       inputs,
       target,
       prompt.operationId,
-      before.result.generation,
+      generation,
       sent.sequence,
     );
+    const [submitted, cancelled] = await Promise.allSettled([starting, cancelling]);
+    if (submitted.status === "rejected") throw submitted.reason;
+    if (cancelled.status === "rejected") throw cancelled.reason;
+    requireAdmission(submitted.value, prompt.operationId, target);
+    const wireCancel = cancelled.value;
     requireFailure(
       await waitOperation(inputs, "cancel-terminal-prompt", prompt.operationId),
       prompt.operationId,
@@ -169,20 +261,9 @@ export async function unconfirmedCancelCase(inputs: CaseInputs): Promise<CaseRes
     });
     if ((await inspect(inputs, "cancel-released", target)).state !== "unloaded")
       throw new Error("close did not release the unconfirmed turn's Session locally");
-    if (inputs.plan.peer.kind === "provider" && withheld.sequence < wireCancel.sequence)
-      return {
-        name: NAME,
-        target,
-        verdict: {
-          kind: "inconclusive",
-          reason: "the real harness had already ended the prompt before cancel crossed the pipe",
-        },
-      };
-    return observed(
-      NAME,
-      target,
-      "exact cancellation requested, original prompt unknown, and local close settled",
-    );
+    return inputs.plan.peer.kind === "provider" && withheld.sequence < wireCancel.sequence
+      ? "alreadyEnded"
+      : "held";
   } finally {
     release();
   }

@@ -32,7 +32,7 @@ export async function unansweredCloseCase(inputs: CaseInputs): Promise<CaseResul
   if (!offered.close) return notOffered(NAME, "session/close");
   if (!offered[control(inputs).restore]) return notOffered(NAME, "restore method");
   const target = await createSession(inputs, "close-create", control(inputs).savedMode);
-  await completePrompt(inputs, "close-primer", target);
+  if (control(inputs).closePrimer !== false) await completePrompt(inputs, "close-primer", target);
   const release = holdWire(inputs, { method: "session/close", sessionId: target.sessionId });
   try {
     const operationId = newOperationId();

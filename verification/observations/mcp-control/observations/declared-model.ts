@@ -7,6 +7,7 @@ export const declaredProviderSelectionSchema = z.strictObject({
   selectOnCreate: z.boolean(),
   selectOnRestore: z.boolean(),
   requiredOptions: z.record(z.string().min(1), z.string()),
+  advertisedLabel: z.string().min(1).optional(),
 });
 export type DeclaredProviderSelection = z.infer<typeof declaredProviderSelectionSchema>;
 
@@ -17,6 +18,7 @@ const modelInspectSchema = z.looseObject({
       z.looseObject({
         id: z.string(),
         category: z.string().optional(),
+        choices: z.array(z.looseObject({ label: z.string(), value: z.string() })).optional(),
         currentValue: z.discriminatedUnion("kind", [
           z.object({ kind: z.literal("select"), value: z.string() }),
           z.object({ kind: z.literal("boolean"), value: z.boolean() }),
@@ -43,6 +45,11 @@ export function requireSelectedModel(
     throw new Error(
       `current model ${selected.value} differs from declared model ${selection.model}`,
     );
+  if (selection.advertisedLabel !== undefined) {
+    const selectedChoice = models[0]?.choices?.filter((choice) => choice.value === selected.value);
+    if (selectedChoice?.length !== 1 || selectedChoice[0]?.label !== selection.advertisedLabel)
+      throw new Error("the selected model does not advertise the exact declared label");
+  }
   for (const [optionId, expectedValue] of Object.entries(selection.requiredOptions)) {
     const matching = inspected.settingsCatalog.configOptions.filter(
       (option) => option.id === optionId,

@@ -131,6 +131,7 @@ export const controlPlanSchema = z.strictObject({
       gateDirectory: absolutePath,
       restore: z.enum(["load", "resume"]),
       savedMode: z.string().min(1),
+      closePrimer: z.literal(false).optional(),
       restart: z
         .discriminatedUnion("phase", [
           z.strictObject({ phase: z.literal("seed"), record: absolutePath }),
@@ -164,7 +165,8 @@ const CASE_EFFECTS: Readonly<
   savedModeRestart: { sessions: 1, prompts: 1 }, // Each lifetime is admitted separately.
   unansweredReopen: { sessions: 2, prompts: 2 },
   unansweredClose: { sessions: 1, prompts: 2 },
-  unconfirmedCancel: { sessions: 1, prompts: 1 },
+  // Reserve the refusal probe too. A wrong build could dispatch it.
+  unconfirmedCancel: { sessions: 1, prompts: 3 },
 };
 const CONTINUATION_CASE = { retain: "continuationRetain", reload: "continuationReload" } as const;
 const OWNER_LOOKUP_COMMAND = "/usr/bin/id"; // collaboration-client owner_identity_resolution.rs:8
@@ -374,11 +376,35 @@ function checkSessionControlDeclaration(plan: ControlPlan): void {
     plan.cases.length !== 1 ||
     plan.continuation !== null ||
     plan.peer.kind === "controlled" ||
-    (!fixture && plan.host.kind !== "foregroundRouterHost")
+    (!fixture &&
+      plan.host.kind !== "foregroundRouterHost" &&
+      plan.host.kind !== "automationDebugHost")
   )
     throw new Error("declare one session-control case on its own gated Host connection");
   if ((control.restart !== undefined) !== (selected[0] === "savedModeRestart"))
     throw new Error("only the saved-mode case declares seed and reopen lifetimes");
+  if (control.closePrimer === false && selected[0] !== "unansweredClose")
+    throw new Error("only the unanswered-close case declares a metadata-only seed");
+  if (plan.host.kind === "automationDebugHost") {
+    if (plan.hostContext === null)
+      throw new Error("the automation Host needs its prepared context");
+    const prepared = z
+      .looseObject({
+        kind: z.literal("debugHostPrepared"),
+        runDirectory: absolutePath,
+        serviceDirectory: absolutePath,
+        hostPid: z.number().int().positive(),
+      })
+      .parse(JSON.parse(readFileSync(plan.hostContext, "utf8")));
+    if (
+      prepared.hostPid !== plan.host.pid ||
+      prepared.serviceDirectory !== plan.serviceDirectory ||
+      join(prepared.runDirectory, "agent-communication") !== plan.serviceDirectory
+    )
+      throw new Error(
+        "the automation Host did not publish a private run-local collaboration store",
+      );
+  }
   if (
     control.restart?.phase === "seed" &&
     (dirname(control.restart.record) !== plan.evidence || existsSync(control.restart.record))
@@ -447,7 +473,11 @@ function checkEffectsAndTime(plan: ControlPlan, now: Date): void {
   const needed = plan.cases.reduce(
     (total, name) => ({
       sessions: total.sessions + CASE_EFFECTS[name].sessions,
-      prompts: total.prompts + CASE_EFFECTS[name].prompts,
+      prompts:
+        total.prompts +
+        (name === "unansweredClose" && plan.sessionControl?.closePrimer === false
+          ? 1
+          : CASE_EFFECTS[name].prompts),
     }),
     { sessions: 0, prompts: 0 },
   );

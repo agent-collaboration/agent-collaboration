@@ -82,7 +82,17 @@ function sessionControlTools(plan: ControlPlan): string[] {
     "provider_session_inspect",
   ];
   if (plan.cases.includes("unconfirmedCancel"))
-    return [...common, "events_observe", "conversation_cancel", "conversation_close"];
+    return [
+      ...common,
+      "events_observe",
+      "conversation_cancel",
+      "conversation_close",
+      "conversation_operation_reconcile",
+      "conversation_" + plan.sessionControl?.restore,
+      ...(plan.peer.kind === "provider" && plan.peer.selection.selectOnRestore
+        ? ["conversation_settings_set"]
+        : []),
+    ];
   const restore = "conversation_" + plan.sessionControl?.restore;
   return [
     ...common,
