@@ -3,11 +3,10 @@ import type { InventoryRow } from "../schema-audit-types.ts";
 export const rows: InventoryRow[] = [
   {
     file: "crates/codex-router-host/src/provider_acp_delivery_route.rs",
-    line: 268,
+    line: 259,
     owner: "router-vocabulary",
     kind: "rust-type",
-    defines:
-      "ProviderSessionLoadOutcome to UnsentCause/NativeRefusalCode with reason literals (268-351); one of four hand mappings of the load outcome",
+    defines: "ProviderSessionLoadOutcome to UnsentCause/NativeRefusalCode with reason literals",
     usedBy: [{ crate: "codex-router-host" }],
     duplicateGroup: "load-outcome-mapping",
     disposition: "duplicate",
@@ -15,11 +14,11 @@ export const rows: InventoryRow[] = [
   },
   {
     file: "crates/codex-router-host/src/provider_acp_delivery_route.rs",
-    line: 376,
+    line: 424,
     owner: "router-vocabulary",
     kind: "rust-type",
     defines:
-      "ProviderSteeringOutcome to the delivery NativeObservedOutcome Steered/Started, with delivery evidence and the reason literals steerFailed and no running turn (376-436). Its output is its own audience's target; no independent encoder of the same target exists, so it is a boundary conversion (Verifier C3).",
+      "Owner InputAcceptance to the delivery NativeObservedOutcome Steered, Started or Queued, and reasoned unsent or unknown outcomes. This is the delivery boundary's own conversion (Verifier C3).",
     usedBy: [{ crate: "codex-router-host" }],
     duplicateGroup: null,
     disposition: "boundary-encoding",
@@ -91,8 +90,8 @@ export const rows: InventoryRow[] = [
       "queue NotSubmitted reason literals: providerRetired (31), Router-shutdown and queue-stopped texts (350-361), and ProviderSessionLoadOutcome to reason strings (231-266) instead of a typed reason",
     usedBy: [{ crate: "codex-router-host" }],
     duplicateGroup: "load-outcome-mapping",
-    disposition: "duplicate",
-    fixedBy: "D2",
+    disposition: "retired",
+    removedIn: "9c6fb389c",
   },
   {
     file: "crates/codex-router-host/src/provider_acp_route_claim.rs",
@@ -107,11 +106,11 @@ export const rows: InventoryRow[] = [
   },
   {
     file: "crates/codex-router-host/src/provider_acp_session_loading.rs",
-    line: 125,
+    line: 303,
     owner: "router-vocabulary",
     kind: "rust-type",
     defines:
-      "ExternalProviderRuntimeError (ACP error classes) to ProviderSessionLoadOutcome/ProviderSessionLoadRejection with ACP code and reference texts (125-187, 234-247)",
+      "RestoreFailure to ProviderSessionLoadOutcome and ProviderSessionLoadRejection with an ACP code and reference text where available",
     usedBy: [{ crate: "codex-router-host" }],
     duplicateGroup: "operation-failure-mapping",
     disposition: "duplicate",
@@ -119,11 +118,11 @@ export const rows: InventoryRow[] = [
   },
   {
     file: "crates/codex-router-host/src/provider_acp_session_loading.rs",
-    line: 134,
+    line: 315,
     owner: "router-vocabulary",
     kind: "rust-type",
     defines:
-      "acp-client-runtime ProviderErrorCorrelationId to DeliveryCorrelationId by to_string round trip (134, 153, 239); the same conversion is written again at provider_operation_failure.rs:398 (Verifier C4).",
+      "ACP ProviderErrorCorrelationId to DeliveryCorrelationId by String round trip; the same conversion is written in provider_operation_failure.rs (Verifier C4).",
     usedBy: [{ crate: "codex-router-host" }],
     duplicateGroup: "provider-correlation-to-delivery-id",
     disposition: "duplicate",
@@ -286,8 +285,8 @@ export const rows: InventoryRow[] = [
     defines: "provider session id String to board SessionRef built from the hub endpoint",
     usedBy: [{ part: "N5" }],
     duplicateGroup: "session-ref-conversion",
-    disposition: "duplicate",
-    fixedBy: "D2",
+    disposition: "retired",
+    removedIn: "9c6fb389c",
   },
   {
     file: "crates/codex-router-host/src/provider_startup_composition.rs",

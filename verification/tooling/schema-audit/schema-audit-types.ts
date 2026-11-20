@@ -60,11 +60,12 @@ interface InventoryRowFields {
 /**
  * One definition or conversion site. A boundary encoding is the one legitimate encoding at its
  * boundary: it has no fixer and never yields a finding. A duplicate or malformed site is a defect
- * someone fixes.
+ * someone fixes. A retired row records where a removed definition lived and the removing commit.
  */
 export type InventoryRow =
   | (InventoryRowFields & { disposition: "boundary-encoding" })
-  | (InventoryRowFields & { disposition: "duplicate" | "malformed"; fixedBy: FixedBy });
+  | (InventoryRowFields & { disposition: "duplicate" | "malformed"; fixedBy: FixedBy })
+  | (InventoryRowFields & { disposition: "retired"; removedIn: string });
 
 /** What one source file does with message shapes. */
 export type FileDisposition =

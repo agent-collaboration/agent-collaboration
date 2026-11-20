@@ -5,8 +5,7 @@ const TAPS = "crates/acp-client-runtime/tests/integration/typed_extension_node_t
 const APPROVAL_TAP = "crates/acp-client-runtime/tests/integration/approval_dispatch_node_tap.rs";
 const STEER_CASES = [
   "node_tap_steering_injected_while_running",
-  "node_tap_steering_started_new_turn_while_idle",
-  "node_tap_steering_prompt_required_publishes_nothing",
+  "node_tap_steering_prompt_required_routes_one_prompt",
   "node_tap_steering_failed_publishes_nothing",
   "node_tap_steering_outcome_outside_enum_is_invalid_reply",
 ];
@@ -35,7 +34,7 @@ export const section: LedgerSection = {
     {
       file: `${R}approval_turn_cancellation.rs`,
       disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "turn cancellation bookkeeping; passes the cancel reason as the string literal turnCancelled to InteractionPort::cancel_all (:98); the wire cancel is sent from provider_session_actor.rs",
+      note: "turn cancellation bookkeeping and authorization; the wire cancel is sent from owner_wire.rs",
     },
     {
       file: `${R}agent_session_client/external_approval_dispatch.rs`,
@@ -115,7 +114,7 @@ export const section: LedgerSection = {
     {
       file: `${R}agent_session_client/provider_lifecycle_requests.rs`,
       disposition: { kind: "sends", owners: ["acp"] },
-      note: "typed session/list (:22) and session/close (:54); each listed SessionInfo is mapped to ProviderSessionSummary field by field (:26-36)",
+      note: "typed session/list (:22); session/close moved to the ordered writer in 9c6fb389c",
     },
     {
       file: `${R}agent_session_client/provider_model_discovery.rs`,
@@ -135,12 +134,12 @@ export const section: LedgerSection = {
     {
       file: `${R}agent_session_client/provider_session_admission.rs`,
       disposition: { kind: "sends", owners: ["acp"] },
-      note: "session/new through build_session_from (:158) and session/close (:183)",
+      note: "retired in 9c6fb389c; session/new moved to owner_wire/owner_session_open.rs and session/close to owner_wire.rs",
     },
     {
       file: `${R}agent_session_client/provider_session_restore.rs`,
       disposition: { kind: "sends", owners: ["acp"] },
-      note: "session/load (:67-71) and session/resume (:90-94); pre-parses replayed session/update by hand (update.sessionUpdate, unknown kind content.text :138-156) before from_value into SessionNotification (:158)",
+      note: "retired in 9c6fb389c; session/load and session/resume moved to owner_wire/owner_session_open.rs and replay decoding to owner_session_replay.rs",
     },
     {
       file: `${R}provider_setting_application.rs`,
@@ -221,7 +220,7 @@ export const section: LedgerSection = {
     {
       file: `${R}provider_session_actor.rs`,
       disposition: { kind: "converts", owners: ["acp", "claude-extra"] },
-      note: "typed session/prompt (:219-235), session/cancel after output limit (:319) and for a user cancel command (:393), hand-built _session/steering json! (:543-554) and its reply outcome read by hand (:565-574)",
+      note: "retired in 9c6fb389c; session/prompt, session/cancel and _session/steering use owner_wire.rs",
     },
     {
       file: `${R}provider_session_setting_update.rs`,
@@ -275,8 +274,8 @@ export const section: LedgerSection = {
       coverage: noTap("no tap records authenticate"),
     },
     {
-      file: `${R}agent_session_client/provider_session_admission.rs`,
-      line: 158,
+      file: `${R}owner_wire/owner_session_open.rs`,
+      line: 165,
       edge: "acp-agent",
       sends: "session/new",
       owner: N6,
@@ -284,8 +283,8 @@ export const section: LedgerSection = {
       coverage: { kind: "tap", testFile: TAPS, cases: SETUP_CASES },
     },
     {
-      file: `${R}agent_session_client/provider_session_admission.rs`,
-      line: 183,
+      file: `${R}owner_wire.rs`,
+      line: 646,
       edge: "acp-agent",
       sends: "session/close",
       owner: N6,
@@ -302,17 +301,8 @@ export const section: LedgerSection = {
       coverage: noTap("no tap records session/list"),
     },
     {
-      file: `${R}agent_session_client/provider_lifecycle_requests.rs`,
-      line: 54,
-      edge: "acp-agent",
-      sends: "session/close",
-      owner: N6,
-      origin: "product",
-      coverage: noTap("no tap records session/close"),
-    },
-    {
-      file: `${R}agent_session_client/provider_session_restore.rs`,
-      line: 71,
+      file: `${R}owner_wire/owner_session_open.rs`,
+      line: 237,
       edge: "acp-agent",
       sends: "session/load",
       owner: N6,
@@ -320,8 +310,8 @@ export const section: LedgerSection = {
       coverage: noTap("no tap records session/load"),
     },
     {
-      file: `${R}agent_session_client/provider_session_restore.rs`,
-      line: 94,
+      file: `${R}owner_wire/owner_session_open.rs`,
+      line: 249,
       edge: "acp-agent",
       sends: "session/resume",
       owner: N6,
@@ -330,7 +320,7 @@ export const section: LedgerSection = {
     },
     {
       file: `${R}provider_setting_application.rs`,
-      line: 377,
+      line: 474,
       edge: "acp-agent",
       sends: "session/set_config_option and session/set_mode",
       owner: N6,
@@ -338,8 +328,17 @@ export const section: LedgerSection = {
       coverage: noTap("no tap records setting requests"),
     },
     {
-      file: `${R}provider_session_actor.rs`,
-      line: 235,
+      file: `${R}owner_wire/owner_session_setting.rs`,
+      line: 157,
+      edge: "acp-agent",
+      sends: "owner-authorized session/set_config_option or session/set_mode",
+      owner: N6,
+      origin: "product",
+      coverage: noTap("no tap records owner-authorized setting requests"),
+    },
+    {
+      file: `${R}owner_wire.rs`,
+      line: 403,
       edge: "acp-agent",
       sends: "session/prompt",
       owner: N6,
@@ -347,28 +346,26 @@ export const section: LedgerSection = {
       coverage: { kind: "tap", testFile: TAPS, cases: HELD_TURN_CASES },
     },
     {
-      file: `${R}provider_session_actor.rs`,
-      line: 319,
+      file: `${R}owner_wire.rs`,
+      line: 692,
       edge: "acp-agent",
-      sends: "session/cancel notification after output limit",
-      owner: N6,
-      origin: "product",
-      coverage: noTap(
-        "output-limit branch (output_limit_rx, :309-319); no named tap overflows prompt output, and the HELD_TURN case cancels through the user cancel command at :393",
-      ),
-    },
-    {
-      file: `${R}provider_session_actor.rs`,
-      line: 393,
-      edge: "acp-agent",
-      sends: "session/cancel notification for a user cancel command",
+      sends: "session/cancel notification for a user cancel command through the ordered writer",
       owner: N6,
       origin: "product",
       coverage: { kind: "tap", testFile: TAPS, cases: HELD_TURN_CASES },
     },
     {
-      file: `${R}provider_session_actor.rs`,
-      line: 554,
+      file: `${R}owner_wire.rs`,
+      line: 692,
+      edge: "acp-agent",
+      sends: "session/cancel notification after output limit through the ordered writer",
+      owner: N6,
+      origin: "product",
+      coverage: noTap("no named tap overflows prompt output"),
+    },
+    {
+      file: `${R}owner_wire.rs`,
+      line: 436,
       edge: "acp-agent",
       sends: "_session/steering",
       owner: N6,
@@ -406,7 +403,7 @@ export const section: LedgerSection = {
     },
     {
       file: `${R}agent_session_client/provider_connection_task.rs`,
-      line: 201,
+      line: 236,
       edge: "acp-agent",
       sends: "reply to session/request_permission (in-folder auto allow)",
       owner: N6,
@@ -453,18 +450,9 @@ export const section: LedgerSection = {
     },
     {
       file: `${R}agent_session_client/provider_request_fallback.rs`,
-      line: 52,
+      line: 59,
       edge: "acp-agent",
-      sends: "method_not_found error reply",
-      owner: N6,
-      origin: "product",
-      coverage: noTap("no tap records fallback errors"),
-    },
-    {
-      file: `${R}provider_prompt_observation.rs`,
-      line: 130,
-      edge: "acp-agent",
-      sends: "method_not_found error reply",
+      sends: "method_not_found error reply to a request no handler owns",
       owner: N6,
       origin: "product",
       coverage: noTap("no tap records fallback errors"),
@@ -588,18 +576,9 @@ export const section: LedgerSection = {
     },
     {
       file: `${R}agent_session_client/provider_request_fallback.rs`,
-      line: 81,
+      line: 30,
       edge: "acp-agent",
       sends: "method_not_found error reply to an unowned request without a known session",
-      owner: N6,
-      origin: "product",
-      coverage: noTap("no tap records fallback errors"),
-    },
-    {
-      file: `${R}provider_prompt_observation.rs`,
-      line: 382,
-      edge: "acp-agent",
-      sends: "method_not_found error reply to an agent request during the prompt drain",
       owner: N6,
       origin: "product",
       coverage: noTap("no tap records fallback errors"),
