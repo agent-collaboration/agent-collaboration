@@ -383,7 +383,7 @@ async fn a_restore_whose_mode_set_fails_loads_without_a_grant_and_shows_the_mism
 }
 
 #[tokio::test]
-async fn a_refused_stricter_restore_keeps_the_reported_auto_allowance() {
+async fn a_refused_stricter_restore_reports_auto_without_granting_it() {
     let fixture = Fixture::start(&["advertise-restore", "restored-in-auto", "reject-mode"]).await;
     let id = "loaded-session";
     let restored = fixture
@@ -391,13 +391,55 @@ async fn a_refused_stricter_restore_keeps_the_reported_auto_allowance() {
         .await;
     assert_eq!(fixture.mode_requests(id), ["default"]);
     assert_eq!(fixture.current_mode(id), "auto");
-    assert_eq!(fixture.grant(id), Some(true));
+    assert_eq!(fixture.grant(id), Some(false));
     assert_eq!(
         restored
             .observed
             .get(&ProviderSettingKind::Mode)
             .and_then(|evidence| evidence.cause),
         Some(ObservationCause::Refused),
+    );
+    fixture.client.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_refused_default_restore_never_grants_the_agents_auto_fallback() {
+    let fixture = Fixture::start_in_profile(
+        "claude-without-auto",
+        &[
+            "advertise-restore",
+            "restored-in-accept-edits",
+            "reject-mode",
+        ],
+    )
+    .await;
+    let id = "loaded-session";
+    let restored = fixture
+        .restore(id, fixture.saved_setup("default"), RestoreVia::Load)
+        .await;
+    assert_eq!(fixture.mode_requests(id), ["default"]);
+    assert_eq!(fixture.current_mode(id), "acceptEdits");
+    assert_eq!(
+        fixture.grant(id),
+        Some(false),
+        "the creator did not ask for Router Auto"
+    );
+    assert_eq!(
+        restored
+            .observed
+            .get(&ProviderSettingKind::Mode)
+            .and_then(|evidence| evidence.cause),
+        Some(ObservationCause::Refused),
+    );
+    fixture
+        .prompt_in_folder_edit(id)
+        .await
+        .expect("input remains available");
+    assert_eq!(
+        fixture
+            .receipt()
+            .pointer("/permissionAnswers/0/answer/outcome/outcome"),
+        Some(&json!("cancelled")),
     );
     fixture.client.shutdown().await;
 }

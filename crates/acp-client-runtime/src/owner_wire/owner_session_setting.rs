@@ -35,7 +35,7 @@ impl OwnerOpenedSession {
     #[must_use]
     pub fn restore_setting_plan(&mut self, requested_mode: Option<&str>) -> RestoreSettingPlan {
         let current = self.catalog.effective_settings().mode;
-        self.refresh_restored_allowance();
+        self.refresh_restored_allowance(requested_mode);
         let (mode, accepted_mode_fallback) = if let Some(requested) = requested_mode {
             match plan_permission_mode(
                 RequestedPermissionMode::from_request(Some(requested)),
@@ -78,7 +78,11 @@ impl OwnerOpenedSession {
         }
     }
 
-    pub fn apply_restore_setting_readback(&mut self, readback: RestoreSettingReadback) {
+    pub fn apply_restore_setting_readback(
+        &mut self,
+        readback: RestoreSettingReadback,
+        requested_mode: Option<&str>,
+    ) {
         let catalog = readback
             .0
             .lock()
@@ -86,15 +90,15 @@ impl OwnerOpenedSession {
             .take();
         if let Some(catalog) = catalog {
             self.catalog = catalog;
-            self.refresh_restored_allowance();
+            self.refresh_restored_allowance(requested_mode);
         }
     }
 
-    fn refresh_restored_allowance(&mut self) {
-        // Evaluate the adapter's Auto rule against the reported mode. The
-        // saved folders still determine whether this run has a scope at all.
+    fn refresh_restored_allowance(&mut self, requested_mode: Option<&str>) {
+        // Router Auto requires both saved consent and the reported mode
+        // selected by the adapter's Auto plan.
         self.router_auto_active = crate::provider_setting_application::current_mode_grants_auto(
-            Some("auto"),
+            requested_mode,
             &self.catalog,
             self.behavior.as_ref(),
         );

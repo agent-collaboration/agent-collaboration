@@ -32,6 +32,7 @@
 //     records each restore's additionalDirectories and _meta, and answers it
 //     with the session in its profile's start mode.
 //   restored-in-auto: with advertise-restore, a restored session is in auto.
+//   restored-in-accept-edits: the restored mode is the provider's acceptEdits fallback.
 //   narrow-restore-modes: after a restore, advertise only default and plan.
 //   restore-fast-on: with advertise-restore and offer-fast, a restored
 //     session reads fast on, as an agent that forgot its fast setting.
@@ -64,6 +65,7 @@ const known = [
   "refuse-fast-once",
   "advertise-restore",
   "restored-in-auto",
+  "restored-in-accept-edits",
   "narrow-restore-modes",
   "restore-fast-on",
 ];
@@ -263,7 +265,12 @@ requests: for (;;) {
         additionalDirectories: params.additionalDirectories ?? null,
         meta: params._meta ?? null,
       });
-      currentMode.set(sessionId, behaviours.has("restored-in-auto") ? "auto" : chosen.start);
+      const restoredMode = behaviours.has("restored-in-accept-edits")
+        ? "acceptEdits"
+        : behaviours.has("restored-in-auto")
+          ? "auto"
+          : chosen.start;
+      currentMode.set(sessionId, restoredMode);
       if (behaviours.has("narrow-restore-modes")) narrowedModeCatalogues.add(sessionId);
       if (behaviours.has("restore-fast-on")) currentFast.set(sessionId, "true");
       agent.receipt(receipt, observed);

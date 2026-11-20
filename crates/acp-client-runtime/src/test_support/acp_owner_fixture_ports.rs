@@ -35,6 +35,7 @@ use uuid::Uuid;
 
 struct OpenedRestore {
     opened: OwnerOpenedSession,
+    requested_mode: Option<String>,
     generation: SessionGeneration,
     replay: ReplayedSessionFacts,
     fallback: Option<String>,
@@ -44,7 +45,8 @@ struct OpenedRestore {
 impl OpenedRestore {
     fn apply_setting_readback(&mut self) {
         if let Some(readback) = self.setting_readback.take() {
-            self.opened.apply_restore_setting_readback(readback);
+            self.opened
+                .apply_restore_setting_readback(readback, self.requested_mode.as_deref());
         }
     }
 }
@@ -186,6 +188,7 @@ impl<P: InteractionPort> FixturePorts<P> {
                             run.attempt,
                             OpenedRestore {
                                 opened,
+                                requested_mode: setup.requested_mode,
                                 generation: run.generation,
                                 replay,
                                 fallback: planned.accepted_mode_fallback,

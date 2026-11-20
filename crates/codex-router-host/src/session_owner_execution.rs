@@ -56,6 +56,7 @@ pub struct SessionOwnerExecution {
 
 struct OpenedRestore {
     session: OwnerOpenedSession,
+    requested_mode: Option<String>,
     fallback: Option<String>,
     skills: Option<session_event_model::SkillView>,
     setting_readback: Option<RestoreSettingReadback>,
@@ -64,7 +65,8 @@ struct OpenedRestore {
 impl OpenedRestore {
     fn apply_setting_readback(&mut self) {
         if let Some(readback) = self.setting_readback.take() {
-            self.session.apply_restore_setting_readback(readback);
+            self.session
+                .apply_restore_setting_readback(readback, self.requested_mode.as_deref());
         }
     }
 }
@@ -281,6 +283,7 @@ impl SessionOwnerExecution {
                 run.attempt,
                 OpenedRestore {
                     session,
+                    requested_mode: saved.resume.requested_mode,
                     fallback: accepted_mode_fallback,
                     skills,
                     setting_readback: None,
