@@ -107,6 +107,9 @@ pub enum SessionOwnerCommand {
         generation: SessionGeneration,
         input: InputId,
     },
+    CancelOperation {
+        target: uuid::Uuid,
+    },
     CancelSetting {
         input: InputId,
         setting: OwnerSetting,
@@ -540,6 +543,7 @@ pub enum SessionOwnerRefusal {
     InputAlreadyAdmitted,
     EffectInProgress,
     SettingEffectInProgress(SettingEffectInProgress),
+    CancelTargetInactive,
     QueueFull,
     CannotSteer,
     SkillSelectionChanged,

@@ -697,6 +697,139 @@ async fn steer_into_a_turn_that_replaced_the_running_one_names_that_turns_approv
     stopped.expect("supervisor shutdown");
 }
 
+#[tokio::test]
+async fn operation_cancel_interrupts_an_input_taken_while_cancel_waited_for_admission() {
+    use collaboration_protocol::{
+        ConversationCancelRequest, MessageDelivery, ProviderPromptStopReason,
+    };
+
+    let rig = steering_session_on_clock(
+        "cursor-settings-agent.ts",
+        "reactive-session-1",
+        |receipt| {
+            vec![
+                "reactive".to_owned(),
+                receipt.display().to_string(),
+                "hold-first-prompt-open".to_owned(),
+                "prompt-directives".to_owned(),
+            ]
+        },
+        Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
+    )
+    .await;
+    let prompt = |text: &str, delivery| ConversationPromptRequest {
+        delivery,
+        operation_id: OperationId::generate(),
+        input_id: None,
+        target: rig.target.clone(),
+        generation: Some(binding().generation),
+        requested_by: rig.target.clone().into(),
+        approver: rig.target.clone().into(),
+        prompt: collaboration_protocol::MessageContent::HumanUser {
+            text: MessageText::try_from(text.to_owned()).expect("prompt text"),
+        },
+    };
+    rig.supervisor
+        .prompt(prompt("first", MessageDelivery::Auto))
+        .await
+        .expect("first prompt");
+    while recorded_requests(&rig.receipt, "session/prompt") != 1 {
+        tokio::task::yield_now().await;
+    }
+    let queued_request = prompt("hold-open", MessageDelivery::Queue);
+    let requested = queued_request.operation_id.clone();
+    let requested_id = uuid::Uuid::parse_str(requested.as_str()).expect("prompt operation UUID");
+    rig.supervisor
+        .prompt(queued_request)
+        .await
+        .expect("queued prompt");
+    let owner = rig
+        .supervisor
+        .session_owner_for(&rig.target)
+        .expect("session owner");
+    let mut snapshots = owner.snapshots();
+    snapshots
+        .wait_for(|snapshot| {
+            snapshot
+                .queue
+                .iter()
+                .any(|entry| !entry.started && entry.input.operation == requested_id)
+        })
+        .await
+        .expect("target still queued");
+
+    let (entered, reached) = tokio::sync::oneshot::channel();
+    let (release, released) = tokio::sync::oneshot::channel();
+    *rig.supervisor
+        .inner
+        .cancel_admission_test_pause
+        .lock()
+        .expect("test pause") = Some(AdmissionTestPause {
+        entered,
+        release: released,
+    });
+    let cancel = OperationId::generate();
+    rig.supervisor
+        .cancel(ConversationCancelRequest {
+            operation_id: cancel.clone(),
+            target_operation_id: requested.clone(),
+            target: rig.target.clone(),
+            generation: Some(binding().generation),
+            requested_by: rig.target.clone().into(),
+            approver: rig.target.clone().into(),
+        })
+        .await
+        .expect("cancel operation admitted at Host");
+    reached.await.expect("cancel waiting at owner admission");
+    node_test_fixture::release_fixture(&rig.receipt, ".release").expect("finish first prompt");
+    snapshots
+        .wait_for(|snapshot| {
+            snapshot
+                .foreground
+                .as_ref()
+                .is_some_and(|input| input.operation == requested_id)
+        })
+        .await
+        .expect("queued input became the foreground");
+    while recorded_requests(&rig.receipt, "session/prompt") != 2 {
+        tokio::task::yield_now().await;
+    }
+    release
+        .send(())
+        .expect("send cancellation after writer takes the queued input");
+
+    let wait_request = |operation_id| ConversationOperationWaitRequest {
+        operation_id,
+        timeout_seconds: PositiveSeconds::try_from(10).expect("bounded wait"),
+    };
+    let cancelled = rig
+        .supervisor
+        .wait(wait_request(cancel))
+        .await
+        .expect("cancel the foreground by operation");
+    assert!(
+        matches!(cancelled.output, ConversationOperationWaitOutput::Available {
+        settlement: ConversationOperationSettlement::CancelRequested { target_operation_id, .. }
+    } if target_operation_id == requested)
+    );
+    let stopped = rig
+        .supervisor
+        .wait(wait_request(requested))
+        .await
+        .expect("prompt finishes");
+    assert!(matches!(
+        stopped.output,
+        ConversationOperationWaitOutput::Available {
+            settlement: ConversationOperationSettlement::PromptCompleted {
+                stop_reason: ProviderPromptStopReason::Cancelled,
+                ..
+            }
+        }
+    ));
+    assert_eq!(recorded_requests(&rig.receipt, "session/cancel"), 1);
+    rig.supervisor.shutdown().await.expect("fixture shutdown");
+}
+
 fn human(id: &str) -> collaboration_protocol::ProviderIdentity {
     serde_json::from_value(serde_json::json!({"kind": "human", "humanId": id})).expect("human")
 }

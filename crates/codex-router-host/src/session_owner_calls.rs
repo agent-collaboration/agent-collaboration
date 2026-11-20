@@ -33,12 +33,18 @@ pub struct SessionOwnerCalls {
     steer_targets: Mutex<BTreeMap<Uuid, SteerTarget>>,
     replies: Mutex<BTreeMap<Uuid, oneshot::Sender<OwnedSettlement>>>,
     reply_changed: Notify,
-    cancels: Mutex<BTreeMap<(SessionGeneration, TurnId), oneshot::Sender<CancelReceipt>>>,
+    cancels: Mutex<BTreeMap<CancelTarget, oneshot::Sender<CancelReceipt>>>,
     dependent_restores: Mutex<BTreeMap<Uuid, oneshot::Sender<RestoreResult>>>,
     idle_steers: Mutex<BTreeSet<Uuid>>,
 }
 
 pub(crate) type CancelReceipt = Result<CancelDrainReport, RevokeReason>;
+
+#[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) enum CancelTarget {
+    Turn(SessionGeneration, TurnId),
+    Operation(Uuid),
+}
 
 struct SteerTarget {
     operation: Option<Uuid>,
@@ -168,12 +174,10 @@ impl SessionOwnerCalls {
 
     pub(crate) fn expect_cancel(
         &self,
-        generation: SessionGeneration,
-        turn: TurnId,
+        target: CancelTarget,
     ) -> Option<oneshot::Receiver<CancelReceipt>> {
         let mut cancels = lock(&self.cancels);
-        let std::collections::btree_map::Entry::Vacant(waiter) = cancels.entry((generation, turn))
-        else {
+        let std::collections::btree_map::Entry::Vacant(waiter) = cancels.entry(target) else {
             return None;
         };
         let (send, receive) = oneshot::channel();
@@ -181,20 +185,26 @@ impl SessionOwnerCalls {
         Some(receive)
     }
 
-    pub(crate) fn forget_cancel(&self, generation: SessionGeneration, turn: TurnId) {
-        lock(&self.cancels).remove(&(generation, turn));
+    pub(crate) fn forget_cancel(&self, target: CancelTarget) {
+        lock(&self.cancels).remove(&target);
         self.reply_changed.notify_waiters();
     }
 
     pub(crate) fn settle_cancel(
         &self,
         authorization: &DispatchAuthorization,
+        operation: Uuid,
         receipt: CancelReceipt,
     ) {
         let AuthorizationTarget::ExistingTurn { turn } = authorization.target else {
             return;
         };
-        if let Some(waiter) = lock(&self.cancels).remove(&(authorization.run, turn)) {
+        self.answer_cancel(CancelTarget::Operation(operation), receipt.clone());
+        self.answer_cancel(CancelTarget::Turn(authorization.run, turn), receipt);
+    }
+
+    fn answer_cancel(&self, target: CancelTarget, receipt: CancelReceipt) {
+        if let Some(waiter) = lock(&self.cancels).remove(&target) {
             let _caller_gone = waiter.send(receipt);
             self.reply_changed.notify_waiters();
         }
@@ -290,6 +300,15 @@ impl SessionOwnerCalls {
         lock(&self.delivery_evidence).remove(&operation);
         let joined = lock(&self.steer_targets).remove(&operation);
         let joined_operation = joined.as_ref().and_then(|target| target.operation);
+        if let SessionOwnerReply::InputUnsent { reason, .. } = &reply {
+            let receipt = match reason {
+                RevokeReason::Cancelled | RevokeReason::QueueCancelled => {
+                    Ok(CancelDrainReport::Drained)
+                }
+                other => Err(*other),
+            };
+            self.answer_cancel(CancelTarget::Operation(operation), receipt);
+        }
         let acceptance = match &reply {
             SessionOwnerReply::SteerStarted { .. } => InputAcceptance::ProviderStarted,
             SessionOwnerReply::InputFinished {

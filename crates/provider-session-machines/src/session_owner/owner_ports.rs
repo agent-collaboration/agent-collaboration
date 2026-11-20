@@ -719,6 +719,7 @@ pub enum OwnerEffect {
     },
     CancelSent {
         authorization: DispatchAuthorization,
+        operation: Uuid,
         drain: CancelDrainReport,
     },
     /// The executor synchronously arbitrates with take and reports the
@@ -750,6 +751,7 @@ pub enum OwnerEffect {
     ReopenRoute(RunAttempt<CloseAttempt>),
     CancelNotSent {
         authorization: DispatchAuthorization,
+        operation: Uuid,
         reason: RevokeReason,
     },
     IdleSteerUsesPrompt(OwnerInput),

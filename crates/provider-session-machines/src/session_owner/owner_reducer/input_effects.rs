@@ -443,6 +443,32 @@ impl OwnerTransition {
         self.retire_waiting_inputs(reason)
     }
 
+    pub(super) fn cancel_operation(&mut self, operation: uuid::Uuid) -> OwnerResult {
+        if let Some(pending) = self
+            .next
+            .prompts
+            .values()
+            .find(|pending| pending.input.operation == operation)
+        {
+            let input = pending.input.clone();
+            return if pending.wait == InputWait::Wire {
+                self.cancel_turn(input.generation, input.turn)
+            } else {
+                self.cancel_queued(input.generation, &input.input)
+            };
+        }
+        if let Some(input) = self
+            .next
+            .ports
+            .provider_started_turn
+            .as_ref()
+            .filter(|input| input.operation == operation)
+        {
+            return self.cancel_turn(input.generation, input.turn);
+        }
+        Err(SessionOwnerRefusal::CancelTargetInactive.into())
+    }
+
     pub(super) fn cancel_queued(
         &mut self,
         generation: SessionGeneration,

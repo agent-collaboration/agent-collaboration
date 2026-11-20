@@ -721,6 +721,7 @@ impl SessionOwnerPorts for SessionOwnerExecution {
             OwnerEffect::SteerSubmitted(input) => Ok(self.submitted_input(input)),
             OwnerEffect::CancelSent {
                 authorization,
+                operation,
                 drain,
             } => {
                 use provider_session_machines::session_owner::CancelDrainReport;
@@ -732,14 +733,17 @@ impl SessionOwnerPorts for SessionOwnerExecution {
                         "{}", CancelDrainReport::EXPIRED_SUMMARY
                     );
                 }
-                self.calls.settle_cancel(&authorization, Ok(drain));
+                self.calls
+                    .settle_cancel(&authorization, operation, Ok(drain));
                 Ok(None)
             }
             OwnerEffect::CancelNotSent {
                 authorization,
+                operation,
                 reason,
             } => {
-                self.calls.settle_cancel(&authorization, Err(reason));
+                self.calls
+                    .settle_cancel(&authorization, operation, Err(reason));
                 Ok(None)
             }
             OwnerEffect::ProviderStartedTurn(input) => {

@@ -173,6 +173,7 @@ impl OwnerTransition {
             SessionOwnerCommand::CancelQueued { generation, input } => {
                 self.cancel_queued(generation, &input)
             }
+            SessionOwnerCommand::CancelOperation { target } => self.cancel_operation(target),
             SessionOwnerCommand::Set {
                 input,
                 setting,

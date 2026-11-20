@@ -407,6 +407,7 @@ impl OwnerTransition {
             AuthorizedWork::Setting { setting, .. } => self.setting_taken(setting),
             AuthorizedWork::Cancel(input) => {
                 let drain = drain.ok_or(OwnerRejection::IgnoredLate)?;
+                let operation = input.operation;
                 if self.is_live(input.generation)
                     && self.next.turn() == (SessionTurn::Running { turn: input.turn })
                 {
@@ -416,6 +417,7 @@ impl OwnerTransition {
                 self.next.ports.authorizations.remove(key);
                 self.effects.push(OwnerEffect::CancelSent {
                     authorization: key.clone(),
+                    operation,
                     drain,
                 });
                 self.continue_close()?;
@@ -482,6 +484,7 @@ impl OwnerTransition {
             AuthorizedWork::Cancel(input) => {
                 self.effects.push(OwnerEffect::CancelNotSent {
                     authorization: key.clone(),
+                    operation: input.operation,
                     reason,
                 });
                 if reason == RevokeReason::Closed

@@ -1,7 +1,9 @@
 //! Start and address a session-owner task through the Host registry.
 
 use crate::{
-    session_owner_calls::{InputAcceptance, OwnedSettlement, SessionOwnerCalls},
+    session_owner_calls::{
+        CancelReceipt, CancelTarget, InputAcceptance, OwnedSettlement, SessionOwnerCalls,
+    },
     session_owner_execution::SessionOwnerExecution,
     session_owner_publication::SessionOwnerPublisher,
     session_owner_registry::{RegisteredOwner, SessionOwnerRegistry},
@@ -338,16 +340,36 @@ impl SessionOwnerAddress {
         &self,
         generation: provider_session_machines::SessionGeneration,
         turn: provider_session_machines::session_turn_machine::TurnId,
-    ) -> Result<crate::session_owner_calls::CancelReceipt, OwnerDoorError> {
+    ) -> Result<CancelReceipt, OwnerDoorError> {
+        self.cancel(
+            CancelTarget::Turn(generation, turn),
+            SessionOwnerCommand::CancelTurn { generation, turn },
+        )
+        .await
+    }
+
+    pub(crate) async fn cancel_operation(
+        &self,
+        operation: Uuid,
+    ) -> Result<CancelReceipt, OwnerDoorError> {
+        self.cancel(
+            CancelTarget::Operation(operation),
+            SessionOwnerCommand::CancelOperation { target: operation },
+        )
+        .await
+    }
+
+    async fn cancel(
+        &self,
+        target: CancelTarget,
+        command: SessionOwnerCommand,
+    ) -> Result<CancelReceipt, OwnerDoorError> {
         let receipt = self
             .calls
-            .expect_cancel(generation, turn)
+            .expect_cancel(target)
             .ok_or(OwnerDoorError::Mailbox(OwnerMailboxUnavailable::Busy))?;
-        if let Err(error) = self
-            .admit(SessionOwnerCommand::CancelTurn { generation, turn })
-            .await
-        {
-            self.calls.forget_cancel(generation, turn);
+        if let Err(error) = self.admit(command).await {
+            self.calls.forget_cancel(target);
             return Err(error);
         }
         receipt.await.map_err(|_| OwnerDoorError::OwnerStopped)

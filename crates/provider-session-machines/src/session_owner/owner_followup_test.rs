@@ -285,6 +285,7 @@ fn t2_revoking_a_cancel_does_not_change_its_existing_turn_membership() {
     no_membership_change(&revoked);
     assert!(revoked.contains(&OwnerEffect::CancelNotSent {
         authorization: cancel,
+        operation: foreground.operation,
         reason: RevokeReason::Closed,
     }));
     assert_eq!(

@@ -96,6 +96,8 @@ struct SupervisorInner {
     started_at_ms: i64,
     #[cfg(test)]
     admission_test_pause: StdMutex<Option<AdmissionTestPause>>,
+    #[cfg(test)]
+    cancel_admission_test_pause: StdMutex<Option<AdmissionTestPause>>,
     /// Pauses the next steer after its injection reply, before it reads the
     /// joined turn's approver.
     #[cfg(test)]
@@ -399,6 +401,8 @@ impl ExternalProviderSupervisor {
                 started_at_ms,
                 #[cfg(test)]
                 admission_test_pause: StdMutex::new(None),
+                #[cfg(test)]
+                cancel_admission_test_pause: StdMutex::new(None),
                 #[cfg(test)]
                 steer_reply_test_pause: StdMutex::new(None),
                 #[cfg(test)]

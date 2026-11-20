@@ -273,6 +273,10 @@ fn owner_failure(
             ConversationOperationFailureKind::StaleGeneration,
             refusal.and_then(SessionOwnerRefusal::retry_advice),
         )),
+        Some(SessionOwnerRefusal::CancelTargetInactive) => Some((
+            ConversationOperationFailureKind::NotFound,
+            Some("target provider prompt operation is not active on this binding"),
+        )),
         _ => None,
     };
     if let Some((kind, message)) = public {
@@ -437,7 +441,6 @@ pub(super) async fn cancel(
             ));
         }
     };
-    let snapshot = owner.snapshots().borrow().clone();
     let Ok(target_id) = uuid::Uuid::parse_str(target_operation.as_str()) else {
         return ProviderOperationCompletion::Failure(failure(
             ConversationOperationFailureKind::InvalidRequest,
@@ -448,33 +451,9 @@ pub(super) async fn cancel(
             Some(target),
         ));
     };
-    let cancelled = if let Some(queued) = snapshot
-        .queue
-        .iter()
-        .find(|entry| !entry.started && entry.input.operation == target_id)
-    {
-        owner
-            .cancel_queued(queued.input.input.clone())
-            .await
-            .map(|()| Ok(provider_session_machines::session_owner::CancelDrainReport::Drained))
-    } else if let Some(foreground) = snapshot
-        .foreground
-        .filter(|input| input.operation == target_id)
-    {
-        owner
-            .cancel_turn(foreground.generation, foreground.turn)
-            .await
-    } else {
-        return ProviderOperationCompletion::Failure(failure(
-            ConversationOperationFailureKind::NotFound,
-            ConversationOperationFailureStage::Admission,
-            ProviderOperationEffect::None,
-            "target provider prompt operation is not active on this binding",
-            operation,
-            Some(target),
-        ));
-    };
-    match cancelled {
+    #[cfg(test)]
+    pause_before_cancel_admission(supervisor).await;
+    match owner.cancel_operation(target_id).await {
         Ok(Ok(_drain)) => ProviderOperationCompletion::Success {
             settlement: ConversationOperationSettlement::CancelRequested {
                 target: target.clone(),
@@ -497,5 +476,19 @@ pub(super) async fn cancel(
             error,
             &owner.snapshots().borrow(),
         )),
+    }
+}
+
+#[cfg(test)]
+async fn pause_before_cancel_admission(supervisor: &ExternalProviderSupervisor) {
+    let pause = supervisor
+        .inner
+        .cancel_admission_test_pause
+        .lock()
+        .expect("cancel admission test pause")
+        .take();
+    if let Some(pause) = pause {
+        let _entered = pause.entered.send(());
+        let _released = pause.release.await;
     }
 }
