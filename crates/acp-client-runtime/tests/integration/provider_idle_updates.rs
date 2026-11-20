@@ -91,6 +91,7 @@ async fn idle_mode_config_unknown_and_late_tool_updates_are_projected() {
             arguments: vec![
                 IDLE_UPDATE_FIXTURE.to_owned(),
                 receipt.display().to_string(),
+                "malformed-tool".to_owned(),
             ],
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,
