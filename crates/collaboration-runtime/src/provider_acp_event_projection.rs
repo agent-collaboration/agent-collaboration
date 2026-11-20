@@ -338,6 +338,32 @@ impl ProviderSessionObservers {
     }
 }
 
+enum SnapshotTurn<'a> {
+    Idle,
+    Known(&'a str),
+    PendingUnknown,
+}
+
+fn snapshot_turn(snapshot: &[HubEvent]) -> SnapshotTurn<'_> {
+    snapshot
+        .iter()
+        .fold(SnapshotTurn::Idle, |current, record| match &record.event {
+            SessionEvent::TurnStarted { turn_id, .. } => SnapshotTurn::Known(turn_id),
+            SessionEvent::TurnEnded { turn_id, .. } => match current {
+                SnapshotTurn::Known(active) if active != turn_id => current,
+                _ => SnapshotTurn::Idle,
+            },
+            SessionEvent::StateChanged {
+                state: SessionState::Running | SessionState::RequiresAction { .. },
+            } => match current {
+                SnapshotTurn::Idle => SnapshotTurn::PendingUnknown,
+                _ => current,
+            },
+            SessionEvent::StateChanged { .. } => SnapshotTurn::Idle,
+            _ => current,
+        })
+}
+
 pub(crate) async fn stream_prompt(
     output: codex_acp_adapter::AcpOutputSender,
     id: Value,
@@ -350,6 +376,7 @@ pub(crate) async fn stream_prompt(
     use tokio::sync::broadcast::error::RecvError;
 
     let mut replay = std::mem::take(&mut attachment.snapshot).into_iter();
+    let mut identity_unknown = false;
     loop {
         let received = match replay.next() {
             Some(event) => Ok(event),
@@ -361,21 +388,31 @@ pub(crate) async fn stream_prompt(
                 ..
             })
             | Err(RecvError::Lagged(_)) => {
-                let resync = received.is_ok();
-                let replacement = events.attach(session.clone()).await;
-                let Ok(replacement) = replacement else {
+                let Ok(mut replacement) = events.attach(session.clone()).await else {
                     let _sent = output
                         .send(failure(id, -32000, TURN_OUTCOME_UNREADABLE))
                         .await;
                     return;
                 };
-                if (resync || replacement.epoch != attachment.epoch)
-                    && !replacement.snapshot.iter().any(|event| matches!(
+                let retains_end = replacement.snapshot.iter().any(|event| matches!(
                         &event.event, SessionEvent::TurnEnded { turn_id: ended, .. } if ended == &turn_id
-                    ))
-                {
-                    let _sent = output.send(failure(id, -32000, TURN_OUTCOME_UNREADABLE)).await;
-                    return;
+                    ));
+                if retains_end {
+                    identity_unknown = false;
+                } else {
+                    identity_unknown = match snapshot_turn(&replacement.snapshot) {
+                        SnapshotTurn::Known(active) if active == turn_id => false,
+                        SnapshotTurn::PendingUnknown => true,
+                        _ => {
+                            let _sent = output
+                                .send(failure(id, -32000, TURN_OUTCOME_UNREADABLE))
+                                .await;
+                            return;
+                        }
+                    };
+                    // Subsequent turn boundaries decide ownership. Earlier
+                    // turns in the snapshot cannot settle this prompt.
+                    replacement.snapshot.clear();
                 }
                 attachment = replacement;
                 replay = std::mem::take(&mut attachment.snapshot).into_iter();
@@ -389,6 +426,27 @@ pub(crate) async fn stream_prompt(
                 return;
             }
         };
+        if identity_unknown {
+            match &event.event {
+                SessionEvent::TurnStarted {
+                    turn_id: started, ..
+                } if started == &turn_id => {
+                    identity_unknown = false;
+                }
+                SessionEvent::TurnEnded { turn_id: ended, .. } if ended == &turn_id => {}
+                SessionEvent::TurnStarted { .. }
+                | SessionEvent::TurnEnded { .. }
+                | SessionEvent::StateChanged {
+                    state: SessionState::Idle | SessionState::Unloaded | SessionState::Closed,
+                } => {
+                    let _sent = output
+                        .send(failure(id, -32000, TURN_OUTCOME_UNREADABLE))
+                        .await;
+                    return;
+                }
+                _ => {}
+            }
+        }
         if let SessionEvent::TurnEnded {
             turn_id: ended,
             outcome,
@@ -410,7 +468,7 @@ pub(crate) async fn stream_prompt(
                     TurnOutcome::Ended {
                         stop_reason: StopReason::Unknown(_),
                         ..
-                    } => failure(id, -32000, TURN_OUTCOME_UNREADABLE),
+                    } => response(id, json!({"stopReason":"end_turn"})),
                     TurnOutcome::Ended { stop_reason, .. } => {
                         response(id, json!({"stopReason":stop_reason_label(&stop_reason)}))
                     }

@@ -48,23 +48,31 @@ async fn apply(inbox: &HubSessionInbox, publication: HubPublication) {
 }
 
 fn terminal() -> SessionEvent {
+    ended(TURN, StopReason::MaxTokens)
+}
+
+fn ended(turn: &str, stop_reason: StopReason) -> SessionEvent {
     SessionEvent::TurnEnded {
-        turn_id: TURN.to_owned(),
+        turn_id: turn.to_owned(),
         outcome: TurnOutcome::Ended {
-            stop_reason: StopReason::MaxTokens,
+            stop_reason,
             local_cause: None,
         },
     }
 }
 
-async fn busy_prompt_rebase_reply(retains_terminal: bool) -> Value {
+async fn busy_prompt_rebase_reply(
+    state: SessionState,
+    retained: Option<StopReason>,
+    later: &[SessionEvent],
+) -> Value {
     let root = tempfile::tempdir().expect("private root");
     let store = ProviderOperationStore::open(&root.path().join("operations.sqlite"))
         .await
         .expect("store");
     // The retained-terminal case loses the marker to receiver lag. The other
     // case receives the marker from its original attachment.
-    let subscriber_capacity = if retains_terminal { 1 } else { 256 };
+    let subscriber_capacity = if retained.is_some() { 1 } else { 256 };
     let hub = Arc::new(ProviderSessionEventHub::with_capacity(
         Arc::new(tokio::sync::Mutex::new(store)),
         subscriber_capacity,
@@ -142,14 +150,18 @@ async fn busy_prompt_rebase_reply(retains_terminal: bool) -> Value {
         .await
         .expect("buffered receipt")
         .expect("buffered batch applied");
-    let state = if retains_terminal {
-        SessionState::Running
-    } else {
-        SessionState::Idle
-    };
     apply(&inbox, rebase(incarnation, 5, state)).await;
-    if retains_terminal {
-        apply(&inbox, commit(incarnation, 6, terminal())).await;
+    if let Some(reason) = retained {
+        apply(&inbox, commit(incarnation, 6, ended(TURN, reason))).await;
+    }
+    if !later.is_empty() {
+        assert!(
+            futures_util::poll!(&mut waiter).is_pending(),
+            "the waiter must stay pending on the rebased running turn"
+        );
+        for (sequence, event) in (6..).zip(later.iter().cloned()) {
+            apply(&inbox, commit(incarnation, sequence, event)).await;
+        }
     }
 
     waiter.await;
@@ -163,7 +175,38 @@ async fn busy_prompt_rebase_reply(retains_terminal: bool) -> Value {
 
 #[tokio::test(flavor = "current_thread")]
 async fn busy_prompt_recovers_retained_terminal_after_full_inbox_rebase() {
-    let reply = busy_prompt_rebase_reply(true).await;
+    for (reason, expected) in [
+        (StopReason::MaxTokens, "max_tokens"),
+        (StopReason::Unknown("future_reason".into()), "end_turn"),
+    ] {
+        let reply = busy_prompt_rebase_reply(SessionState::Running, Some(reason), &[]).await;
+        assert_eq!(
+            reply.pointer("/result/stopReason"),
+            Some(&json!(expected)),
+            "{reply}"
+        );
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn busy_prompt_reports_unknown_when_full_inbox_rebase_loses_terminal() {
+    let reply = busy_prompt_rebase_reply(SessionState::Idle, None, &[]).await;
+    assert_unreadable(&reply);
+}
+
+fn assert_unreadable(reply: &Value) {
+    assert_eq!(
+        reply.pointer("/error/message"),
+        Some(&json!(
+            "the turn's outcome couldn't be read from the event stream; check the session before sending again"
+        )),
+        "{reply}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn busy_prompt_waits_for_same_turn_after_running_rebase() {
+    let reply = busy_prompt_rebase_reply(SessionState::Running, None, &[terminal()]).await;
     assert_eq!(
         reply.pointer("/result/stopReason"),
         Some(&json!("max_tokens")),
@@ -172,13 +215,55 @@ async fn busy_prompt_recovers_retained_terminal_after_full_inbox_rebase() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn busy_prompt_reports_unknown_when_full_inbox_rebase_loses_terminal() {
-    let reply = busy_prompt_rebase_reply(false).await;
-    assert_eq!(
-        reply.pointer("/error/message"),
-        Some(&json!(
-            "the turn's outcome couldn't be read from the event stream; check the session before sending again"
-        )),
-        "{reply}"
-    );
+async fn busy_prompt_reports_unknown_when_a_different_turn_is_seen_after_rebase() {
+    for event in [
+        SessionEvent::TurnStarted {
+            turn_id: "different-turn".into(),
+            input_id: session_event_model::InputId::generate(),
+        },
+        ended("different-turn", StopReason::EndTurn),
+    ] {
+        let reply = busy_prompt_rebase_reply(SessionState::Running, None, &[event]).await;
+        assert_unreadable(&reply);
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn busy_prompt_reports_unknown_when_pending_action_rebase_becomes_idle() {
+    use session_event_model::{
+        ApprovalChoice, ApprovalEffect, ApprovalRequest, ApprovalScope, OfferedOption,
+        OfferedOptionId, OfferedOptions, OptionsOrigin, PendingInteraction, PendingInteractions,
+    };
+
+    let request_id = "held-approval".to_owned();
+    let pending = PendingInteractions::new(vec![PendingInteraction::Approval {
+        approver: serde_json::from_value(json!({"kind":"human", "humanId":"approver"}))
+            .expect("approver"),
+        request: Box::new(ApprovalRequest {
+            request_id: request_id.clone(),
+            title: "Approve the action".into(),
+            description: None,
+            subject: None,
+            options_origin: OptionsOrigin::AgentOffered,
+            options: OfferedOptions::new(vec![OfferedOption {
+                option_id: OfferedOptionId::new("allow").expect("option id"),
+                label: "Allow".into(),
+                choice: ApprovalChoice::new(ApprovalEffect::Allow, ApprovalScope::Once),
+            }])
+            .expect("options"),
+        }),
+    }])
+    .expect("pending interaction");
+    let reply = busy_prompt_rebase_reply(
+        SessionState::RequiresAction { pending },
+        None,
+        &[
+            SessionEvent::InteractionResolved { request_id },
+            SessionEvent::StateChanged {
+                state: SessionState::Idle,
+            },
+        ],
+    )
+    .await;
+    assert_unreadable(&reply);
 }
