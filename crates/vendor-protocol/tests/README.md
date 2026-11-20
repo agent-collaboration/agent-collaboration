@@ -8,6 +8,8 @@ The integration target exercises the public Codex `model/list`, `thread/read`,
 and `thread/resume` bindings with independent JSON samples and compiler
 diagnostics for invalid method pairings. The thread cases cover the different
 reply settings, tagged objects, and schema-declared alternatives.
+The response ingress cases exercise the typed decoder on raw JSON-RPC results,
+compare opaque numbers with `Value` ingress, and pin the buffering restriction.
 The pinned inputs and their provenance live in `verification/schemas/pins.json`.
 
 Run the crate tests with `cargo nextest run --locked -p vendor-protocol`.

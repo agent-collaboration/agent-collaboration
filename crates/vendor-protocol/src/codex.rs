@@ -1,4 +1,14 @@
 //! Codex app-server wire bindings from the pinned experimental schema and pairing.
+//!
+//! A plain JSON-RPC envelope can retain its `result` field as a
+//! [`RawValue`](serde_json::value::RawValue). After selecting and correlating the reply,
+//! pass that field's JSON bytes to [`CodexRequest::decode_response`].
+//! Decode request bodies directly from JSON text or bytes with Serde.
+//!
+//! An existing `serde_json::Value` can still decode a valid body. It may already
+//! have rounded opaque numbers. Derived Serde envelopes that buffer payloads with
+//! `untagged`, `flatten`, or internal tagging can reject valid bodies that
+//! require access to raw JSON.
 
 use serde::de::{DeserializeOwned, MapAccess, Visitor, value::MapAccessDeserializer};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -13,12 +23,28 @@ mod sealed {
 pub trait CodexRequest: sealed::Sealed + Serialize + DeserializeOwned {
     const METHOD: &'static str;
     type Response: Serialize + DeserializeOwned;
+
+    /// Decodes the complete JSON payload of a selected, correlated JSON-RPC `result`.
+    ///
+    /// Pass the bytes of the raw result, for example `result.get().as_bytes()`
+    /// from a `Box<RawValue>` field on a plain envelope. The caller owns envelope
+    /// selection, reply correlation, and JSON-RPC errors.
+    ///
+    /// # Errors
+    ///
+    /// Returns a JSON error for an invalid response body or trailing non-whitespace data.
+    fn decode_response(result_json: &[u8]) -> serde_json::Result<Self::Response> {
+        serde_json::from_slice(result_json)
+    }
 }
 
 /// A validated JSON value in a schema-declared opaque field.
 ///
 /// Decode directly from JSON text or bytes and serialize back to JSON to retain the source
 /// numbers. An intermediate `serde_json::Value` may have already rounded them.
+///
+/// Equality compares the retained JSON text. Whitespace and key order inside the value
+/// can therefore affect equality of enclosing generated types.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct OpaqueJson(Box<RawValue>);
