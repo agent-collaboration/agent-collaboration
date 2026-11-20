@@ -4,6 +4,8 @@
 mod acp_provider_backend;
 #[path = "../support/native_delivery.rs"]
 mod native_delivery;
+#[path = "../support/provider_history.rs"]
+mod provider_history;
 use codex_acp_adapter::test_support::native_permission_echo;
 #[path = "../support/served_api.rs"]
 mod served_api;
