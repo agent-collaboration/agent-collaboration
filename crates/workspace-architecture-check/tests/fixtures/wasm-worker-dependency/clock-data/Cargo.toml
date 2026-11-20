@@ -1,0 +1,9 @@
+[package]
+name = "clock-data"
+version = "0.0.0"
+edition = "2024"
+autotests = false
+publish = false
+
+[target.wasm32-unknown-unknown.dependencies]
+worker = { path = "../worker" }
