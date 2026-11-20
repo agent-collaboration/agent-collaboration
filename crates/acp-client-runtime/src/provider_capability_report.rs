@@ -92,6 +92,28 @@ impl ProviderCapabilityReport {
             auth_status: self.auth_status.clone(),
         }
     }
+
+    /// Use the session owner's negotiated capabilities alongside connection-only facts.
+    #[must_use]
+    pub fn with_session_model(mut self, session: &CapabilityReport) -> Self {
+        self.supports_load = session.load;
+        self.supports_resume = session.resume;
+        self.supports_close = session.close;
+        self.supports_list = session.list;
+        self.supports_steering = session.steer;
+        self.router_queue = session
+            .queue
+            .is_some_and(|queue| queue.kind == QueueCapability::Router);
+        self.supports_cancel_queued = session.queue.is_some_and(|queue| queue.can_cancel);
+        self.supports_modes = session.modes;
+        self.supports_config_options = session.config_options;
+        self.supports_elicitation = session.elicitation;
+        self.supports_usage = session.usage;
+        self.accepts_image = session.prompt_content.image;
+        self.accepts_audio = session.prompt_content.audio;
+        self.accepts_embedded_resource = session.prompt_content.embedded_context;
+        self
+    }
 }
 
 fn advertises_steering(meta: Option<&serde_json::Map<String, serde_json::Value>>) -> bool {

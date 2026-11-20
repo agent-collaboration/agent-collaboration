@@ -60,6 +60,24 @@ pub trait SessionEventSink: Send + Sync + 'static {
             .map(|()| GenerationPublication::Published)
     }
 
+    fn publish_for_turn(
+        &self,
+        session_id: &str,
+        generation: SessionGeneration,
+        _turn: provider_session_machines::session_turn_machine::TurnId,
+        event: SessionEvent,
+    ) -> Result<GenerationPublication, EventSinkClosed> {
+        self.publish_in(session_id, generation, event)
+    }
+
+    fn publish_connection_auth(
+        &self,
+        _session_id: &str,
+        _status: session_event_model::ProviderAuthStatus,
+    ) -> Result<(), EventSinkClosed> {
+        Ok(())
+    }
+
     fn publish_skill_view_in(
         &self,
         session_id: &str,
@@ -114,17 +132,20 @@ pub trait SessionEventSink: Send + Sync + 'static {
 /// generation the session was admitted under, so a producer that outlives
 /// its run (an actor, a projection, a settings update) can't publish into a
 /// later one.
+#[cfg(test)]
 pub(crate) struct SessionGenerationSink {
     inner: Arc<dyn SessionEventSink>,
     generation: SessionGeneration,
 }
 
+#[cfg(test)]
 impl SessionGenerationSink {
     pub(crate) fn new(inner: Arc<dyn SessionEventSink>, generation: SessionGeneration) -> Self {
         Self { inner, generation }
     }
 }
 
+#[cfg(test)]
 impl SessionEventSink for SessionGenerationSink {
     fn publish_skill_view(
         &self,

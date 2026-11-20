@@ -1,129 +1,214 @@
-//! A Router-side close (an agent without session/close) ends the session
-//! NotLoaded like any close (the owner's close decision, design note §6):
-//! a released session loads again, a release during a running prompt waits
-//! for its turn, and releasing a session that isn't loaded answers nothing
-//! to close. Through the runtime's public API; the load-path races at the
-//! loading function stay unit tests beside it.
+//! Router-only close settles on the owner and permits same-ID restore.
+
+#![expect(
+    clippy::expect_used,
+    reason = "A malformed fixture must fail before asserting the close and restore."
+)]
+#![expect(
+    clippy::result_large_err,
+    reason = "The tests match the full public operation failures."
+)]
 
 use super::provider_acp_message_fifo_support::{provider_binding, recorded_requests, target};
 use super::provider_fixture_launch;
-use codex_router_host::ExternalProviderRuntime;
-use collaboration_protocol::{OperationId, SessionId};
-use std::sync::Arc;
+use codex_router_host::{
+    ExternalProviderBinding, ExternalProviderRuntime, ExternalProviderSupervisor,
+};
+use collaboration_contracts::ProviderConversationBackend;
+use collaboration_protocol::{
+    ConversationCloseRequest, ConversationLoadRequest, ConversationOperationFailure,
+    ConversationOperationSettlement, ConversationOperationWaitOutput,
+    ConversationOperationWaitRequest, ConversationPromptRequest, MessageContent, MessageDelivery,
+    MessageText, OperationId, PositiveSeconds, ProviderRequestedPolicy, ProviderWorkingDirectory,
+    RouterAccess, SessionId, SessionRef,
+};
+use collaboration_runtime::{ProviderOperationStore, ProviderSessionRecord};
+use std::{path::PathBuf, sync::Arc};
+use tokio::sync::Mutex;
 
-/// Oracle: the owner's close decision (ACP close: it ends NotLoaded and can
-/// be loaded again; the Router-side close is no longer terminal). Released on
-/// an agent that can load but can't close, the session loads again on the
-/// same connection, and the agent sees both session/loads.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_released_session_loads_again_on_the_same_connection() {
-    // Arrange: a loaded, then released, session on a load-capable agent
-    // without session/close.
-    let root = tempfile::tempdir().expect("fixture root");
-    let receipt = root.path().join("wire.json");
-    let runtime = ExternalProviderRuntime::initialize(
-        provider_fixture_launch::launch(
-            "cursor-settings-agent.ts",
-            vec!["reactive".to_owned(), receipt.display().to_string()],
-        ),
-        Arc::new(acp_provider_adapters::StandardAcpBehavior),
-    )
-    .await
-    .expect("fixture provider");
-    runtime
-        .load_session("reactive-session-1".to_owned(), root.path().to_owned())
-        .await
-        .expect("the first load");
-    runtime
-        .release_session("reactive-session-1".to_owned())
-        .await
-        .expect("the Router releases the session");
-
-    // Act
-    let reloaded = runtime
-        .load_session("reactive-session-1".to_owned(), root.path().to_owned())
-        .await;
-    let loads = recorded_requests(&receipt, "session/load");
-    runtime.shutdown().await;
-
-    // Assert
-    assert!(
-        reloaded.is_ok(),
-        "a released session loads again: {reloaded:?}"
-    );
-    assert_eq!(loads, 2, "the agent saw both session/loads");
+struct RouterCloseFixture {
+    root: tempfile::TempDir,
+    wire: PathBuf,
+    target: SessionRef,
+    supervisor: ExternalProviderSupervisor,
+    cwd: ProviderWorkingDirectory,
+    policy: ProviderRequestedPolicy,
 }
 
-/// Oracle: design note §12.1 (a close that finds a turn running frees the
-/// session only after that turn ends) and the owner's close decision (it
-/// ends NotLoaded and can be loaded again). On an agent that can load but
-/// can't close, a release during a running prompt interrupts it, waits for
-/// its end, frees the session, and the session loads again.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_release_during_a_running_prompt_frees_the_session_for_a_new_load() {
-    // Arrange: a created session with a held prompt running.
-    let root = tempfile::tempdir().expect("fixture root");
-    let receipt = root.path().join("wire.json");
-    let mut target = target();
-    target.session_id = SessionId::try_from("reactive-session-1".to_owned()).expect("session ID");
-    let binding = provider_binding(&target);
-    let runtime = Arc::new(
-        ExternalProviderRuntime::initialize(
-            provider_fixture_launch::launch(
-                "cursor-settings-agent.ts",
-                vec![
-                    "reactive".to_owned(),
-                    receipt.display().to_string(),
-                    "hold-first-prompt-open".to_owned(),
-                ],
-            ),
+impl RouterCloseFixture {
+    async fn start(hold_prompt: bool) -> Self {
+        let root = tempfile::tempdir().expect("fixture root");
+        let wire = root.path().join("wire.json");
+        let mut target = target();
+        target.session_id =
+            SessionId::try_from("reactive-session-1".to_owned()).expect("session ID");
+        let mut arguments = vec!["reactive".to_owned(), wire.display().to_string()];
+        if hold_prompt {
+            arguments.push("hold-first-prompt-open".to_owned());
+        }
+        let runtime = ExternalProviderRuntime::initialize(
+            provider_fixture_launch::launch("cursor-settings-agent.ts", arguments),
             Arc::new(acp_provider_adapters::StandardAcpBehavior),
         )
         .await
-        .expect("fixture provider"),
+        .expect("fixture provider");
+        let store = Arc::new(Mutex::new(
+            ProviderOperationStore::open(&root.path().join("operations.sqlite"))
+                .await
+                .expect("operation store"),
+        ));
+        let cwd = ProviderWorkingDirectory::try_from(root.path().display().to_string())
+            .expect("fixture directory");
+        let policy = ProviderRequestedPolicy {
+            access: RouterAccess::WriteRestricted,
+        };
+        store
+            .lock()
+            .await
+            .record_session(&ProviderSessionRecord {
+                target: target.clone(),
+                working_directory: cwd.clone(),
+                requested_policy: policy.clone(),
+                created_by: target.clone().into(),
+                approver: target.clone().into(),
+                updated_at_ms: 0,
+                resume: Default::default(),
+            })
+            .await
+            .expect("saved setup");
+        let supervisor = ExternalProviderSupervisor::new(
+            vec![ExternalProviderBinding {
+                identity: provider_binding(&target),
+                runtime,
+            }],
+            store,
+        )
+        .expect("fixture Host");
+        Self {
+            root,
+            wire,
+            target,
+            supervisor,
+            cwd,
+            policy,
+        }
+    }
+
+    async fn load(&self) -> Result<ConversationOperationWaitOutput, ConversationOperationFailure> {
+        let operation_id = OperationId::generate();
+        self.supervisor
+            .load(ConversationLoadRequest {
+                operation_id: operation_id.clone(),
+                target: self.target.clone(),
+                generation: None,
+                working_directory: self.cwd.clone(),
+                requested_by: self.target.clone().into(),
+                approver: self.target.clone().into(),
+                requested_policy: self.policy.clone(),
+            })
+            .await?;
+        self.wait(operation_id).await
+    }
+
+    async fn close(&self) -> Result<ConversationOperationWaitOutput, ConversationOperationFailure> {
+        let operation_id = OperationId::generate();
+        self.supervisor
+            .close(ConversationCloseRequest {
+                operation_id: operation_id.clone(),
+                target: self.target.clone(),
+                generation: None,
+                requested_by: self.target.clone().into(),
+                approver: self.target.clone().into(),
+            })
+            .await?;
+        self.wait(operation_id).await
+    }
+
+    async fn wait(
+        &self,
+        operation_id: OperationId,
+    ) -> Result<ConversationOperationWaitOutput, ConversationOperationFailure> {
+        self.supervisor
+            .wait(ConversationOperationWaitRequest {
+                operation_id,
+                timeout_seconds: PositiveSeconds::try_from(10).expect("bound"),
+            })
+            .await
+            .map(|result| result.output)
+    }
+
+    async fn shutdown(&self) {
+        self.supervisor.shutdown().await.expect("fixture stops");
+    }
+}
+
+fn assert_router_close(output: ConversationOperationWaitOutput) {
+    assert!(
+        matches!(
+            output,
+            ConversationOperationWaitOutput::Available {
+                settlement: ConversationOperationSettlement::Closed {
+                    router_closed: true,
+                    ..
+                }
+            }
+        ),
+        "expected Router-only close, got {output:?}"
     );
-    runtime
-        .create_session(root.path().to_owned())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_released_session_loads_again_on_the_same_connection() {
+    let fixture = RouterCloseFixture::start(false).await;
+    fixture.load().await.expect("first load");
+    assert_router_close(fixture.close().await.expect("Router releases session"));
+
+    let reloaded = fixture.load().await;
+    let loads = recorded_requests(&fixture.wire, "session/load");
+    fixture.shutdown().await;
+
+    assert!(reloaded.is_ok(), "same ID loads again: {reloaded:?}");
+    assert_eq!(loads, 2, "the agent saw both session/loads");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_release_during_a_running_prompt_frees_the_session_for_a_new_load() {
+    let fixture = RouterCloseFixture::start(true).await;
+    let opened = fixture
+        .supervisor
+        .open_provider_fixture(&fixture.target.endpoint, fixture.root.path().to_owned())
         .await
         .expect("session/new");
-    let held_context = codex_router_host::ExternalProviderApprovalContext {
-        requester: target.clone().into(),
-        approver: target.clone().into(),
-        target: target.clone(),
-        operation_id: OperationId::generate(),
-        binding_generation: binding.generation.clone(),
-        binding_retirement: runtime.retirement(),
-    };
-    let held = tokio::spawn({
-        let runtime = Arc::clone(&runtime);
-        async move {
-            runtime
-                .prompt_with_approval_context(
-                    "reactive-session-1".to_owned(),
-                    "first".to_owned(),
-                    held_context,
-                )
-                .await
-        }
-    });
-    while recorded_requests(&receipt, "session/prompt") < 1 {
+    assert_eq!(opened, String::from(fixture.target.session_id.clone()));
+    let held = OperationId::generate();
+    fixture
+        .supervisor
+        .prompt(ConversationPromptRequest {
+            delivery: MessageDelivery::Auto,
+            operation_id: held.clone(),
+            input_id: None,
+            target: fixture.target.clone(),
+            generation: None,
+            requested_by: fixture.target.clone().into(),
+            approver: fixture.target.clone().into(),
+            prompt: MessageContent::HumanUser {
+                text: MessageText::try_from("first".to_owned()).expect("prompt"),
+            },
+        })
+        .await
+        .expect("admit held prompt");
+    while recorded_requests(&fixture.wire, "session/prompt") < 1 {
         tokio::task::yield_now().await;
     }
 
-    // Act
-    let released = runtime
-        .release_session("reactive-session-1".to_owned())
-        .await;
-    let held = held.await.expect("held prompt task");
-    let reloaded = runtime
-        .load_session("reactive-session-1".to_owned(), root.path().to_owned())
-        .await;
-    let cancels = recorded_requests(&receipt, "session/cancel");
-    let loads = recorded_requests(&receipt, "session/load");
-    runtime.shutdown().await;
+    let released = fixture.close().await;
+    let held = fixture.wait(held).await;
+    let reloaded = fixture.load().await;
+    let cancels = recorded_requests(&fixture.wire, "session/cancel");
+    let loads = recorded_requests(&fixture.wire, "session/load");
+    fixture.shutdown().await;
 
-    // Assert
-    assert!(released.is_ok(), "the release completes: {released:?}");
+    assert_router_close(released.expect("Router-only close completes"));
     assert!(held.is_ok(), "the interrupted prompt returns: {held:?}");
     assert_eq!(cancels, 1, "the running turn was interrupted once");
     assert!(
@@ -133,39 +218,22 @@ async fn a_release_during_a_running_prompt_frees_the_session_for_a_new_load() {
     assert_eq!(loads, 1);
 }
 
-/// Oracle: the owner's close decision and M8: close on a session that isn't
-/// loaded is refused "nothing to close", with the state and its valid next
-/// steps; the agent sees no request for it.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn releasing_a_session_that_is_not_loaded_answers_nothing_to_close() {
-    // Arrange: a load-capable agent without session/close, nothing loaded.
-    let root = tempfile::tempdir().expect("fixture root");
-    let receipt = root.path().join("wire.json");
-    let runtime = ExternalProviderRuntime::initialize(
-        provider_fixture_launch::launch(
-            "cursor-settings-agent.ts",
-            vec!["reactive".to_owned(), receipt.display().to_string()],
-        ),
-        Arc::new(acp_provider_adapters::StandardAcpBehavior),
-    )
-    .await
-    .expect("fixture provider");
+    let fixture = RouterCloseFixture::start(false).await;
 
-    // Act
-    let released = runtime
-        .release_session("reactive-session-1".to_owned())
-        .await;
-    let loads = recorded_requests(&receipt, "session/load");
-    runtime.shutdown().await;
+    let released = fixture.close().await;
+    let loads = recorded_requests(&fixture.wire, "session/load");
+    fixture.shutdown().await;
 
-    // Assert
-    assert!(
-        matches!(
-            &released,
-            Err(acp_client_runtime::ExternalProviderRuntimeError::SessionStateRefused { answer })
-                if answer == "session is not loaded; nothing to close; load it or resume it"
-        ),
-        "the release answers nothing to close: {released:?}"
+    let failure = released.expect_err("nothing to close");
+    assert_eq!(
+        String::from(failure.message),
+        "session is not loaded; nothing to close; load it or resume it"
+    );
+    assert_eq!(
+        failure.effect,
+        collaboration_protocol::ProviderOperationEffect::None
     );
     assert_eq!(loads, 0, "the agent saw no session/load");
 }

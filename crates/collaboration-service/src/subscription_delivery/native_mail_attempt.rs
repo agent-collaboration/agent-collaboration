@@ -15,6 +15,7 @@ use collaboration_protocol::{
     SessionReachability, SessionRef,
 };
 use message_board::BoardError;
+use std::sync::Arc;
 use tokio::sync::Mutex;
 
 impl SubscriptionPushStore {
@@ -113,6 +114,10 @@ struct CapturedAttemptEvidence {
     recorded: Mutex<Option<RouteEffectEvidence<SessionRef, CodexGeneration>>>,
 }
 impl AttemptEvidenceSink for CapturedAttemptEvidence {
+    fn retain_queued_dispatch(&self) -> Option<Arc<dyn AttemptEvidenceSink>> {
+        Some(Arc::new(Self::default()))
+    }
+
     fn record(
         &self,
         evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,

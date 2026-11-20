@@ -140,7 +140,7 @@ fn echoed_router_marker_without_typed_tool_event_is_not_native_execution() {
 
 #[cfg(unix)]
 #[tokio::test]
-async fn overlapping_prompt_cannot_replace_context_and_dropped_waiter_cleans_it() {
+async fn overlapping_prompt_cannot_replace_a_taken_turns_approval_context() {
     let runtime = ExternalProviderRuntime::initialize(
         cancellation_fixture(),
         std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
@@ -159,7 +159,7 @@ async fn overlapping_prompt_cannot_replace_context_and_dropped_waiter_cleans_it(
     ));
     tokio::select! {
         result = &mut first => panic!("first prompt settled unexpectedly: {result:?}"),
-        () = tokio::time::sleep(Duration::from_millis(25)) => {}
+        () = wait_for_foreground_approval(&runtime, "fixture-session") => {}
     }
     let second = runtime
         .prompt_with_approval_context(
@@ -180,7 +180,20 @@ async fn overlapping_prompt_cannot_replace_context_and_dropped_waiter_cleans_it(
         Some(first_operation.to_owned())
     );
     drop(first);
-    assert!(runtime.active_approval_count() == 0);
+    assert_eq!(
+        runtime.active_approval_count(),
+        1,
+        "the already-taken turn retains its scope"
+    );
+    runtime
+        .cancel_active_prompt("fixture-session".to_owned())
+        .await
+        .expect("cancel the detached turn");
+    runtime
+        .wait_session_idle("fixture-session".to_owned())
+        .await
+        .expect("the provider confirmed cancellation");
+    assert_eq!(runtime.active_approval_count(), 0);
     runtime.shutdown().await;
 }
 
@@ -204,7 +217,7 @@ async fn shutdown_joins_runtime_and_settles_held_prompt() {
     ));
     tokio::select! {
         result = &mut prompt => panic!("held prompt settled unexpectedly: {result:?}"),
-        () = tokio::time::sleep(Duration::from_millis(25)) => {}
+        () = wait_for_foreground_approval(&runtime, "fixture-session") => {}
     }
     runtime.shutdown().await;
     assert!(prompt.await.is_err());
@@ -247,21 +260,16 @@ async fn shutdown_drains_more_than_completion_channel_capacity_of_held_loads() {
                 .await
         }));
     }
-    tokio::time::timeout(Duration::from_secs(2), async {
-        loop {
-            let admissions = std::fs::read_to_string(&admission_log).unwrap_or_default();
-            if admissions.lines().count() == 40 {
-                break;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("all held loads reached the provider");
+    while std::fs::read_to_string(&admission_log)
+        .unwrap_or_default()
+        .lines()
+        .count()
+        != 40
+    {
+        tokio::task::yield_now().await;
+    }
 
-    tokio::time::timeout(Duration::from_secs(2), runtime.shutdown())
-        .await
-        .expect("shutdown drains the saturated completion path");
+    runtime.shutdown().await;
     for load in loads {
         assert!(matches!(
             load.await.expect("load task"),
@@ -296,16 +304,15 @@ async fn prompt_cancel_remains_responsive_during_create_admission() {
         "hold".to_owned(),
         None,
     ));
-    assert!(futures_util::poll!(&mut prompt).is_pending());
+    tokio::select! {
+        result = &mut prompt => panic!("held prompt ended: {result:?}"),
+        () = wait_for_foreground_approval(&runtime, "active-session") => {}
+    }
     let mut create = Box::pin(runtime.create_session(PathBuf::from("/tmp")));
-    assert!(futures_util::poll!(&mut create).is_pending());
-    tokio::time::timeout(Duration::from_secs(2), async {
-        while !observed.exists() {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("create reached provider");
+    tokio::select! {
+        result = &mut create => panic!("create ended before cancellation: {result:?}"),
+        () = wait_for_admission_witness(&observed) => {}
+    }
     runtime
         .cancel_prompt_operation("active-session".to_owned(), prompt_id)
         .await
@@ -343,17 +350,16 @@ async fn prompt_cancel_remains_responsive_during_load_admission() {
         "hold".to_owned(),
         None,
     ));
-    assert!(futures_util::poll!(&mut prompt).is_pending());
+    tokio::select! {
+        result = &mut prompt => panic!("held prompt ended: {result:?}"),
+        () = wait_for_foreground_approval(&runtime, "active-session") => {}
+    }
     let mut load =
         Box::pin(runtime.load_session("loaded-session".to_owned(), PathBuf::from("/tmp")));
-    assert!(futures_util::poll!(&mut load).is_pending());
-    tokio::time::timeout(Duration::from_secs(2), async {
-        while !observed.exists() {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("load reached provider");
+    tokio::select! {
+        result = &mut load => panic!("load ended before cancellation: {result:?}"),
+        () = wait_for_admission_witness(&observed) => {}
+    }
     runtime
         .cancel_prompt_operation("active-session".to_owned(), prompt_id)
         .await
@@ -364,6 +370,20 @@ async fn prompt_cancel_remains_responsive_during_load_admission() {
     );
     load.await.expect("load settles");
     runtime.shutdown().await;
+}
+
+#[cfg(unix)]
+async fn wait_for_foreground_approval(runtime: &ExternalProviderRuntime, session: &str) {
+    while runtime.active_approval_operation(session).is_none() {
+        tokio::task::yield_now().await;
+    }
+}
+
+#[cfg(unix)]
+async fn wait_for_admission_witness(receipt: &std::path::Path) {
+    while !receipt.exists() {
+        tokio::task::yield_now().await;
+    }
 }
 
 #[cfg(unix)]

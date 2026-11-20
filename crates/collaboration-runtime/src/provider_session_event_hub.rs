@@ -214,6 +214,11 @@ impl SessionHistory {
 }
 
 impl ProviderSessionEventHub {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn store_for_fixture(&self) -> Arc<Mutex<ProviderOperationStore>> {
+        self.store.clone()
+    }
+
     pub async fn publish_skill_view(
         &self,
         session: SessionRef,

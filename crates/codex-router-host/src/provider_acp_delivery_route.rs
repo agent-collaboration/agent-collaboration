@@ -7,7 +7,6 @@ mod native_result;
 mod provider_active_turn_cancel;
 mod provider_content_commands;
 mod provider_delivery_request;
-mod provider_queue_submission;
 mod session_delivery_route;
 pub use provider_active_turn_cancel::ProviderCancelActiveTurnError;
 pub use provider_content_commands::{
@@ -15,16 +14,13 @@ pub use provider_content_commands::{
 };
 use provider_delivery_request::{ProviderDeliveryContent, ProviderDeliveryRequest};
 
-use crate::external_provider_supervisor::{ProviderPromptContentsRequest, ProviderPromptDispatch};
-use crate::provider_acp_message_fifo::{ProviderAcpMessageFifo, ProviderQueuedPrompt};
+use crate::external_provider_supervisor::ProviderPromptContentsRequest;
 use crate::provider_acp_route_claim::ProviderAcpRouteClaim;
 use crate::provider_acp_session_loading::{
     ProviderSessionLoadOutcome, ProviderSessionLoadRejection, ensure_provider_session_loaded,
+    session_queue_plan,
 };
-use crate::{
-    ExternalProviderSupervisor, LiveSessionOwnershipCheck, ProviderSessionActivity,
-    ProviderSteeringOutcome,
-};
+use crate::{ExternalProviderSupervisor, LiveSessionOwnershipCheck};
 use agent_automation::{
     ProviderAcpEffectEvidence, ProviderBindingReference, ProviderSettlementEffect,
     RouteEffectEvidence, SubmissionEffect,
@@ -43,10 +39,7 @@ use collaboration_protocol::{
 };
 use collaboration_runtime::EndpointDirectory;
 use collaboration_runtime::ProviderOperationStore;
-use std::{
-    collections::{HashMap, HashSet},
-    sync::{Arc, Mutex as StdMutex},
-};
+use std::{collections::HashSet, sync::Arc};
 use tokio::sync::Mutex;
 
 pub struct ProviderAcpDeliveryRoute {
@@ -55,24 +48,48 @@ pub struct ProviderAcpDeliveryRoute {
     supervisor: Arc<ExternalProviderSupervisor>,
     store: Arc<Mutex<ProviderOperationStore>>,
     ownership: Arc<dyn LiveSessionOwnershipCheck>,
-    queue: Arc<ProviderAcpMessageFifo>,
-    session_locks: StdMutex<HashMap<SessionRef, Arc<Mutex<()>>>>,
+    #[cfg(feature = "test-support")]
+    queue_plan_pause: std::sync::Mutex<Option<QueuePlanPause>>,
+}
+
+#[cfg(feature = "test-support")]
+struct QueuePlanPause {
+    sampled: tokio::sync::oneshot::Sender<acp_client_runtime::acp_transport::TransportRun>,
+    release: tokio::sync::oneshot::Receiver<()>,
 }
 
 impl ProviderAcpDeliveryRoute {
     #[must_use]
     pub fn queue_list(&self, session: &SessionRef) -> Vec<crate::ProviderQueuedInput> {
-        self.supervisor.queued_operation_registry().list(session)
+        let Some(snapshot) = self.supervisor.owner_session_snapshot(session) else {
+            return Vec::new();
+        };
+        self.supervisor
+            .queued_operation_registry()
+            .list_in_owner_order(
+                session,
+                snapshot
+                    .queue
+                    .into_iter()
+                    .filter(|entry| !entry.started)
+                    .map(|entry| entry.input.input),
+            )
     }
 
-    pub fn queue_cancel(
+    pub async fn queue_cancel(
         &self,
         session: &SessionRef,
         input_id: &session_event_model::InputId,
     ) -> Result<(), crate::ProviderQueueCancellationError> {
-        self.queue.cancel_queued(session, input_id)
+        let owner = self
+            .supervisor
+            .session_owner_for(session)
+            .map_err(|_| crate::ProviderQueueCancellationError::NotQueued)?;
+        owner
+            .cancel_queued(input_id.clone())
+            .await
+            .map_err(|_| crate::ProviderQueueCancellationError::NotQueued)
     }
-
     #[must_use]
     pub fn new(
         service_id: UuidIdentity,
@@ -81,7 +98,7 @@ impl ProviderAcpDeliveryRoute {
         supervisor: Arc<ExternalProviderSupervisor>,
         store: Arc<Mutex<ProviderOperationStore>>,
         ownership: Arc<dyn LiveSessionOwnershipCheck>,
-        clock: Arc<dyn router_clock::RuntimeClock>,
+        _clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Self {
         let claim = ProviderAcpRouteClaim::new(
             service_id.clone(),
@@ -90,39 +107,37 @@ impl ProviderAcpDeliveryRoute {
             Arc::clone(&supervisor),
             Arc::clone(&store),
         );
-        let queue = Arc::new(ProviderAcpMessageFifo::new(
-            Arc::clone(&supervisor),
-            Arc::clone(&store),
-            Arc::clone(&ownership),
-            clock,
-        ));
-        // API prompts to a session that can't steer wait in this same line (D1 R12).
-        supervisor.attach_message_fifo(&queue);
         Self {
             service_id,
             claim,
             supervisor,
             store,
             ownership,
-            queue,
-            session_locks: StdMutex::new(HashMap::new()),
+            #[cfg(feature = "test-support")]
+            queue_plan_pause: std::sync::Mutex::new(None),
         }
     }
 
-    fn session_lock(&self, target: &SessionRef) -> Result<Arc<Mutex<()>>, DeliveryContractError> {
-        let mut locks = self
-            .session_locks
+    #[cfg(feature = "test-support")]
+    pub fn pause_next_queue_plan_for_fixture(
+        &self,
+    ) -> (
+        tokio::sync::oneshot::Receiver<acp_client_runtime::acp_transport::TransportRun>,
+        tokio::sync::oneshot::Sender<()>,
+    ) {
+        let (sampled, observed) = tokio::sync::oneshot::channel();
+        let (resume, release) = tokio::sync::oneshot::channel();
+        let previous = self
+            .queue_plan_pause
             .lock()
-            .map_err(|_| DeliveryContractError::ClientOperation)?;
-        Ok(Arc::clone(
-            locks
-                .entry(target.clone())
-                .or_insert_with(|| Arc::new(Mutex::new(()))),
-        ))
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .replace(QueuePlanPause { sampled, release });
+        assert!(previous.is_none(), "a fixture pause is still pending");
+        (observed, resume)
     }
 
     pub async fn shutdown_queue(&self) {
-        self.queue.shutdown().await;
+        self.supervisor.cancel_waiting_owner_inputs().await;
     }
 
     fn serves(&self, target: &SessionRef) -> bool {
@@ -176,8 +191,6 @@ impl ProviderAcpDeliveryRoute {
                 "provider binding generation changed",
             ));
         }
-        let session_lock = self.session_lock(&request.target)?;
-        let _session_guard = session_lock.lock().await;
         let claim = self.claim.claim(&request.target).await;
         let claim_cause = claim.unsent_cause();
         match claim.into_claim() {
@@ -206,76 +219,46 @@ impl ProviderAcpDeliveryRoute {
         }
         let operation_id = OperationId::try_from(request.attempt.as_str().to_owned())
             .map_err(|_| DeliveryContractError::InvalidEvidence)?;
-        let Some(runtime) = self.supervisor.runtime_for(&request.target.endpoint) else {
-            return Ok(Self::not_submitted(
-                "provider runtime is unavailable",
-                true,
-                UnsentCause::Holdable {
-                    otherwise: NativeRefusalCode::RuntimeMissing,
-                },
-            ));
-        };
-        let provider_session_id = String::from(request.target.session_id.clone());
-        if runtime.settings_unresolved(&provider_session_id) {
-            return Ok(Self::rejected(
-                DeliveryRejectionReason::SettingsUnresolved,
-                "settingsUnresolved: set requested settings or accept current values before prompt, steer or queue",
-            ));
-        }
-        let capabilities = runtime.capability_report(&provider_session_id).await;
-        if request.mode == MessageDelivery::Steer && !capabilities.supports_steering {
-            return Ok(Self::rejected(
-                DeliveryRejectionReason::SteerUnsupported,
-                "steer unsupported by provider",
-            ));
-        }
-        let activity = match runtime
-            .session_activity(String::from(request.target.session_id.clone()))
-            .await
-        {
-            Ok(activity) => activity,
-            Err(_) => {
-                return Ok(Self::not_submitted(
-                    "provider activity is unavailable",
-                    true,
-                    UnsentCause::Holdable {
-                        otherwise: NativeRefusalCode::ActivityUnavailable,
-                    },
-                ));
-            }
-        };
-        if request.mode == MessageDelivery::Queue
-            && request.load_policy == LoadPolicy::LoadedOnly
-            && activity == ProviderSessionActivity::NotLoaded
-        {
-            return Ok(Self::not_submitted(
-                NOT_LOADED_REASON,
-                true,
-                UnsentCause::Holdable {
-                    otherwise: NativeRefusalCode::ThreadNotLoaded,
-                },
-            ));
-        }
-        if request.mode == MessageDelivery::Queue
-            || (!capabilities.supports_steering
-                && request.mode == MessageDelivery::Auto
-                && activity == ProviderSessionActivity::Running)
-        {
-            return self
-                .queue_delivery(&request, sink, &binding, &operation_id)
-                .await;
-        }
         let mut effect = Self::effect(&request, &binding, SubmissionEffect::Dispatching)?;
-        sink.record(effect.clone()).await?;
-        match ensure_provider_session_loaded(
-            &self.supervisor,
-            &self.store,
-            self.ownership.as_ref(),
-            &request.target,
-            request.load_policy,
-        )
-        .await
-        {
+        let (loaded, queue_run) = if request.mode == MessageDelivery::Queue {
+            match session_queue_plan(
+                &self.supervisor,
+                &self.store,
+                self.ownership.as_ref(),
+                &request.target,
+                request.load_policy,
+            )
+            .await
+            {
+                Ok(run) => (ProviderSessionLoadOutcome::Ready, Some(run)),
+                Err(reason) => (reason, None),
+            }
+        } else {
+            (
+                ensure_provider_session_loaded(
+                    &self.supervisor,
+                    &self.store,
+                    self.ownership.as_ref(),
+                    &request.target,
+                    request.load_policy,
+                )
+                .await,
+                None,
+            )
+        };
+        #[cfg(feature = "test-support")]
+        if let Some(plan) = queue_run {
+            let pause = self
+                .queue_plan_pause
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take();
+            if let Some(pause) = pause {
+                let _fixture_gone = pause.sampled.send(plan.run());
+                let _released = pause.release.await;
+            }
+        }
+        match loaded {
             ProviderSessionLoadOutcome::Ready | ProviderSessionLoadOutcome::AlreadyLoaded => {}
             ProviderSessionLoadOutcome::NotLoaded => {
                 return self
@@ -371,94 +354,6 @@ impl ProviderAcpDeliveryRoute {
                 return self.finish_rejected(sink, &mut effect, reason).await;
             }
         }
-        let activity = match runtime
-            .session_activity(String::from(request.target.session_id.clone()))
-            .await
-        {
-            Ok(activity) => activity,
-            Err(_) => return self.finish_unknown(sink, &mut effect).await,
-        };
-        if !capabilities.supports_steering && activity == ProviderSessionActivity::Running {
-            return self
-                .queue_delivery(&request, sink, &binding, &operation_id)
-                .await;
-        }
-        if capabilities.supports_steering {
-            let prompt_text = match &request.content {
-                ProviderDeliveryContent::PreparedPush { line, .. } => line.as_str().to_owned(),
-            };
-            match runtime
-                .steer_session_with_input(
-                    String::from(request.target.session_id.clone()),
-                    input_id.clone(),
-                    prompt_text,
-                )
-                .await
-            {
-                Ok(ProviderSteeringOutcome::Injected {
-                    running_operation_id: Some(running),
-                    ..
-                }) => {
-                    update_submission(&mut effect, SubmissionEffect::Accepted);
-                    if sink.record(effect).await.is_err() {
-                        return Ok(Self::observed(NativeObservedOutcome::Unknown, None));
-                    }
-                    return Ok(Self::observed(
-                        NativeObservedOutcome::Steered,
-                        Some(running),
-                    ));
-                }
-                Ok(ProviderSteeringOutcome::Injected {
-                    running_operation_id: None,
-                    ..
-                }) => {
-                    update_submission(&mut effect, SubmissionEffect::Accepted);
-                    if sink.record(effect).await.is_err() {
-                        return Ok(Self::observed(NativeObservedOutcome::Unknown, None));
-                    }
-                    return Ok(Self::observed(NativeObservedOutcome::Steered, None));
-                }
-                Ok(ProviderSteeringOutcome::StartedNewTurn) => {
-                    update_submission(&mut effect, SubmissionEffect::Accepted);
-                    if sink.record(effect).await.is_err() {
-                        return Ok(Self::observed(NativeObservedOutcome::Unknown, None));
-                    }
-                    tracing::info!(
-                        session_id = %String::from(request.target.session_id.clone()),
-                        "agent started a new turn from a steer"
-                    );
-                    return Ok(Self::observed(NativeObservedOutcome::Started, None));
-                }
-                Ok(ProviderSteeringOutcome::Failed) => {
-                    return self
-                        .finish_known_none(
-                            &request,
-                            sink,
-                            &mut effect,
-                            "steerFailed",
-                            false,
-                            UnsentCause::Refused(NativeRefusalCode::SteerFailed),
-                        )
-                        .await;
-                }
-                Ok(ProviderSteeringOutcome::PromptRequired)
-                    if request.mode == MessageDelivery::Steer =>
-                {
-                    return self
-                        .finish_known_none(
-                            &request,
-                            sink,
-                            &mut effect,
-                            "no running turn",
-                            false,
-                            UnsentCause::Refused(NativeRefusalCode::NoActiveTurn),
-                        )
-                        .await;
-                }
-                Ok(ProviderSteeringOutcome::PromptRequired) => {}
-                Err(_) => return self.finish_unknown(sink, &mut effect).await,
-            }
-        }
         let record = match self
             .store
             .lock()
@@ -484,63 +379,123 @@ impl ProviderAcpDeliveryRoute {
         let requested_by = match &request.content {
             ProviderDeliveryContent::PreparedPush { .. } => record.created_by.clone(),
         };
-        let dispatch = match &request.content {
+        let contents_request = match &request.content {
             ProviderDeliveryContent::PreparedPush { line, .. } => {
-                let contents_request = ProviderPromptContentsRequest::from_prepared_push(
+                ProviderPromptContentsRequest::from_prepared_push(
                     operation_id.clone(),
                     input_id,
                     request.target.clone(),
                     requested_by,
                     record.approver,
                     line,
-                )?;
-                self.supervisor
-                    .submit_delivery_prompt_contents(contents_request)
-                    .await
+                )?
             }
         };
-        match dispatch {
-            Ok(ProviderPromptDispatch::Submitted) => {
-                update_submission(&mut effect, SubmissionEffect::Accepted);
-                if sink.record(effect).await.is_err() {
-                    return Ok(Self::observed(NativeObservedOutcome::Unknown, None));
-                }
-                Ok(Self::observed(
-                    NativeObservedOutcome::Started,
-                    Some(operation_id),
-                ))
-            }
-            Ok(ProviderPromptDispatch::NotSubmitted | ProviderPromptDispatch::Refused(_)) => {
-                self.finish_known_none(
-                    &request,
+        use crate::session_owner_calls::InputAcceptance;
+        let mut dispatch = self
+            .supervisor
+            .submit_evidenced_delivery(
+                contents_request.clone(),
+                request.mode,
+                queue_run,
+                sink,
+                effect.clone(),
+            )
+            .await;
+        if matches!(dispatch, Ok(InputAcceptance::QueuePlanChanged))
+            && let Ok(run) = session_queue_plan(
+                &self.supervisor,
+                &self.store,
+                self.ownership.as_ref(),
+                &request.target,
+                request.load_policy,
+            )
+            .await
+        {
+            dispatch = self
+                .supervisor
+                .submit_evidenced_delivery(
+                    contents_request,
+                    request.mode,
+                    Some(run),
                     sink,
-                    &mut effect,
-                    "provider prompt was not sent",
-                    true,
-                    UnsentCause::Holdable {
-                        otherwise: NativeRefusalCode::ProviderNotSubmitted,
-                    },
+                    effect.clone(),
                 )
-                .await
+                .await;
+        }
+        let (observed, operation, submission) = match dispatch {
+            Ok(InputAcceptance::Started) => (
+                NativeObservedOutcome::Started,
+                Some(operation_id),
+                SubmissionEffect::Accepted,
+            ),
+            Ok(InputAcceptance::ProviderStarted) => (
+                NativeObservedOutcome::Started,
+                None,
+                SubmissionEffect::Accepted,
+            ),
+            Ok(InputAcceptance::Steered { joined_operation }) => (
+                NativeObservedOutcome::Steered,
+                joined_operation.and_then(|id| OperationId::try_from(id.to_string()).ok()),
+                SubmissionEffect::Accepted,
+            ),
+            Ok(InputAcceptance::Queued) => {
+                return Ok(Self::observed(NativeObservedOutcome::Queued, Some(operation_id)));
             }
-            Ok(ProviderPromptDispatch::Existing | ProviderPromptDispatch::Uncertain) => {
-                self.finish_unknown(sink, &mut effect).await
+            Ok(InputAcceptance::QueuePlanChanged) => {
+                return self.finish_known_none(&request, sink, &mut effect,
+                    "the session changed state while the message was being queued; send again",
+                    false, UnsentCause::Refused(NativeRefusalCode::ProviderNotSubmitted),
+                ).await;
+            }
+            Ok(InputAcceptance::Unsent {
+                reason: Some(reason @ provider_session_machines::session_owner::RevokeReason::DeliveryEvidenceUnavailable),
+            }) => {
+                return Ok(Self::not_submitted(
+                    reason.human_phrase(),
+                    false,
+                    UnsentCause::Refused(NativeRefusalCode::ProviderNotSubmitted),
+                ));
+            }
+            Ok(InputAcceptance::Unsent { reason }) => {
+                return self
+                    .finish_known_none(
+                        &request,
+                        sink,
+                        &mut effect,
+                        reason.map_or_else(|| "provider prompt was not sent".into(),
+                            provider_session_machines::session_owner::RevokeReason::display_detail),
+                        false,
+                        UnsentCause::Refused(NativeRefusalCode::ProviderNotSubmitted),
+                    )
+                    .await;
+            }
+            Err(failure) if failure.kind == collaboration_protocol::ConversationOperationFailureKind::CannotSteer => {
+                return Ok(Self::rejected(DeliveryRejectionReason::SteerUnsupported, &String::from(failure.message)));
             }
             Err(failure) if failure.effect == ProviderOperationEffect::None => {
-                self.finish_known_none(
-                    &request,
-                    sink,
-                    &mut effect,
-                    String::from(failure.message),
-                    true,
-                    UnsentCause::Holdable {
-                        otherwise: NativeRefusalCode::ProviderNotSubmitted,
-                    },
-                )
-                .await
+                return self
+                    .finish_known_none(
+                        &request,
+                        sink,
+                        &mut effect,
+                        String::from(failure.message),
+                        true,
+                        UnsentCause::Holdable {
+                            otherwise: NativeRefusalCode::ProviderNotSubmitted,
+                        },
+                    )
+                    .await;
             }
-            Err(_) => self.finish_unknown(sink, &mut effect).await,
+            Ok(InputAcceptance::Unknown) | Err(_) => {
+                return self.finish_unknown(sink, &mut effect).await;
+            }
+        };
+        update_submission(&mut effect, submission);
+        if sink.record(effect).await.is_err() {
+            return Ok(Self::observed(NativeObservedOutcome::Unknown, None));
         }
+        Ok(Self::observed(observed, operation))
     }
 }
 

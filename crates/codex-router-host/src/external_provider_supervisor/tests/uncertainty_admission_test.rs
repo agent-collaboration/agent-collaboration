@@ -56,7 +56,7 @@ async fn assert_uncertainty_admission(targetless: bool, previous_generation: boo
             .record_terminal(
                 &operation_id,
                 ProviderOperationEffect::Unknown,
-                ProviderReconciliationState::NotReconcilable,
+                ProviderReconciliationState::Unresolved,
                 None,
                 4,
             )

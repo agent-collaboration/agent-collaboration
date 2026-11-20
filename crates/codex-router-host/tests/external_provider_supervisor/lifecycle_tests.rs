@@ -618,8 +618,16 @@ async fn authentication_required_is_no_effect_and_does_not_poison_fresh_create()
         std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
     )
     .await?;
-    let classification = classification_runtime
-        .create_session(PathBuf::from("/tmp"))
+    let classification_supervisor = supervisor(
+        &root,
+        vec![(
+            binding(provider_endpoint.clone(), "cursor")?,
+            classification_runtime,
+        )],
+    )
+    .await?;
+    let classification = classification_supervisor
+        .open_provider_fixture(&provider_endpoint, PathBuf::from("/tmp"))
         .await;
     if !matches!(
         classification,
@@ -632,7 +640,7 @@ async fn authentication_required_is_no_effect_and_does_not_poison_fresh_create()
     ) {
         return Err(format!("unexpected authentication classification: {classification:?}").into());
     }
-    classification_runtime.shutdown().await;
+    classification_supervisor.shutdown().await?;
     let runtime = ExternalProviderRuntime::initialize(
         authentication_then_create_fixture(),
         std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),

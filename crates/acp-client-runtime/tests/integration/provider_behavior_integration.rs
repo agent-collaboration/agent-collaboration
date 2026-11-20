@@ -1,3 +1,4 @@
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::*;
 use session_event_model::*;
 use std::{

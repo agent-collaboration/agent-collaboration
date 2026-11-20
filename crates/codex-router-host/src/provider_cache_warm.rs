@@ -12,12 +12,12 @@ mod supervisor_submitter;
 
 pub(crate) use supervisor_submitter::SupervisorWarmPromptSubmitter;
 
-use crate::provider_session_event_sink::LiveSessionEventObserver;
 use crate::provider_settings_section::CacheWarmSetting;
 use collaboration_protocol::{EndpointRef, ProviderKind, SessionId, SessionRef};
 use provider_session_machines::cache_warm_machine::{
     CacheWarm, CacheWarmEffect, CacheWarmEvent, CacheWarmMachine, WarmCadence,
 };
+use provider_session_machines::{SessionGeneration, session_owner::OwnerAddress};
 use router_clock::{ClockInstant, RuntimeClock};
 use session_event_model::{InputId, SessionEvent, SessionState};
 use state_machine_core::StateMachine;
@@ -41,13 +41,24 @@ pub(crate) const WARM_PROMPT_TEXT: &str = "Cache warm: reply ok";
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct WarmPromptRefused;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct WarmRun {
+    pub(crate) owner: OwnerAddress,
+    pub(crate) generation: SessionGeneration,
+}
+
 pub(crate) type WarmPromptFuture<'a> =
     Pin<Box<dyn Future<Output = Result<(), WarmPromptRefused>> + Send + 'a>>;
 
 /// Sends the warm prompt to an idle session. It must refuse a busy session
 /// and never steer, queue or cancel.
 pub(crate) trait WarmPromptSubmitter: Send + Sync + 'static {
-    fn submit_warm_prompt(&self, target: SessionRef, input_id: InputId) -> WarmPromptFuture<'_>;
+    fn submit_warm_prompt(
+        &self,
+        target: SessionRef,
+        run: WarmRun,
+        input_id: InputId,
+    ) -> WarmPromptFuture<'_>;
 }
 
 pub(crate) struct ProviderCacheWarm {
@@ -68,6 +79,7 @@ struct WarmInner {
 
 /// One session's warm state and its armed timer.
 struct SessionWarmCell {
+    run: WarmRun,
     state: CacheWarm,
     timer: Option<CancellationToken>,
 }
@@ -148,12 +160,12 @@ pub(crate) fn compose_provider_cache_warm(
         submitter,
     )?;
     supervisor
-        .install_live_event_observer(&endpoint, warm.clone())
+        .install_owner_snapshot_observer(&endpoint, warm.clone())
         .then_some(warm)
 }
 
-impl LiveSessionEventObserver for ProviderCacheWarm {
-    fn observe_live_event(&self, session_id: &str, event: &SessionEvent) {
+impl ProviderCacheWarm {
+    fn observe_live_event(&self, session_id: &str, run: WarmRun, event: &SessionEvent) {
         let inner = &self.inner;
         if inner.stopped.load(Ordering::SeqCst) {
             return;
@@ -172,7 +184,12 @@ impl LiveSessionEventObserver for ProviderCacheWarm {
             SessionEvent::StateChanged {
                 state: SessionState::Closed | SessionState::Unloaded,
             } => {
-                if let Some(cell) = lock(&inner.sessions).remove(session_id) {
+                let mut sessions = lock(&inner.sessions);
+                if sessions
+                    .get(session_id)
+                    .is_some_and(|cell| lock(cell).run == run)
+                    && let Some(cell) = sessions.remove(session_id)
+                {
                     let mut cell = lock(&cell);
                     let _gone = inner.apply(&mut cell, session_id, CacheWarmEvent::SessionGone);
                 }
@@ -180,27 +197,117 @@ impl LiveSessionEventObserver for ProviderCacheWarm {
             }
             _ => return,
         };
-        let cell = inner.cell(session_id);
+        let cell = inner.cell(session_id, run);
         let mut cell = lock(&cell);
-        let _effects = inner.apply(&mut cell, session_id, event);
+        if cell.run == run {
+            let _effects = inner.apply(&mut cell, session_id, event);
+        }
+    }
+}
+
+impl crate::session_owner_door::SessionOwnerSnapshotObserver for ProviderCacheWarm {
+    fn observe(
+        &self,
+        session: &str,
+        previous: &provider_session_machines::session_owner::SessionSnapshot,
+        current: &provider_session_machines::session_owner::SessionSnapshot,
+    ) {
+        use provider_session_machines::session_lifecycle_machine::SessionLifecycle;
+
+        let SessionLifecycle::Live { generation } = current.lifecycle else {
+            if let SessionLifecycle::Live { generation } = previous.lifecycle {
+                self.observe_live_event(
+                    session,
+                    WarmRun {
+                        owner: previous.owner,
+                        generation,
+                    },
+                    &SessionEvent::StateChanged {
+                        state: SessionState::Unloaded,
+                    },
+                );
+            }
+            return;
+        };
+        let run = WarmRun {
+            owner: current.owner,
+            generation,
+        };
+        if previous.last_live_turn != current.last_live_turn
+            && let Some(last) = &current.last_live_turn
+        {
+            if previous
+                .foreground
+                .as_ref()
+                .is_none_or(|foreground| foreground.turn != last.turn)
+            {
+                self.observe_live_event(
+                    session,
+                    run,
+                    &SessionEvent::TurnStarted {
+                        turn_id: last.turn.0.to_string(),
+                        input_id: last.input.clone(),
+                    },
+                );
+            }
+            self.observe_live_event(
+                session,
+                run,
+                &SessionEvent::TurnEnded {
+                    turn_id: last.turn.0.to_string(),
+                    outcome: last.outcome.clone(),
+                },
+            );
+        }
+        if previous.foreground != current.foreground
+            && let Some(active) = &current.foreground
+        {
+            self.observe_live_event(
+                session,
+                run,
+                &SessionEvent::TurnStarted {
+                    turn_id: active.turn.0.to_string(),
+                    input_id: active.input.clone(),
+                },
+            );
+        }
+        if previous.recent_steer != current.recent_steer
+            && let Some(steer) = &current.recent_steer
+        {
+            self.observe_live_event(
+                session,
+                run,
+                &SessionEvent::InputAccepted {
+                    turn_id: steer.turn.0.to_string(),
+                    input_id: steer.input.clone(),
+                },
+            );
+        }
     }
 }
 
 impl WarmInner {
     /// The session's warm cell, a cold one the first time.
-    fn cell(&self, session_id: &str) -> Arc<StdMutex<SessionWarmCell>> {
-        Arc::clone(
-            lock(&self.sessions)
-                .entry(session_id.to_owned())
-                .or_insert_with(|| {
-                    Arc::new(StdMutex::new(SessionWarmCell {
-                        state: CacheWarm::Cold {
-                            last_real_end: None,
-                        },
-                        timer: None,
-                    }))
-                }),
-        )
+    fn cell(&self, session_id: &str, run: WarmRun) -> Arc<StdMutex<SessionWarmCell>> {
+        let mut sessions = lock(&self.sessions);
+        let cell = sessions.entry(session_id.to_owned()).or_insert_with(|| {
+            Arc::new(StdMutex::new(SessionWarmCell {
+                run,
+                state: CacheWarm::Cold {
+                    last_real_end: None,
+                },
+                timer: None,
+            }))
+        });
+        let mut current = lock(cell);
+        if current.run != run {
+            current.disarm();
+            current.run = run;
+            current.state = CacheWarm::Cold {
+                last_real_end: None,
+            };
+        }
+        Arc::clone(cell)
     }
 
     /// Applies one event to the session's cell under its lock and runs its
@@ -239,7 +346,12 @@ impl WarmInner {
         cell.disarm();
         let timer = CancellationToken::new();
         cell.timer = Some(timer.clone());
-        let task = tokio::spawn(Arc::clone(self).run_timer(session_id.to_owned(), timer, deadline));
+        let task = tokio::spawn(Arc::clone(self).run_timer(
+            session_id.to_owned(),
+            cell.run,
+            timer,
+            deadline,
+        ));
         let mut tasks = lock(&self.tasks);
         tasks.retain(|task| !task.is_finished());
         tasks.push(task);
@@ -248,6 +360,7 @@ impl WarmInner {
     async fn run_timer(
         self: Arc<Self>,
         session_id: String,
+        run: WarmRun,
         timer: CancellationToken,
         deadline: ClockInstant,
     ) {
@@ -264,7 +377,7 @@ impl WarmInner {
                 return;
             };
             let mut cell = lock(&cell);
-            if self.stopped.load(Ordering::SeqCst) || timer.is_cancelled() {
+            if self.stopped.load(Ordering::SeqCst) || timer.is_cancelled() || cell.run != run {
                 return;
             }
             cell.timer = None;
@@ -288,13 +401,15 @@ impl WarmInner {
         let submitted = tokio::select! {
             biased;
             () = self.shutdown.cancelled() => return,
-            submitted = self.submitter.submit_warm_prompt(target, input_id) => submitted,
+            submitted = self.submitter.submit_warm_prompt(target, run, input_id) => submitted,
         };
         if submitted.is_err() {
             // Not now: nothing was sent, so the next real turn end re-arms.
             if let Some(cell) = lock(&self.sessions).get(&session_id).map(Arc::clone) {
                 let mut cell = lock(&cell);
-                let _refused = self.apply(&mut cell, &session_id, CacheWarmEvent::WarmRefused);
+                if cell.run == run {
+                    let _refused = self.apply(&mut cell, &session_id, CacheWarmEvent::WarmRefused);
+                }
             }
         }
     }

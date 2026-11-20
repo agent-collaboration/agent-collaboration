@@ -7,13 +7,56 @@
 //! turn's approver even when that turn ended before the steer read it.
 
 use super::*;
-use crate::provider_acp_message_fifo::ProviderAcpMessageFifo;
 use collaboration_contracts::SessionEventHub as _;
-use collaboration_runtime::ProviderSessionRecord;
 use session_event_model::SessionEvent;
 
 /// A steering agent that holds its first turn open, on a supervisor whose
 /// session is recorded on a real hub.
+async fn create_test_session(
+    supervisor: &ExternalProviderSupervisor,
+    expected: &SessionRef,
+    cwd: &std::path::Path,
+) {
+    let operation_id = OperationId::generate();
+    supervisor
+        .create(ConversationCreateRequest {
+            operation_id: operation_id.clone(),
+            endpoint: expected.endpoint.clone(),
+            generation: None,
+            working_directory: ProviderWorkingDirectory::try_from(cwd.display().to_string())
+                .expect("fixture working directory"),
+            created_by: requester().into(),
+            approver: requester().into(),
+            requested_policy: ProviderRequestedPolicy {
+                access: RouterAccess::WriteRestricted,
+            },
+            settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                mode: Some("auto".to_owned()),
+                ..Default::default()
+            }),
+            work_roots: Vec::new(),
+        })
+        .await
+        .expect("admit fixture create");
+    let created = supervisor
+        .wait(ConversationOperationWaitRequest {
+            operation_id,
+            timeout_seconds: PositiveSeconds::try_from(10).expect("bound"),
+        })
+        .await
+        .expect("settle fixture create");
+    assert!(
+        matches!(
+            &created.output,
+            ConversationOperationWaitOutput::Available {
+                settlement: ConversationOperationSettlement::Created { target, .. },
+            } if target == expected
+        ),
+        "created fixture identity: {:?}",
+        created.output
+    );
+}
+
 struct SteeringSession {
     _root: tempfile::TempDir,
     receipt: std::path::PathBuf,
@@ -21,7 +64,6 @@ struct SteeringSession {
     hub: Arc<collaboration_runtime::ProviderSessionEventHub>,
     hub_target: message_board::SessionRef,
     supervisor: Arc<ExternalProviderSupervisor>,
-    queue: Arc<ProviderAcpMessageFifo>,
 }
 
 async fn steering_session() -> SteeringSession {
@@ -79,46 +121,19 @@ async fn steering_session_on(
     )
     .await
     .expect("fixture provider");
-    runtime
-        .create_session(root.path().to_owned())
-        .await
-        .expect("session/new");
-    store
-        .lock()
-        .await
-        .record_session(&ProviderSessionRecord {
-            target: target.clone(),
-            working_directory: ProviderWorkingDirectory::try_from(
-                root.path().display().to_string(),
-            )
-            .expect("working directory"),
-            requested_policy: ProviderRequestedPolicy {
-                access: RouterAccess::WriteRestricted,
-            },
-            created_by: target.clone().into(),
-            approver: target.clone().into(),
-            updated_at_ms: 1,
-            resume: Default::default(),
-        })
-        .await
-        .expect("session record");
     let supervisor = Arc::new(
-        ExternalProviderSupervisor::new(
+        ExternalProviderSupervisor::new_with_hub(
             vec![ExternalProviderBinding {
                 identity: binding(),
                 runtime,
             }],
             Arc::clone(&store),
+            Some(hub.clone()),
+            None,
         )
         .expect("supervisor"),
     );
-    let queue = Arc::new(ProviderAcpMessageFifo::new(
-        Arc::clone(&supervisor),
-        Arc::clone(&store),
-        Arc::new(NoLivePeer),
-        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
-    ));
-    supervisor.attach_message_fifo(&queue);
+    create_test_session(&supervisor, &target, root.path()).await;
     SteeringSession {
         _root: root,
         receipt,
@@ -126,7 +141,6 @@ async fn steering_session_on(
         hub,
         hub_target,
         supervisor,
-        queue,
     }
 }
 
@@ -144,26 +158,23 @@ async fn steered_prompt_is_accepted_under_its_requests_input_id() {
         hub,
         hub_target,
         supervisor,
-        queue,
     } = steering_session().await;
-    let runtime = supervisor.runtime_for(&target.endpoint).expect("runtime");
-    let held_context = crate::ExternalProviderApprovalContext {
-        requester: target.clone().into(),
-        approver: target.clone().into(),
-        target: target.clone(),
-        operation_id: OperationId::generate(),
-        binding_generation: binding().generation,
-        binding_retirement: runtime.retirement(),
-    };
-    let held = tokio::spawn(async move {
-        runtime
-            .prompt_with_approval_context(
-                "reactive-session-1".to_owned(),
-                "first".to_owned(),
-                held_context,
-            )
-            .await
-    });
+    let held = OperationId::generate();
+    supervisor
+        .prompt(ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
+            operation_id: held.clone(),
+            input_id: None,
+            target: target.clone(),
+            generation: None,
+            requested_by: target.clone().into(),
+            approver: target.clone().into(),
+            prompt: collaboration_protocol::MessageContent::HumanUser {
+                text: MessageText::try_from("first".to_owned()).expect("prompt"),
+            },
+        })
+        .await
+        .expect("held prompt admitted");
     while recorded_requests(&receipt, "session/prompt") < 1 {
         tokio::task::yield_now().await;
     }
@@ -190,18 +201,41 @@ async fn steered_prompt_is_accepted_under_its_requests_input_id() {
         })
         .await;
     let accepted = loop {
-        match followed.receiver.recv().await {
-            Ok(event) => {
-                if let SessionEvent::InputAccepted { input_id, .. } = event.event {
-                    break vec![input_id];
-                }
+        if let Some(input) = followed
+            .snapshot
+            .iter()
+            .find_map(|observed| match &observed.event {
+                SessionEvent::InputAccepted { input_id, .. } => Some(input_id.clone()),
+                _ => None,
+            })
+        {
+            break vec![input];
+        }
+        match followed
+            .receiver
+            .recv()
+            .await
+            .expect("the hub follows the turn")
+            .event
+        {
+            SessionEvent::InputAccepted { input_id, .. } => break vec![input_id],
+            SessionEvent::ResyncRequired { replay_epoch } => {
+                followed = hub
+                    .attach(hub_target.clone())
+                    .await
+                    .expect("follow the current epoch");
+                assert!(followed.epoch >= replay_epoch);
             }
-            Err(error) => panic!("the hub stopped before an acceptance: {error:?}"),
+            _ => {}
         }
     };
     node_test_fixture::release_fixture(&receipt, ".release").expect("release the turn");
-    let held = held.await.expect("held turn task");
-    queue.shutdown().await;
+    let held = supervisor
+        .wait(ConversationOperationWaitRequest {
+            operation_id: held,
+            timeout_seconds: PositiveSeconds::try_from(5).expect("bound"),
+        })
+        .await;
     let steers = recorded_requests(&receipt, "_session/steering");
     let stopped = supervisor.shutdown().await;
 
@@ -305,7 +339,6 @@ async fn steer_whose_turn_ended_and_was_evicted_before_it_read_the_approver_stil
             timeout_seconds: PositiveSeconds::try_from(5).expect("bound"),
         })
         .await;
-    session.queue.shutdown().await;
     let stopped = session.supervisor.shutdown().await;
 
     // Assert: the turn had settled before the read, and the steer names A.
@@ -451,7 +484,6 @@ async fn steer_into_a_turn_that_replaced_the_running_one_names_that_turns_approv
             timeout_seconds: PositiveSeconds::try_from(5).expect("bound"),
         })
         .await;
-    session.queue.shutdown().await;
     let stopped = session.supervisor.shutdown().await;
 
     // Assert

@@ -246,6 +246,29 @@ impl SessionOwnerPorts for ScenarioPorts {
                 self.transport.apply_membership(address.incarnation, change);
                 None
             }
+            OwnerEffect::DrainCancel(authorization) => Some(OwnerEvent::Dispatch(
+                DispatchResult::CancelDrainFinished(authorization),
+            )),
+            OwnerEffect::TakeCancel {
+                authorization,
+                expired: false,
+            } => {
+                self.transport
+                    .offer(authorization.clone(), None, Some(authorization.clone()))
+                    .map_err(|_| OwnerTaskError::ExecutorStopped)?;
+                let result = match self
+                    .transport
+                    .take(&authorization)
+                    .map_err(|_| OwnerTaskError::ExecutorStopped)?
+                {
+                    DispatchResult::Taken(authorization) => DispatchResult::CancelTaken {
+                        authorization,
+                        drain: provider_session_machines::session_owner::CancelDrainReport::Drained,
+                    },
+                    other => other,
+                };
+                Some(OwnerEvent::Dispatch(result))
+            }
             OwnerEffect::Authorize {
                 authorization,
                 work,
@@ -516,3 +539,6 @@ async fn failed_owner_settles_late_steer_mark_across_handover_and_reopen() {
 
 #[path = "session_owner_registry_close_test.rs"]
 mod close_enqueue;
+
+#[path = "session_owner_registry_publication_test.rs"]
+mod publication;

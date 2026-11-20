@@ -546,33 +546,53 @@ fn work_roots_widen_the_inside_for_file_actions_and_command_operands() {
 /// its grant off, never turns B's allowance on.
 #[test]
 fn an_ended_runs_mode_change_never_turns_on_the_newer_runs_grant() {
-    // Arrange
+    use crate::acp_transport::TransportRun;
+    use provider_session_machines::{
+        SessionGeneration,
+        session_owner::{OwnerIncarnation, TurnMembership},
+    };
+    use std::num::NonZeroUsize;
+
     let folders = folders();
-    let cells = std::sync::Arc::new(crate::session_cell_table::SessionCellTable::default());
-    let grants: super::InFolderGrants = std::sync::Arc::new(
-        crate::run_owned_state::RunOwnedMap::new(std::sync::Arc::clone(&cells)),
+    let (wire, _output) = crate::owner_wire::OwnerAcpWire::new(
+        NonZeroUsize::MIN,
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     );
-    let first =
-        crate::session_cell_bookkeeping::admit_create(&cells, "session-a").expect("created");
-    let second =
-        crate::session_cell_bookkeeping::end_run_and_load_next_for_test(&cells, "session-a", first);
+    let first = TransportRun {
+        incarnation: OwnerIncarnation(uuid::Uuid::now_v7()),
+        generation: SessionGeneration::from_number(1),
+    };
+    let second = TransportRun {
+        generation: SessionGeneration::from_number(2),
+        ..first
+    };
+    wire.open_route(first, "session-a".into());
+    wire.apply_membership(first.incarnation, TurnMembership::Retire(first.generation));
+    wire.open_route(second, "session-a".into());
+    wire.activate_route(second);
     let grant = InFolderGrant::new(&folders.project, &folders.scratch, &[]).expect("grant");
-    let _newer = grants.write(
-        "session-a",
+    wire.register_grant(
         second,
         super::SessionInFolderGrant {
-            grant,
+            grant: grant.clone(),
             router_auto: false,
         },
     );
 
-    // Act
-    super::set_router_auto(&grants, "session-a", first, true);
-
-    // Assert
-    assert_eq!(super::active_grant(&grants, "session-a"), None);
-    assert_eq!(
-        grants.read("session-a").map(|session| session.router_auto),
-        Some(false)
+    wire.register_grant(
+        first,
+        super::SessionInFolderGrant {
+            grant: grant.clone(),
+            router_auto: true,
+        },
     );
+    assert!(wire.in_folder_grant(second).is_none());
+    wire.register_grant(
+        second,
+        super::SessionInFolderGrant {
+            grant,
+            router_auto: true,
+        },
+    );
+    assert!(wire.in_folder_grant(second).is_some());
 }

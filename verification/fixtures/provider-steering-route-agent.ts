@@ -5,7 +5,8 @@ import { AcpExchange } from "./acp-exchange.ts";
 import { FixtureControlSocket } from "./fixture-control-socket.ts";
 import { sendSocketNotice } from "./fixture-socket-notice.ts";
 const mode = requireArgument(2);
-const agent = new AcpExchange();
+const capture = process.argv[4];
+const agent = new AcpExchange(undefined, capture === undefined ? {} : { wireCapture: capture });
 const advertised = mode !== "none" && mode !== "serial";
 agent.respond(await agent.read(), {
   protocolVersion: 1,
@@ -62,8 +63,15 @@ if (mode === "active") {
   requireRoutedText(second);
   await sendSocketNotice(requireArgument(3), "second");
   agent.endTurn(second);
+} else if (mode === "idle" || mode === "auto") {
+  const prompt = await agent.read("session/prompt");
+  requireRoutedText(prompt);
+  agent.endTurn(prompt);
 } else if (mode !== "none") {
+  const prompt = await agent.read("session/prompt");
+  await sendSocketNotice(requireArgument(3), "active");
   const steer = await agent.read("_session/steering");
+  requireRoutedText(steer);
   if (mode === "drop") {
     agent.close();
   } else {
@@ -75,7 +83,7 @@ if (mode === "active") {
           ? { outcome: "failed", reason: "private provider detail" }
           : { outcome: "promptRequired" },
     );
-    if (mode === "auto") agent.endTurn(await agent.read("session/prompt"));
+    agent.endTurn(prompt);
   }
 }
 if (mode !== "drop") await agent.drain();

@@ -69,13 +69,9 @@ impl ProviderAcpScheduledRuns {
                 "Provider generation changed before scheduled submission",
             ));
         }
-        let Some(runtime) = self.supervisor.runtime_for(&run.target.endpoint) else {
-            return Ok(RunSubmission::NotStartedBusy);
-        };
-        let session_id = String::from(run.target.session_id.clone());
-        match runtime.session_activity(session_id.clone()).await {
-            Ok(ProviderSessionActivity::Running) => return Ok(RunSubmission::NotStartedBusy),
-            Ok(ProviderSessionActivity::NotLoaded) => {
+        match self.supervisor.owner_session_activity(&run.target) {
+            ProviderSessionActivity::Running => return Ok(RunSubmission::NotStartedBusy),
+            ProviderSessionActivity::NotLoaded => {
                 if matches!(
                     sink.record(RouteEffectEvidence::ProviderAcp(effect.clone()))
                         .await?,
@@ -97,12 +93,11 @@ impl ProviderAcpScheduledRuns {
                     return Ok(RunSubmission::NotStartedBusy);
                 }
             }
-            Ok(ProviderSessionActivity::Idle) => {}
-            Err(_) => return Ok(RunSubmission::NotStartedBusy),
+            ProviderSessionActivity::Idle => {}
         }
         if !matches!(
-            runtime.session_activity(session_id).await,
-            Ok(ProviderSessionActivity::Idle)
+            self.supervisor.owner_session_activity(&run.target),
+            ProviderSessionActivity::Idle
         ) {
             return Ok(RunSubmission::NotStartedBusy);
         }
@@ -187,15 +182,18 @@ impl ProviderAcpScheduledRuns {
                     },
                 }))
             }
-            Ok(ProviderPromptDispatch::NotSubmitted | ProviderPromptDispatch::Refused(_)) => {
+            Ok(ProviderPromptDispatch::NotSubmitted { reason }) => {
                 effect.submission = SubmissionEffect::NotDispatched;
                 rejected(
                     DeliveryRejectionReason::EndpointUnavailable,
                     DeliveryNextAction::RetryLater,
-                    "Provider scheduled prompt was not sent",
+                    &reason.map_or_else(
+                        || "Provider scheduled prompt was not sent".into(),
+                        provider_session_machines::session_owner::RevokeReason::display_detail,
+                    ),
                 )
             }
-            Ok(ProviderPromptDispatch::Existing | ProviderPromptDispatch::Uncertain) => {
+            Ok(ProviderPromptDispatch::Uncertain) => {
                 effect.submission = SubmissionEffect::Unknown;
                 RunSubmission::Unknown
             }

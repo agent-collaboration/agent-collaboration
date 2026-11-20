@@ -56,10 +56,6 @@ pub struct SessionCell {
     /// the Lead's 3b-5 ruling: a prompt waits behind an in-flight change in
     /// the actor and is refused only while a kind is Unresolved).
     pub settings: HashMap<ProviderSettingKind, SessionSetting>,
-    /// A restore's mode write, claimed while its load attempt still owned
-    /// the session (review F1): a close after the claim can't recall a write
-    /// already on its way to the agent. Later loads can run while their own optional write is skipped.
-    pub restore_mode_write: Option<LoadAttempt>,
     /// The last locally expired restore may still send session-scoped updates.
     pub last_unanswered_restore: Option<LoadAttempt>,
 }
@@ -80,7 +76,6 @@ impl SessionCell {
             turn: SessionTurn::Idle,
             keep_fast_off: false,
             settings: HashMap::new(),
-            restore_mode_write: None,
             last_unanswered_restore: None,
         }
     }
@@ -111,13 +106,6 @@ impl SessionCell {
     /// Some setting's last change has an unknown outcome.
     pub fn any_setting_outcome_unknown(&self) -> bool {
         self.settings.values().any(SessionSetting::outcome_unknown)
-    }
-
-    /// The kind's last change has an unknown outcome.
-    pub fn setting_outcome_unknown(&self, kind: ProviderSettingKind) -> bool {
-        self.settings
-            .get(&kind)
-            .is_some_and(SessionSetting::outcome_unknown)
     }
 
     fn line_open_for(&self, generation: SessionGeneration) -> bool {
@@ -174,6 +162,7 @@ pub enum SessionCellEvent {
     ActorExited {
         generation: SessionGeneration,
     },
+    #[cfg(test)]
     Publish {
         generation: SessionGeneration,
     },
@@ -221,8 +210,10 @@ pub enum SessionCellEvent {
         turn: TurnId,
         outcome: SentOutcome,
     },
+    #[cfg(test)]
     Stop,
     /// The provider connection ended: its lines end.
+    #[cfg(test)]
     ConnectionClosed,
     /// One setting kind's event (a change requested, its result, an
     /// observation, a lost reply).
@@ -234,15 +225,6 @@ pub enum SessionCellEvent {
     /// is left alone, and an unknown outcome refuses the whole accept.
     AcceptSettings,
     KeepFastOff(bool),
-    /// A restore is about to write the session's recorded mode to the agent;
-    /// accepted only while its load attempt still owns the session (review F1).
-    RestoreModeWriteClaimed {
-        attempt: LoadAttempt,
-    },
-    /// That write got its answer, or was never sent.
-    RestoreModeWriteSettled {
-        attempt: LoadAttempt,
-    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -315,6 +297,7 @@ impl EventTag for SessionCellEvent {
             Self::CloseDone { .. } => "close_done",
             Self::CloseFailed { .. } => "close_failed",
             Self::ActorExited { .. } => "actor_exited",
+            #[cfg(test)]
             Self::Publish { .. } => "publish",
             Self::Enqueue { .. } => "enqueue",
             Self::Claim { .. } => "claim",
@@ -330,13 +313,13 @@ impl EventTag for SessionCellEvent {
             Self::SteerRequested { .. } => "steer_requested",
             Self::CancelTurn => "cancel_turn",
             Self::TurnEnded { .. } => "turn_ended",
+            #[cfg(test)]
             Self::Stop => "stop",
+            #[cfg(test)]
             Self::ConnectionClosed => "connection_closed",
             Self::Setting { .. } => "setting",
             Self::AcceptSettings => "accept_settings",
             Self::KeepFastOff(_) => "keep_fast_off",
-            Self::RestoreModeWriteClaimed { .. } => "restore_mode_write_claimed",
-            Self::RestoreModeWriteSettled { .. } => "restore_mode_write_settled",
         }
     }
 }
@@ -597,6 +580,7 @@ impl StateMachine for SessionCellMachine {
             V::ActorExited { generation } => {
                 lifecycle_move(cell, SessionLifecycleEvent::ActorExited { generation })
             }
+            #[cfg(test)]
             V::Publish { generation } => {
                 lifecycle_move(cell, SessionLifecycleEvent::Publish { generation })
             }
@@ -756,12 +740,14 @@ impl StateMachine for SessionCellMachine {
                 ))
             }
             V::TurnEnded { turn, outcome } => turn_ended(cell, turn, outcome),
+            #[cfg(test)]
             V::Stop => {
                 let mut next = cell.clone();
                 let mut effects = Vec::new();
                 end_line(&mut next, NotSentReason::RouterShuttingDown, &mut effects);
                 Ok((next, effects))
             }
+            #[cfg(test)]
             V::ConnectionClosed => {
                 let mut next = cell.clone();
                 let mut effects = Vec::new();
@@ -811,26 +797,6 @@ impl StateMachine for SessionCellMachine {
             V::KeepFastOff(keep) => {
                 let mut next = cell.clone();
                 next.keep_fast_off = keep;
-                Ok((next, Vec::new()))
-            }
-            V::RestoreModeWriteClaimed { attempt } => {
-                let owns = matches!(
-                    cell.lifecycle,
-                    SessionLifecycle::Loading { attempt: loading, .. } if loading == attempt
-                );
-                if !owns || cell.restore_mode_write.is_some() {
-                    return Err(TransitionError::Stale);
-                }
-                let mut next = cell.clone();
-                next.restore_mode_write = Some(attempt);
-                Ok((next, Vec::new()))
-            }
-            V::RestoreModeWriteSettled { attempt } => {
-                if cell.restore_mode_write != Some(attempt) {
-                    return Err(TransitionError::Stale);
-                }
-                let mut next = cell.clone();
-                next.restore_mode_write = None;
                 Ok((next, Vec::new()))
             }
         }

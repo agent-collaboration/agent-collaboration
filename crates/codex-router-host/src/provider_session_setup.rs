@@ -9,7 +9,7 @@ use crate::provider_work_roots::{ProviderWorkRoots, WorkRootsHook};
 use collaboration_runtime::ProviderSessionResumeInputs;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Mutex, PoisonError};
 
 /// A session's requested mode and why the agent's mode differs, for show.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -33,9 +33,6 @@ impl RequestedModeRecord {
 pub(crate) struct BindingSessionSetup {
     work_roots: Mutex<ProviderWorkRoots>,
     requested_modes: Mutex<HashMap<String, RequestedModeRecord>>,
-    /// One mode operation at a time per session: explicit changes and
-    /// restores (Lead V6b; review F3).
-    mode_order: Arc<crate::provider_session_mode_order::SessionModeOrder>,
 }
 
 impl BindingSessionSetup {
@@ -88,6 +85,7 @@ impl BindingSessionSetup {
     /// Keeps a restored session's mode report when its record named the mode
     /// its create asked for; a session recorded before that was kept keeps
     /// whatever this Host already holds.
+    #[cfg(test)]
     pub(crate) fn record_restored_mode(
         &self,
         provider_session_id: &str,
@@ -98,11 +96,6 @@ impl BindingSessionSetup {
         }
     }
 
-    /// The binding's per-session turn for mode operations.
-    pub(crate) fn mode_order(&self) -> &Arc<crate::provider_session_mode_order::SessionModeOrder> {
-        &self.mode_order
-    }
-
     pub(crate) fn requested_mode(&self, provider_session_id: &str) -> RequestedModeRecord {
         self.requested_modes
             .lock()
@@ -111,26 +104,6 @@ impl BindingSessionSetup {
             .cloned()
             .unwrap_or_default()
     }
-}
-
-/// Reads `target`'s record and rebuilds its setup with its binding's roots; a
-/// session the Router holds no record of rebuilds nothing. A record that
-/// can't be read fails the restore rather than restoring it unbounded.
-pub(crate) async fn recorded_restore_setup(
-    store: &tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>,
-    binding_setup: &BindingSessionSetup,
-    target: &collaboration_protocol::SessionRef,
-    cwd: &Path,
-) -> Result<
-    acp_client_runtime::SessionRestoreSetup,
-    collaboration_runtime::ProviderOperationStoreError,
-> {
-    let record = store.lock().await.session_record(target).await?;
-    Ok(
-        record.map_or_else(acp_client_runtime::SessionRestoreSetup::default, |record| {
-            binding_setup.restore_setup(cwd, &record.resume)
-        }),
-    )
 }
 
 /// A session's setup, rebuilt as its create built it: in auto, the binding's

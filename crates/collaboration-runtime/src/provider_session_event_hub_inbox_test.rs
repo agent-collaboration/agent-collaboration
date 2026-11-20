@@ -35,6 +35,8 @@ fn rebase(incarnation: Uuid, sequence: u64, state: SessionState) -> HubPublicati
         stamp: stamp(incarnation, sequence),
         baseline: Box::new(HubPublicationBaseline {
             state,
+            turn_running: false,
+            capabilities: None,
             settings: None,
             skills: SkillView::Unknown,
             history: HubHistoryAvailability::Unavailable,
@@ -90,6 +92,71 @@ async fn applied(inbox: &HubSessionInbox, batch: HubPublication) -> HubPublicati
         .await
         .expect("worker settled")
         .expect("applied")
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_previous_turn_terminal_is_retained_without_ending_the_active_turn() {
+    let (_root, hub) = hub().await;
+    let session = session();
+    let incarnation = Uuid::now_v7();
+    let (inbox, stop, task) = start(&hub, &session, NonZeroUsize::MIN, incarnation);
+    applied(&inbox, rebase(incarnation, 1, SessionState::Idle)).await;
+    let previous = Uuid::now_v7().to_string();
+    let active = Uuid::now_v7().to_string();
+    let started = |turn_id: String| {
+        HubPublicationFact::Event(SessionEvent::TurnStarted {
+            turn_id,
+            input_id: session_event_model::InputId::generate(),
+        })
+    };
+    let ended = session_event_model::TurnOutcome::Ended {
+        stop_reason: session_event_model::StopReason::EndTurn,
+        local_cause: None,
+    };
+    applied(
+        &inbox,
+        HubPublication::Commit {
+            stamp: stamp(incarnation, 2),
+            facts: vec![
+                started(previous.clone()),
+                started(active.clone()),
+                HubPublicationFact::PreviousTurnEnded {
+                    turn_id: previous.clone(),
+                    outcome: ended.clone(),
+                },
+            ],
+            observed_at_seconds: 0,
+        },
+    )
+    .await;
+    let state = hub.state(session.clone()).await.expect("current state");
+    let retained = hub.attach(session.clone()).await.expect("terminal history");
+    assert!(retained.snapshot.iter().any(|event| matches!(&event.event, SessionEvent::TurnEnded { turn_id, outcome } if turn_id == &previous && outcome == &ended)));
+    assert_eq!(
+        state,
+        SessionState::Running,
+        "the previous prompt terminal must leave the new turn running"
+    );
+    applied(
+        &inbox,
+        HubPublication::Commit {
+            stamp: stamp(incarnation, 3),
+            facts: vec![HubPublicationFact::Event(SessionEvent::TurnEnded {
+                turn_id: active,
+                outcome: ended,
+            })],
+            observed_at_seconds: 0,
+        },
+    )
+    .await;
+    assert_eq!(
+        hub.state(session)
+            .await
+            .expect("current terminal now applies"),
+        SessionState::Idle
+    );
+    stop.cancel();
+    task.await.expect("worker stopped");
 }
 
 #[tokio::test(flavor = "current_thread")]

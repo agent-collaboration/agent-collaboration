@@ -138,11 +138,63 @@ impl<Frame> AcpTransport<Frame> {
         self.state().callbacks.activate(run);
     }
 
+    #[must_use]
+    pub fn current_turn(&self, run: TransportRun) -> Option<TurnId> {
+        self.state().callbacks.current_turn(run)
+    }
+
+    pub(crate) fn provider_started_turn(&self, run: TransportRun) -> Option<TurnId> {
+        self.state().callbacks.provider_started_turn(run)
+    }
+
+    pub(crate) fn route_for_session(&self, session: &str) -> Option<TransportRun> {
+        let state = self.state();
+        let mut matches = state
+            .routes
+            .iter()
+            .filter(|(_, route)| route.session == session);
+        let (run, _) = matches.next()?;
+        matches.next().is_none().then_some(*run)
+    }
+
+    pub(crate) fn session_for_route(&self, run: TransportRun) -> Option<String> {
+        self.state()
+            .routes
+            .get(&run)
+            .map(|route| route.session.clone())
+    }
+
+    pub(crate) fn routed_sessions(&self) -> Vec<String> {
+        self.state()
+            .routes
+            .values()
+            .map(|route| route.session.clone())
+            .collect()
+    }
+
+    pub(crate) fn allows_explicit_tool_request(&self, session: &str, tool: &str) -> bool {
+        let Some(run) = self.route_for_session(session) else {
+            return false;
+        };
+        self.state()
+            .callbacks
+            .allows_explicit_tool_request(session, run, tool)
+    }
+
     pub fn apply_membership(&self, incarnation: OwnerIncarnation, change: TurnMembership) {
         let mut state = self.state();
         match change {
             TurnMembership::Provisional { run, turn } => {
                 state.callbacks.begin_turn(
+                    TransportRun {
+                        incarnation,
+                        generation: run,
+                    },
+                    turn,
+                );
+            }
+            TurnMembership::ObservedEligible { run, turn } => {
+                state.callbacks.observe_eligible_turn(
                     TransportRun {
                         incarnation,
                         generation: run,
@@ -235,6 +287,14 @@ impl<Frame> AcpTransport<Frame> {
         &self,
         authorization: &DispatchAuthorization,
     ) -> Result<DispatchResult, TransportRefusal> {
+        self.take_when(authorization, || true)
+    }
+
+    pub(crate) fn take_when(
+        &self,
+        authorization: &DispatchAuthorization,
+        still_requested: impl FnOnce() -> bool,
+    ) -> Result<DispatchResult, TransportRefusal> {
         let mut state = self.state();
         let slot = state
             .slot
@@ -265,6 +325,10 @@ impl<Frame> AcpTransport<Frame> {
             return Ok(DispatchResult::StaleTarget(authorization.clone()));
         }
         let permit = self.ordered.try_reserve().map_err(writer_refusal)?;
+        if !still_requested() {
+            state.revoke_slot(authorization);
+            return Ok(DispatchResult::DefinitelyUnsent(authorization.clone()));
+        }
         let Some(AuthorizationSlot::Offered { frame, .. }) = state
             .slot
             .insert(authorization.clone(), AuthorizationSlot::Taken)
@@ -308,6 +372,14 @@ impl<Frame> AcpTransport<Frame> {
             .collect()
     }
 
+    pub(crate) fn runs_of(&self, incarnation: OwnerIncarnation) -> Vec<SessionGeneration> {
+        self.state()
+            .routes
+            .keys()
+            .filter_map(|run| (run.incarnation == incarnation).then_some(run.generation))
+            .collect()
+    }
+
     /// Called after terminal settlement no longer needs the slot's evidence.
     pub fn forget(&self, authorization: &DispatchAuthorization) {
         self.state().slot.remove(authorization);
@@ -322,6 +394,15 @@ impl<Frame> AcpTransport<Frame> {
         if route.closing.is_some() {
             return Err(TransportRefusal::Closing);
         }
+        self.enqueue(run, frame)
+    }
+
+    pub(crate) fn enqueue_control(
+        &self,
+        run: TransportRun,
+        frame: Frame,
+    ) -> Result<(), TransportRefusal> {
+        let _ordered_with_authorizations = self.state();
         self.enqueue(run, frame)
     }
 

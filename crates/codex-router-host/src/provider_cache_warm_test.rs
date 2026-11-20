@@ -17,7 +17,12 @@ struct RecordingSubmitter {
 }
 
 impl WarmPromptSubmitter for RecordingSubmitter {
-    fn submit_warm_prompt(&self, target: SessionRef, input_id: InputId) -> WarmPromptFuture<'_> {
+    fn submit_warm_prompt(
+        &self,
+        target: SessionRef,
+        _run: WarmRun,
+        input_id: InputId,
+    ) -> WarmPromptFuture<'_> {
         self.attempts.fetch_add(1, Ordering::SeqCst);
         let refused = self
             .refusals_left
@@ -108,7 +113,16 @@ impl Harness {
     }
 
     fn observe(&self, session: &str, event: SessionEvent) {
-        self.warm.observe_live_event(session, &event);
+        use provider_session_machines::session_owner::{ConnectionEpoch, OwnerIncarnation};
+        let fixture_id = uuid::Uuid::from_u128(0x0000_0000_0000_7000_8000_0000_0000_0001);
+        let run = WarmRun {
+            owner: OwnerAddress {
+                incarnation: OwnerIncarnation(fixture_id),
+                connection_epoch: ConnectionEpoch(fixture_id),
+            },
+            generation: SessionGeneration::UNTRACKED,
+        };
+        self.warm.observe_live_event(session, run, &event);
     }
 
     fn start_turn(&self, session: &str, turn: &str, input: &InputId) {

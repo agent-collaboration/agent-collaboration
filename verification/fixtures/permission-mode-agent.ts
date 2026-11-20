@@ -14,6 +14,7 @@
 //   reject-mode: every mode change is answered with an error.
 //   plain-prompts: record and end prompts without asking for permission.
 //   silent-prompts: record prompts but send no response, even after cancel.
+//   late-cancel-confirmation: end the first held prompt only when the test releases cancel.
 //   refuse-prompt: record the prompt and reject its ACP request.
 //   silent-first-restore: leave the first load or resume unanswered.
 //   disconnect-during-restore: exit after reading the load or resume.
@@ -47,6 +48,7 @@ const known = [
   "reject-mode",
   "plain-prompts",
   "silent-prompts",
+  "late-cancel-confirmation",
   "refuse-prompt",
   "silent-first-restore",
   "disconnect-during-restore",
@@ -63,7 +65,8 @@ const known = [
 for (const behaviour of behaviours)
   if (!known.includes(behaviour)) throw new Error(`unknown fixture behaviour ${behaviour}`);
 const clampAuto = behaviours.has("clamp-auto");
-if (behaviours.has("hold-close-refusal")) startReleaseBarrier(receipt);
+if (behaviours.has("hold-close-refusal") || behaviours.has("late-cancel-confirmation"))
+  startReleaseBarrier(receipt);
 
 const profiles: Record<string, { readonly start: string; readonly modes: readonly string[] }> = {
   claude: { start: "default", modes: ["default", "acceptEdits", "plan", "auto"] },
@@ -93,6 +96,7 @@ interface Observed {
   readonly fastRequests: { sessionId: unknown; value: unknown }[];
   readonly prompts: string[];
   readonly closes: string[];
+  readonly cancels: string[];
   readonly restores: {
     method: string;
     sessionId: string;
@@ -107,6 +111,7 @@ const observed: Observed = {
   fastRequests: [],
   prompts: [],
   closes: [],
+  cancels: [],
   restores: [],
   permissionAnswers: [],
 };
@@ -135,6 +140,7 @@ const configOptions = (sessionId: string): Record<string, unknown>[] => [
 ];
 let modeChanges = 0;
 let fastChanges = 0;
+let heldPrompt: Record<string, unknown> | undefined;
 const refuse = (request: Record<string, unknown>, message: string): void => {
   agent.send({ jsonrpc: "2.0", id: request.id, error: { code: -32000, message } });
 };
@@ -142,7 +148,7 @@ const refuse = (request: Record<string, unknown>, message: string): void => {
 requests: for (;;) {
   const request = await agent.readRequest();
   if (request === undefined) break;
-  if (request.id === undefined) continue;
+  if (request.id === undefined && request.method !== "session/cancel") continue;
   switch (request.method) {
     case "session/new": {
       const sessionId = `fixture-session-${observed.sessions.length + 1}`;
@@ -194,6 +200,11 @@ requests: for (;;) {
       const sessionId = String(field(request, "params", "sessionId"));
       observed.prompts.push(sessionId);
       if (behaviours.has("silent-prompts")) {
+        agent.receipt(receipt, observed);
+        break;
+      }
+      if (behaviours.has("late-cancel-confirmation") && observed.prompts.length === 1) {
+        heldPrompt = request;
         agent.receipt(receipt, observed);
         break;
       }
@@ -254,6 +265,18 @@ requests: for (;;) {
       if (behaviours.has("disconnect-during-restore")) break requests;
       if (behaviours.has("silent-first-restore") && observed.restores.length === 1) break;
       agent.respond(request, { configOptions: configOptions(sessionId) });
+      break;
+    }
+    case "session/cancel": {
+      observed.cancels.push(String(field(request, "params", "sessionId")));
+      agent.receipt(receipt, observed);
+      if (heldPrompt !== undefined) {
+        const prompt = heldPrompt;
+        heldPrompt = undefined;
+        void fileAppears(`${receipt}.release-cancel`).then((): void => {
+          agent.endTurn(prompt, "cancelled");
+        });
+      }
       break;
     }
     case "session/close":

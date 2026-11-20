@@ -1,9 +1,10 @@
 //! Host implementation of the provider Session command boundary used by both faces.
 
+use crate::session_owner_calls::InputAcceptance;
 use crate::{
     ExternalProviderRuntimeError, ExternalProviderSupervisor, ProviderAcpDeliveryRoute,
     ProviderCancelActiveTurnError, ProviderPromptContentsError, ProviderQueueAdmissionError,
-    ProviderQueueCancellationError, ProviderSteerContentsError, ProviderSteeringOutcome,
+    ProviderQueueCancellationError, ProviderSteerContentsError,
 };
 use collaboration_contracts::CommandFailure;
 use collaboration_contracts::CommandFuture;
@@ -37,7 +38,7 @@ use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 
 const OPERATION_WAIT_SECONDS: u32 = 30;
-const TURN_START_DEADLINE: Duration = Duration::from_secs(30);
+const SESSION_EVENT_DEADLINE: Duration = Duration::from_secs(30);
 
 pub struct HostSessionCommandPort {
     supervisor: Arc<ExternalProviderSupervisor>,
@@ -78,6 +79,30 @@ impl HostSessionCommandPort {
             .map_err(|_| CommandFailure::ProviderFailure)?
             .ok_or(CommandFailure::SessionNotFound)
     }
+
+    async fn wait_for_activation(
+        &self,
+        session: message_board::SessionRef,
+        previous_epoch: Option<u64>,
+    ) -> Result<(), CommandFailure> {
+        let attachment = self
+            .hub
+            .attach(session.clone())
+            .await
+            .map_err(|_| CommandFailure::ProviderFailure)?;
+        wait_for_session_event(
+            self.clock.as_ref(),
+            self.hub.as_ref(),
+            session,
+            attachment,
+            |epoch, event| {
+                (Some(epoch) != previous_epoch
+                    && matches!(event, SessionEvent::CapabilitiesChanged { .. }))
+                .then_some(())
+            },
+        )
+        .await
+    }
 }
 
 impl SessionCommandPort for HostSessionCommandPort {
@@ -110,7 +135,11 @@ impl SessionCommandPort for HostSessionCommandPort {
                 .map_err(map_operation_failure)?;
             let settlement = wait_for_settlement(self.supervisor.as_ref(), operation_id).await?;
             match settlement {
-                ConversationOperationSettlement::Created { target, .. } => board_session(target),
+                ConversationOperationSettlement::Created { target, .. } => {
+                    let session = board_session(target)?;
+                    self.wait_for_activation(session.clone(), None).await?;
+                    Ok(session)
+                }
                 ConversationOperationSettlement::CreatedWithoutSettings {
                     target,
                     applied,
@@ -131,6 +160,12 @@ impl SessionCommandPort for HostSessionCommandPort {
         Box::pin(async move {
             let target = protocol_session(&command.target)?;
             let stored = self.stored_session(&target).await?;
+            let previous_epoch = self
+                .hub
+                .attach(command.target.clone())
+                .await
+                .map_err(|_| CommandFailure::ProviderFailure)?
+                .epoch;
             let operation_id = OperationId::generate();
             self.supervisor
                 .load(ConversationLoadRequest {
@@ -145,7 +180,10 @@ impl SessionCommandPort for HostSessionCommandPort {
                 .await
                 .map_err(map_operation_failure)?;
             match wait_for_settlement(self.supervisor.as_ref(), operation_id).await? {
-                ConversationOperationSettlement::Loaded { .. } => Ok(()),
+                ConversationOperationSettlement::Loaded { .. } => {
+                    self.wait_for_activation(command.target, Some(previous_epoch))
+                        .await
+                }
                 _ => Err(CommandFailure::ProviderFailure),
             }
         })
@@ -155,6 +193,12 @@ impl SessionCommandPort for HostSessionCommandPort {
         Box::pin(async move {
             let target = protocol_session(&command.target)?;
             let stored = self.stored_session(&target).await?;
+            let previous_epoch = self
+                .hub
+                .attach(command.target.clone())
+                .await
+                .map_err(|_| CommandFailure::ProviderFailure)?
+                .epoch;
             let operation_id = OperationId::generate();
             self.supervisor
                 .resume(ConversationResumeRequest {
@@ -169,7 +213,10 @@ impl SessionCommandPort for HostSessionCommandPort {
                 .await
                 .map_err(map_operation_failure)?;
             match wait_for_settlement(self.supervisor.as_ref(), operation_id).await? {
-                ConversationOperationSettlement::Resumed { .. } => Ok(()),
+                ConversationOperationSettlement::Resumed { .. } => {
+                    self.wait_for_activation(command.target, Some(previous_epoch))
+                        .await
+                }
                 _ => Err(CommandFailure::ProviderFailure),
             }
         })
@@ -240,18 +287,27 @@ impl SessionCommandPort for HostSessionCommandPort {
             if active_turn_id(&attachment) != Some(command.expected_turn_id.as_str()) {
                 return Err(CommandFailure::Busy);
             }
+            let expected_turn = uuid::Uuid::parse_str(&command.expected_turn_id)
+                .map(provider_session_machines::session_turn_machine::TurnId)
+                .map_err(|_| CommandFailure::Busy)?;
             let target = protocol_session(&command.target)?;
             let actor = provider_actor(&command.actor)?;
             let outcome = self
                 .delivery
-                .steer_contents(target, actor, command.input_id.clone(), command.submission)
+                .place_steer(
+                    target.clone(),
+                    actor,
+                    command.input_id.clone(),
+                    Some(expected_turn),
+                    command.submission,
+                )
                 .await
                 .map_err(map_steer_failure)?;
             match outcome {
-                ProviderSteeringOutcome::Injected { .. } => Ok(SessionSteerOutcome::Injected {
+                InputAcceptance::Steered { .. } => Ok(SessionSteerOutcome::Injected {
                     turn_id: command.expected_turn_id,
                 }),
-                ProviderSteeringOutcome::StartedNewTurn => {
+                InputAcceptance::Started | InputAcceptance::ProviderStarted => {
                     let turn_id = wait_for_turn_start(
                         self.clock.as_ref(),
                         self.hub.as_ref(),
@@ -262,10 +318,42 @@ impl SessionCommandPort for HostSessionCommandPort {
                     .await?;
                     Ok(SessionSteerOutcome::StartedNewTurn { turn_id })
                 }
-                ProviderSteeringOutcome::PromptRequired => Ok(SessionSteerOutcome::PromptRequired),
-                ProviderSteeringOutcome::Failed => Ok(SessionSteerOutcome::Failed {
-                    reason: "provider steering failed".into(),
+                InputAcceptance::Queued => {
+                    let registry = self.supervisor.queued_operation_registry();
+                    match queued_input_outcome(
+                        self.hub.as_ref(),
+                        registry,
+                        command.target,
+                        &target,
+                        attachment,
+                        command.input_id,
+                    )
+                    .await?
+                    {
+                        collaboration_contracts::QueuedInputOutcome::Started { turn_id } => {
+                            Ok(SessionSteerOutcome::StartedNewTurn { turn_id })
+                        }
+                        collaboration_contracts::QueuedInputOutcome::NotSent { reason } => {
+                            Ok(SessionSteerOutcome::Failed {
+                                reason: format!("not sent: {reason}"),
+                            })
+                        }
+                    }
+                }
+                InputAcceptance::Unsent {
+                    reason: Some(provider_session_machines::session_owner::RevokeReason::TurnEnded),
+                } => Err(CommandFailure::Busy),
+                InputAcceptance::Unsent { reason } => Ok(SessionSteerOutcome::Failed {
+                    reason: reason
+                        .map_or_else(
+                            || "provider steering failed".into(),
+                            provider_session_machines::session_owner::RevokeReason::display_detail,
+                        )
+                        .into_owned(),
                 }),
+                InputAcceptance::QueuePlanChanged | InputAcceptance::Unknown => {
+                    Err(CommandFailure::ProviderFailure)
+                }
             }
         })
     }
@@ -335,6 +423,7 @@ impl SessionCommandPort for HostSessionCommandPort {
             let input_id = InputId::new(input_id).map_err(|_| CommandFailure::SessionNotFound)?;
             self.delivery
                 .queue_cancel(&target, &input_id)
+                .await
                 .map_err(|error| match error {
                     ProviderQueueCancellationError::NotQueued => CommandFailure::SessionNotFound,
                 })
@@ -488,6 +577,13 @@ fn map_steer_failure(error: ProviderSteerContentsError) -> CommandFailure {
     match error {
         ProviderSteerContentsError::Admission(error) => map_admission_failure(error),
         ProviderSteerContentsError::Runtime(error) => map_runtime_failure(error),
+        ProviderSteerContentsError::Operation(error) => match error.kind {
+            ConversationOperationFailureKind::CannotSteer => {
+                CommandFailure::UnsupportedOperation { operation: "steer" }
+            }
+            ConversationOperationFailureKind::StaleGeneration => CommandFailure::Busy,
+            _ => map_operation_failure(*error),
+        },
     }
 }
 
@@ -651,61 +747,51 @@ async fn wait_for_turn_start(
     clock: &dyn router_clock::RuntimeClock,
     hub: &ProviderSessionEventHub,
     session: message_board::SessionRef,
-    mut attachment: SessionEventAttachment,
+    attachment: SessionEventAttachment,
     input_id: InputId,
 ) -> Result<String, CommandFailure> {
-    for event in &attachment.snapshot {
-        if let SessionEvent::TurnStarted {
+    wait_for_session_event(clock, hub, session, attachment, |_, event| match event {
+        SessionEvent::TurnStarted {
             turn_id,
             input_id: observed,
-        } = &event.event
-            && observed == &input_id
-        {
-            return Ok(turn_id.clone());
-        }
-    }
-    let started = router_clock::timeout(clock, TURN_START_DEADLINE, async {
+        } if observed == &input_id => Some(turn_id.clone()),
+        _ => None,
+    })
+    .await
+}
+
+async fn wait_for_session_event<T>(
+    clock: &dyn router_clock::RuntimeClock,
+    hub: &ProviderSessionEventHub,
+    session: message_board::SessionRef,
+    mut attachment: SessionEventAttachment,
+    observe: impl Fn(u64, &SessionEvent) -> Option<T>,
+) -> Result<T, CommandFailure> {
+    let received = router_clock::timeout(clock, SESSION_EVENT_DEADLINE, async {
         loop {
-            match attachment.receiver.recv().await {
-                Ok(event) => {
-                    if let SessionEvent::TurnStarted {
-                        turn_id,
-                        input_id: observed,
-                    } = &event.event
-                        && observed == &input_id
-                    {
-                        return Some(turn_id.clone());
-                    }
-                    if let SessionEvent::TurnEnded { .. } = event.event {
-                        continue;
-                    }
-                }
-                Err(_) => return None,
+            if let Some(observed) = attachment
+                .snapshot
+                .iter()
+                .find_map(|event| observe(attachment.epoch, &event.event))
+            {
+                return Ok(observed);
             }
+            while let Ok(event) = attachment.receiver.recv().await {
+                if let Some(observed) = observe(attachment.epoch, &event.event) {
+                    return Ok(observed);
+                }
+                if matches!(event.event, SessionEvent::ResyncRequired { .. }) {
+                    break;
+                }
+            }
+            attachment = hub
+                .attach(session.clone())
+                .await
+                .map_err(|_| CommandFailure::ProviderFailure)?;
         }
     })
     .await;
-    if let Ok(Some(turn_id)) = started {
-        return Ok(turn_id);
-    }
-    let refreshed = hub
-        .attach(session)
-        .await
-        .map_err(|_| CommandFailure::ProviderFailure)?;
-    if let Some(turn_id) = refreshed
-        .snapshot
-        .into_iter()
-        .find_map(|event| match event.event {
-            SessionEvent::TurnStarted {
-                turn_id,
-                input_id: observed,
-            } if observed == input_id => Some(turn_id),
-            _ => None,
-        })
-    {
-        return Ok(turn_id);
-    }
-    Err(CommandFailure::ProviderFailure)
+    received.unwrap_or(Err(CommandFailure::ProviderFailure))
 }
 
 fn active_turn_id(attachment: &SessionEventAttachment) -> Option<&str> {

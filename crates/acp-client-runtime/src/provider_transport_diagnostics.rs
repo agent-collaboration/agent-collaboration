@@ -1,9 +1,12 @@
 //! Opt-in fixed transport witnesses; payloads and peer identities never reach this sink.
+use crate::provider_callback_claims::ProviderCallbackClaims;
+use agent_client_protocol::schema::v1::RequestId;
 use futures_util::{Sink, io::AsyncRead, io::AsyncReadExt};
 use serde::Deserialize;
 use std::{
     io,
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
 };
 
@@ -138,12 +141,16 @@ pub(crate) fn record_incoming_error() {
 pub(crate) struct ObservedProviderSink<Inner> {
     inner: Inner,
     pending_frame_counts: [usize; 9],
+    callback_claims: Arc<ProviderCallbackClaims>,
+    pending_callback_replies: Vec<RequestId>,
 }
 impl<Inner> ObservedProviderSink<Inner> {
-    pub(crate) const fn new(inner: Inner) -> Self {
+    pub(crate) const fn new(inner: Inner, callback_claims: Arc<ProviderCallbackClaims>) -> Self {
         Self {
             inner,
             pending_frame_counts: [0; 9],
+            callback_claims,
+            pending_callback_replies: Vec::new(),
         }
     }
     fn record_flushed(&mut self) {
@@ -168,6 +175,7 @@ impl<Inner: Sink<String, Error = io::Error> + Unpin> Sink<String> for ObservedPr
     }
     fn start_send(self: Pin<&mut Self>, frame: String) -> Result<(), Self::Error> {
         let this = self.get_mut();
+        let (frame, replies) = this.callback_claims.outgoing(frame);
         let observed = enabled();
         let kind = if observed {
             classify_frame(&frame)
@@ -175,6 +183,7 @@ impl<Inner: Sink<String, Error = io::Error> + Unpin> Sink<String> for ObservedPr
             ProviderFrameKind::Other
         };
         Pin::new(&mut this.inner).start_send(frame)?;
+        this.pending_callback_replies.extend(replies);
         if observed {
             if let Some(count) = this.pending_frame_counts.get_mut(kind.index()) {
                 *count = count.saturating_add(1);
@@ -190,6 +199,8 @@ impl<Inner: Sink<String, Error = io::Error> + Unpin> Sink<String> for ObservedPr
         let this = self.get_mut();
         match Pin::new(&mut this.inner).poll_flush(context) {
             Poll::Ready(Ok(())) => {
+                this.callback_claims
+                    .flushed(std::mem::take(&mut this.pending_callback_replies));
                 this.record_flushed();
                 Poll::Ready(Ok(()))
             }

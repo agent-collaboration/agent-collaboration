@@ -1,7 +1,6 @@
 //! Inspect one durable provider Session with its live connection observations.
 
 use super::ExternalProviderSupervisor;
-use collaboration_contracts::SessionEventHub;
 use collaboration_protocol::{
     ProviderConfigOptionView, ProviderConfigValueView, ProviderHistoryAvailability,
     ProviderInspectFailure, ProviderInspectFailureKind, ProviderSessionInspectRequest,
@@ -15,101 +14,86 @@ pub(super) async fn inspect(
     request: ProviderSessionInspectRequest,
 ) -> Result<ProviderSessionInspectResult, ProviderInspectFailure> {
     let target = request.target;
-    supervisor
-        .inner
-        .store
-        .lock()
-        .await
-        .session_record(&target)
-        .await
-        .map_err(|_| failure(ProviderInspectFailureKind::Unavailable, &target))?
-        .ok_or_else(|| failure(ProviderInspectFailureKind::NotFound, &target))?;
+    use provider_session_machines::session_owner::{HistoryAvailability, ObservedSetting};
     let runtime = supervisor
         .runtime_for(&target.endpoint)
         .ok_or_else(|| failure(ProviderInspectFailureKind::Unavailable, &target))?;
-    let session_id = String::from(target.session_id.clone());
-    let capabilities = runtime
-        .capability_report(&session_id)
-        .await
-        .to_session_model();
-    let catalog = runtime.settings_catalog(&session_id);
-    // A lost mode answer leaves the catalog's old mode; show never claims it.
-    let mode_unconfirmed = runtime.setting_outcome_unknown(
-        &session_id,
-        provider_session_machines::ProviderSettingKind::Mode,
-    );
-    if let Some(catalog) = &catalog {
+    let clock = runtime.owner_clock();
+    let record = router_clock::timeout(clock.as_ref(), std::time::Duration::from_secs(10), async {
         supervisor
             .inner
-            .record_settings_catalog(target.clone(), catalog.clone())
-            .await;
-    }
-    let catalog = match catalog {
-        Some(catalog) => Some(catalog),
-        None => supervisor
-            .inner
-            .settings_catalogs
+            .store
             .lock()
             .await
-            .get(&target)
-            .cloned(),
-    };
-    let requested_mode = supervisor
-        .runtime_for(&target.endpoint)
-        .map(|runtime| {
-            runtime
-                .session_setup()
-                .requested_mode(&String::from(target.session_id.clone()))
-        })
-        .unwrap_or_default();
-    // Fast from the catalog this Host holds; absent when it holds none (D1 R11).
-    let fast = catalog.as_ref().map(|catalog| {
-        crate::provider_operation_settlement::provider_fast_state(catalog.fast_observed())
-    });
-    let state = if let Some(hub) = supervisor.inner.hub.as_ref() {
-        let hub_target = serde_json::to_value(&target)
-            .ok()
-            .and_then(|value| serde_json::from_value(value).ok())
-            .ok_or_else(|| failure(ProviderInspectFailureKind::Unavailable, &target))?;
-        hub.state(hub_target)
+            .session_record(&target)
             .await
-            .map_err(|_| failure(ProviderInspectFailureKind::Unavailable, &target))?
-    } else {
-        SessionState::Unloaded
-    };
-    let history = if matches!(state, SessionState::Unloaded)
-        || supervisor
-            .inner
-            .history_unavailable
-            .lock()
-            .await
-            .contains(&target)
+    })
+    .await
+    .map_err(|_| failure(ProviderInspectFailureKind::Unavailable, &target))?
+    .map_err(|_| failure(ProviderInspectFailureKind::Unavailable, &target))?
+    .ok_or_else(|| failure(ProviderInspectFailureKind::NotFound, &target))?;
+    let snapshot = supervisor.owner_session_snapshot(&target);
+    let capabilities = match snapshot
+        .as_ref()
+        .and_then(|owner| owner.projection.capabilities.clone())
     {
-        ProviderHistoryAvailability::HistoryUnavailable
-    } else {
-        ProviderHistoryAvailability::Available
+        Some(report) => report,
+        None => runtime
+            .capability_report(&String::from(target.session_id.clone()))
+            .await
+            .to_session_model(),
     };
+    let catalog = supervisor.owner_session_catalog(&target);
+    let confirmed_mode = snapshot.as_ref().and_then(|owner| {
+        match &owner
+            .settings
+            .get(&provider_session_machines::ProviderSettingKind::Mode)?
+            .value
+        {
+            ObservedSetting::Confirmed(value) => Some(value.0.clone()),
+            ObservedSetting::LastConfirmed(_) | ObservedSetting::Unknown => None,
+        }
+    });
+    let fast = snapshot
+        .as_ref()
+        .and_then(|owner| super::provider_settings_control::snapshot_settings(owner).fast)
+        .map(crate::provider_operation_settlement::provider_fast_state);
+    let state = snapshot.as_ref().map_or(SessionState::Unloaded, |owner| {
+        owner.projection.state.clone()
+    });
+    let history = if snapshot
+        .as_ref()
+        .is_some_and(|owner| owner.history == HistoryAvailability::Available)
+    {
+        ProviderHistoryAvailability::Available
+    } else {
+        ProviderHistoryAvailability::HistoryUnavailable
+    };
+    let requested_mode = record.resume.requested_mode.or_else(|| {
+        runtime
+            .session_setup()
+            .requested_mode(&String::from(target.session_id.clone()))
+            .requested_mode
+    });
     Ok(ProviderSessionInspectResult {
         target,
         state: state_tag(state),
         capabilities,
         history,
-        settings_catalog: catalog.map(|catalog| catalog_view(catalog, mode_unconfirmed)),
-        requested_mode: requested_mode.requested_mode,
-        mode_reason: requested_mode.mode_reason,
+        settings_catalog: catalog.map(|catalog| catalog_view(catalog, confirmed_mode)),
+        requested_mode,
+        mode_reason: snapshot
+            .as_ref()
+            .and_then(|owner| owner.mode_reason)
+            .map(crate::provider_operation_settlement::provider_mode_reason),
         fast,
     })
 }
 
 fn catalog_view(
     catalog: acp_client_runtime::ProviderSettingsCatalog,
-    mode_unconfirmed: bool,
+    current_mode: Option<String>,
 ) -> ProviderSettingsCatalogView {
-    let current_mode = if mode_unconfirmed {
-        None
-    } else {
-        catalog.effective_settings().mode
-    };
     ProviderSettingsCatalogView {
         current_mode,
         modes: catalog.modes.into_iter().map(choice_view).collect(),
@@ -192,11 +176,7 @@ impl ExternalProviderSupervisor {
         {
             return Err(SessionModelCatalogError::SessionNotFound);
         }
-        let runtime = self
-            .runtime_for(&target.endpoint)
-            .ok_or(SessionModelCatalogError::Unavailable)?;
-        let session_id = String::from(target.session_id.clone());
-        let catalog = match runtime.settings_catalog(&session_id) {
+        let catalog = match self.owner_session_catalog(target) {
             Some(catalog) => catalog,
             None => self
                 .inner

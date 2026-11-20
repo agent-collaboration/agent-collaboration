@@ -2,24 +2,6 @@
 
 use agent_client_protocol::Dispatch;
 
-pub(crate) fn session_update_kind(dispatch: &Dispatch) -> Option<&str> {
-    let Dispatch::Notification(message) = dispatch else {
-        return None;
-    };
-    if message.method() != "session/update" {
-        return None;
-    }
-    message
-        .params()
-        .get("update")?
-        .get("sessionUpdate")?
-        .as_str()
-}
-
-pub(crate) fn is_session_update_notification(dispatch: &Dispatch) -> bool {
-    matches!(dispatch, Dispatch::Notification(message) if message.method() == "session/update")
-}
-
 pub(crate) fn is_known_update_kind(kind: &str) -> bool {
     matches!(
         kind,

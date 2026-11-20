@@ -12,11 +12,12 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::{
-    AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
-    HistoryReplayFuture, InteractionFuture, InteractionPort, ModelMetadataSource, ModelReasoning,
-    ModelReasoningEntry, ModelReasoningMetadata, ModelReasoningUnknown, ProviderBehavior,
-    ProviderPersistenceTarget, ProviderSessionActivity, RefusedApprovalOffer, SessionEventSink,
+    ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch, HistoryReplayFuture,
+    InteractionFuture, InteractionPort, ModelMetadataSource, ModelReasoning, ModelReasoningEntry,
+    ModelReasoningMetadata, ModelReasoningUnknown, ProviderBehavior, ProviderPersistenceTarget,
+    ProviderSessionActivity, RefusedApprovalOffer, SessionEventSink,
 };
 use codex_router_test_support::node_taps::stable;
 use session_event_model::{
@@ -219,10 +220,17 @@ impl Wire {
             .create_session(self.root.path().to_path_buf())
             .await
             .expect("session opens");
-        assert!(matches!(
-            self.events.recv().await,
-            Some(SessionEvent::SettingsChanged { .. })
-        ));
+        let mut settings = false;
+        loop {
+            match self.events.recv().await.expect("session activation event") {
+                SessionEvent::SettingsChanged { .. } => settings = true,
+                SessionEvent::StateChanged {
+                    state: session_event_model::SessionState::Idle,
+                } => break,
+                _ => {}
+            }
+        }
+        assert!(settings, "settings must be observed before Idle");
     }
 
     /// The fixture's complete wire capture, every line both ways in order. Read once the client

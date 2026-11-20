@@ -1,8 +1,8 @@
 //! The real warm-prompt path: the supervisor's prompt admission, refusing a busy session.
-use super::{WARM_PROMPT_TEXT, WarmPromptFuture, WarmPromptRefused, WarmPromptSubmitter};
+use super::{WARM_PROMPT_TEXT, WarmPromptFuture, WarmPromptRefused, WarmPromptSubmitter, WarmRun};
 use crate::{
     ExternalProviderSupervisor, ProviderPromptContentsRequest,
-    external_provider_supervisor::PromptBusyPolicy,
+    external_provider_supervisor::PromptBusyPolicy, session_owner_calls::InputAcceptance,
 };
 use collaboration_protocol::{OperationId, SessionRef};
 use collaboration_runtime::ProviderOperationStore;
@@ -31,7 +31,12 @@ impl SupervisorWarmPromptSubmitter {
 }
 
 impl WarmPromptSubmitter for SupervisorWarmPromptSubmitter {
-    fn submit_warm_prompt(&self, target: SessionRef, input_id: InputId) -> WarmPromptFuture<'_> {
+    fn submit_warm_prompt(
+        &self,
+        target: SessionRef,
+        run: WarmRun,
+        input_id: InputId,
+    ) -> WarmPromptFuture<'_> {
         Box::pin(async move {
             let (Some(supervisor), Some(store)) = (self.supervisor.upgrade(), self.store.upgrade())
             else {
@@ -54,11 +59,10 @@ impl WarmPromptSubmitter for SupervisorWarmPromptSubmitter {
                 ),
                 busy: PromptBusyPolicy::RefuseBusy,
             };
-            supervisor
-                .prompt_contents(request)
-                .await
-                .map(|_| ())
-                .map_err(|_| WarmPromptRefused)
+            match supervisor.submit_warm_owner_prompt(request, run).await {
+                Ok(InputAcceptance::Started) => Ok(()),
+                _ => Err(WarmPromptRefused),
+            }
         })
     }
 }

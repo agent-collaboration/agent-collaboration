@@ -27,6 +27,7 @@ impl CollaborationRuntime {
             None,
             None,
             None,
+            None,
         ))
         .await
     }
@@ -47,6 +48,7 @@ impl CollaborationRuntime {
             Some(host_inputs.router_proxy_endpoint),
             prepared_exposure,
             Some(host_inputs.enrollment_reset_directory),
+            None,
         ))
         .await
     }
@@ -58,20 +60,24 @@ impl CollaborationRuntime {
         router_proxy_endpoint: Option<SocketAddr>,
         prepared_exposure: Option<crate::tailscale_exposure::PreparedTailscaleExposure>,
         enrollment_reset_directory: Option<std::path::PathBuf>,
+        clock_override: Option<std::sync::Arc<dyn router_clock::RuntimeClock>>,
     ) -> io::Result<Self> {
         let mut owner_human_id = inputs.owner_human_id.clone();
         #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
-        let mail_clock_control =
-            crate::debug_mail_clock::PreparedMailClock::load(&inputs.directory).await?;
-        #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
-        let worker_clock: std::sync::Arc<dyn router_clock::RuntimeClock> = match &mail_clock_control
-        {
-            Some(control) => control.clock(),
-            None => std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
+        let mail_clock_control = if clock_override.is_none() {
+            crate::debug_mail_clock::PreparedMailClock::load(&inputs.directory).await?
+        } else {
+            None
         };
+        #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+        let worker_clock: std::sync::Arc<dyn router_clock::RuntimeClock> = clock_override
+            .unwrap_or_else(|| match &mail_clock_control {
+                Some(control) => control.clock(),
+                None => std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
+            });
         #[cfg(not(all(debug_assertions, feature = "runtime-test-support")))]
-        let worker_clock: std::sync::Arc<dyn router_clock::RuntimeClock> =
-            std::sync::Arc::new(router_clock::SystemRuntimeClock::new());
+        let worker_clock: std::sync::Arc<dyn router_clock::RuntimeClock> = clock_override
+            .unwrap_or_else(|| std::sync::Arc::new(router_clock::SystemRuntimeClock::new()));
         let service_id = load_service_identity(&inputs.directory)?;
         let installation_peer = load_installation_peer(&inputs.directory)?;
         if inputs

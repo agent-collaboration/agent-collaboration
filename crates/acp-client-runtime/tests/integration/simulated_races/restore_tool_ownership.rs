@@ -1,13 +1,14 @@
 //! Wire oracles for retired tool ownership during restore and before live input.
 
 use super::{
-    AgentSessionClient, ClockInstant, Duration, ExternalProviderRuntimeError, NoInteraction,
-    RestoreObservations, ScriptedLineAgent, closed_session_with_sink, prompt_restored_session,
-    restore_clock, restore_without_mode, spawn_load,
+    AgentSessionClient, Duration, ExternalProviderRuntimeError, NoInteraction, RestoreObservations,
+    ScriptedLineAgent, closed_session_with_sink, prompt_restored_session, restore_clock,
+    restore_without_mode, spawn_load,
 };
 use acp_client_runtime::{
     ApprovalPortOutcome, InteractionFuture, InteractionPort, RefusedApprovalOffer,
 };
+use router_clock::RuntimeClock as _;
 use serde_json::json;
 use session_event_model::{SessionEvent, SessionItem};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -235,14 +236,20 @@ async fn an_idle_resume_drops_the_expired_restores_tool_frames_before_input() {
     )
     .await;
     agent.hold_next_restore_answer();
+    clock
+        .advance(Duration::from_millis(1))
+        .expect("separate restore from the previous close deadline");
     let first = restore_without_mode(&client, &session, "session/load");
     tokio::pin!(first);
     let deadline = Duration::from_secs(30);
+    let due = clock.monotonic_now().after(deadline);
     tokio::select! {
-        () = clock.not_due_check_now(ClockInstant::ZERO.after(deadline)) => {},
+        () = async {
+            agent.received("session/load").await;
+            clock.not_due_check_now(due).await;
+        } => {},
         result = &mut first => panic!("load A ended before its deadline: {result:?}"),
     }
-    agent.received("session/load").await;
     agent.announce_replay_tool(&session, "expired-tool").await;
     // That callback's response establishes that the connection read the announcement.
     let _response = agent.request_permission(&session).await;

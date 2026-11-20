@@ -1,7 +1,5 @@
-//! The uncertainty controls of D1 V22 at the API prompt's two Deferred
-//! dispatch points: a fresh send (`send_api_prompt`, admitted with
-//! `DispatchMark::Deferred` through `still_blocking`) and a queued entry's
-//! dispatch (`dispatch_queued_api_prompt`). Each control is a state the
+//! The uncertainty controls of D1 V22 at API admission and the owner lane's
+//! dispatch-mark acceptance. Each control is a state the
 //! public API can't force on demand: an unresolved row in the current binding
 //! generation with no live entry, a terminal Unknown row whose published
 //! entry is still retained, and the moment between a terminal Unknown row
@@ -10,8 +8,6 @@
 //! records every request it reads.
 
 use super::*;
-use crate::provider_acp_message_fifo::ProviderAcpMessageFifo;
-use collaboration_runtime::ProviderSessionRecord;
 
 /// The text of the send each control refuses; no agent frame may carry it.
 const CONTROL_TEXT: &str = "control";
@@ -30,19 +26,13 @@ enum SeededUncertainty {
     StoredBeforePublished,
 }
 
-type HeldTurn = tokio::task::JoinHandle<
-    Result<crate::ExternalProviderPromptOutcome, crate::ExternalProviderRuntimeError>,
->;
-
-/// One supervisor with its session line, over the real Cursor fixture, with
-/// a turn running on the session that no operation row owns.
+/// One supervisor over the real Cursor fixture, with an accepted prompt held on the wire.
 struct ControlFixture {
     root: tempfile::TempDir,
     target: SessionRef,
     store: Arc<Mutex<ProviderOperationStore>>,
     supervisor: Arc<ExternalProviderSupervisor>,
-    queue: Arc<ProviderAcpMessageFifo>,
-    held: HeldTurn,
+    held: OperationId,
 }
 
 impl ControlFixture {
@@ -53,10 +43,6 @@ impl ControlFixture {
     async fn start(behaviours: &[&str]) -> Self {
         let root = tempfile::tempdir().expect("fixture root");
         let receipt = root.path().join("wire.json");
-        let target = SessionRef {
-            endpoint: endpoint(),
-            session_id: SessionId::try_from("reactive-session-1".to_owned()).expect("session"),
-        };
         let mut arguments = vec!["reactive".to_owned(), receipt.display().to_string()];
         arguments.extend(behaviours.iter().map(|behaviour| (*behaviour).to_owned()));
         let runtime = ExternalProviderRuntime::initialize(
@@ -68,34 +54,11 @@ impl ControlFixture {
         )
         .await
         .expect("fixture provider");
-        runtime
-            .create_session(root.path().to_owned())
-            .await
-            .expect("session/new");
         let store = Arc::new(Mutex::new(
             ProviderOperationStore::open(&root.path().join("operations.sqlite"))
                 .await
                 .expect("store"),
         ));
-        store
-            .lock()
-            .await
-            .record_session(&ProviderSessionRecord {
-                target: target.clone(),
-                working_directory: ProviderWorkingDirectory::try_from(
-                    root.path().display().to_string(),
-                )
-                .expect("working directory"),
-                requested_policy: ProviderRequestedPolicy {
-                    access: RouterAccess::WriteRestricted,
-                },
-                created_by: target.clone().into(),
-                approver: target.clone().into(),
-                updated_at_ms: 1,
-                resume: Default::default(),
-            })
-            .await
-            .expect("session record");
         let supervisor = Arc::new(
             ExternalProviderSupervisor::new(
                 vec![ExternalProviderBinding {
@@ -106,42 +69,54 @@ impl ControlFixture {
             )
             .expect("supervisor"),
         );
-        let queue = Arc::new(ProviderAcpMessageFifo::new(
-            Arc::clone(&supervisor),
-            Arc::clone(&store),
-            Arc::new(NoLivePeer),
-            std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
-        ));
-        supervisor.attach_message_fifo(&queue);
-        let runtime = supervisor.runtime_for(&target.endpoint).expect("runtime");
-        let held_context = crate::ExternalProviderApprovalContext {
-            requester: target.clone().into(),
-            approver: target.clone().into(),
-            target: target.clone(),
-            operation_id: OperationId::generate(),
-            binding_generation: binding().generation,
-            binding_retirement: runtime.retirement(),
-        };
-        let held = tokio::spawn(async move {
-            runtime
-                .prompt_with_approval_context(
-                    "reactive-session-1".to_owned(),
-                    "first".to_owned(),
-                    held_context,
+        let create = OperationId::generate();
+        supervisor
+            .create(ConversationCreateRequest {
+                operation_id: create.clone(),
+                endpoint: endpoint(),
+                generation: None,
+                working_directory: ProviderWorkingDirectory::try_from(
+                    root.path().display().to_string(),
                 )
-                .await
-        });
-        while recorded_frames(&receipt, "session/prompt", None) < 1 {
-            tokio::task::yield_now().await;
-        }
-        Self {
+                .expect("working directory"),
+                created_by: requester().into(),
+                approver: requester().into(),
+                requested_policy: ProviderRequestedPolicy {
+                    access: RouterAccess::WriteRestricted,
+                },
+                settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                    mode: Some("auto".to_owned()),
+                    ..Default::default()
+                }),
+                work_roots: Vec::new(),
+            })
+            .await
+            .expect("admit create");
+        let creation = supervisor
+            .wait(wait_for_operation(create))
+            .await
+            .expect("create completed");
+        let ConversationOperationWaitOutput::Available {
+            settlement: ConversationOperationSettlement::Created { target, .. },
+        } = creation.output
+        else {
+            panic!("expected created owner, got {:?}", creation.output);
+        };
+        let fixture = Self {
             root,
             target,
             store,
             supervisor,
-            queue,
-            held,
+            held: OperationId::generate(),
+        };
+        fixture
+            .send(&fixture.held, "first")
+            .await
+            .expect("accept held turn");
+        while recorded_frames(&receipt, "session/prompt", None) < 1 {
+            tokio::task::yield_now().await;
         }
+        fixture
     }
 
     /// Stores the seeded uncertainty for this session in the current
@@ -209,6 +184,15 @@ impl ControlFixture {
         &self,
         operation_id: &OperationId,
     ) -> Result<ConversationOperationSubmission, ConversationOperationFailure> {
+        self.send(operation_id, CONTROL_TEXT).await
+    }
+
+    #[expect(clippy::result_large_err, reason = "Retains the full typed failure.")]
+    async fn send(
+        &self,
+        operation_id: &OperationId,
+        text: &str,
+    ) -> Result<ConversationOperationSubmission, ConversationOperationFailure> {
         self.supervisor
             .prompt(ConversationPromptRequest {
                 delivery: collaboration_protocol::MessageDelivery::Queue,
@@ -219,7 +203,7 @@ impl ControlFixture {
                 requested_by: self.target.clone().into(),
                 approver: self.target.clone().into(),
                 prompt: collaboration_protocol::MessageContent::HumanUser {
-                    text: MessageText::try_from(CONTROL_TEXT.to_owned()).expect("prompt"),
+                    text: MessageText::try_from(text.to_owned()).expect("prompt"),
                 },
             })
             .await
@@ -235,21 +219,27 @@ impl ControlFixture {
     }
 
     /// Ends the held turn, publishes a still-pending seeded entry so the
-    /// drain can finish, and stops the line and the supervisor.
+    /// drain can finish, and stops the supervisor.
     async fn stop(self, seeded: &OperationId, seeded_state: SeededUncertainty) -> StoppedControl {
         node_test_fixture::release_fixture(&self.receipt(), ".release")
             .expect("release the held turn");
-        let held = self.held.await.expect("held turn task");
+        let held = self.supervisor.wait(wait_for_operation(self.held)).await;
         if matches!(seeded_state, SeededUncertainty::StoredBeforePublished) {
             assert!(self.supervisor.publish_held_result(seeded).await);
         }
-        self.queue.shutdown().await;
         let stopped = self.supervisor.shutdown().await;
         StoppedControl {
             root: self.root,
             held_ended: held.is_ok(),
             stopped,
         }
+    }
+}
+
+fn wait_for_operation(operation_id: OperationId) -> ConversationOperationWaitRequest {
+    ConversationOperationWaitRequest {
+        operation_id,
+        timeout_seconds: PositiveSeconds::try_from(10).expect("bound"),
     }
 }
 
@@ -317,7 +307,7 @@ async fn assert_fresh_send_refused(seeded_state: SeededUncertainty) {
     assert_eq!(
         String::from(failure.message.clone()),
         format!(
-            "an earlier send's outcome is unknown; reconcile {} first",
+            "an earlier prompt's outcome is unknown; check the session, then run operation reconcile for {}",
             seeded.as_str()
         ),
         "{seeded_state:?}: the refusal names the uncertain operation"
@@ -358,6 +348,21 @@ async fn assert_queued_entry_not_sent(seeded_state: SeededUncertainty) {
     let fixture = ControlFixture::start(&["hold-first-prompt-open"]).await;
     let queued = OperationId::generate();
     let admitted = fixture.send_control(&queued).await;
+    let mut snapshots = fixture
+        .supervisor
+        .session_owner_for(&fixture.target)
+        .expect("live owner")
+        .snapshots();
+    let queued_uuid = uuid::Uuid::parse_str(queued.as_str()).expect("operation identity");
+    snapshots
+        .wait_for(|snapshot| {
+            snapshot
+                .queue
+                .iter()
+                .any(|entry| !entry.started && entry.input.operation == queued_uuid)
+        })
+        .await
+        .expect("owner admitted the queued input");
     let queued_before = fixture
         .show(&queued)
         .await
@@ -393,7 +398,10 @@ async fn assert_queued_entry_not_sent(seeded_state: SeededUncertainty) {
     };
     assert_eq!(
         String::from(failure.message.clone()),
-        "not sent: an earlier outcome is unknown",
+        format!(
+            "an earlier prompt's outcome is unknown; check the session, then run operation reconcile for {}",
+            seeded.as_str()
+        ),
         "{seeded_state:?}: {failure:?}"
     );
     assert_eq!(failure.effect, ProviderOperationEffect::None);

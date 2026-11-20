@@ -24,7 +24,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 const UNSAVED_APPLIED: &str =
-    "applied; the durable record still says may-have-dispatched (write failed)";
+    "the provider effect was applied; the saved result isn't available and may differ";
 
 /// Oracle: §12.5, written by hand: show and wait never claim a blanket
 /// "applied"; the row stays MayHaveDispatched; no retry and no second send.
@@ -44,10 +44,6 @@ async fn a_settlement_that_fails_to_save_answers_its_outcome_and_durable_stage()
     )
     .await
     .expect("fixture provider");
-    runtime
-        .create_session(root.path().to_owned())
-        .await
-        .expect("session/new");
     let store = Arc::new(Mutex::new(
         ProviderOperationStore::open(&root.path().join("operations.sqlite"))
             .await
@@ -82,6 +78,11 @@ async fn a_settlement_that_fails_to_save_answers_its_outcome_and_durable_stage()
         )
         .expect("supervisor"),
     );
+    let created = supervisor
+        .open_provider_fixture(&target.endpoint, root.path().to_owned())
+        .await
+        .expect("session/new");
+    assert_eq!(created, String::from(target.session_id.clone()));
     let operation_id = OperationId::generate();
     store
         .lock()

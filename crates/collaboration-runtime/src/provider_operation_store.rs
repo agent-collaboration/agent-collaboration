@@ -283,6 +283,47 @@ impl ProviderOperationStore {
         }
     }
 
+    /// A queued prompt first acquires a durable row when its dispatch mark
+    /// is written. The target and mark take effect in the same statement.
+    pub async fn admit_queued_prompt_at_dispatch(
+        &mut self,
+        admission: ProviderOperationAdmission,
+        target: &SessionRef,
+        dispatched_at_ms: i64,
+    ) -> Result<ProviderOperationRecord, ProviderOperationStoreError> {
+        if admission.operation_kind != ProviderOperationKind::ConversationPrompt {
+            return Err(ProviderOperationStoreError::InvalidRecord);
+        }
+        let dispatched_at_ms = dispatched_at_ms.max(admission.admitted_at_ms);
+        let result = sqlx::query!(
+            "INSERT OR IGNORE INTO provider_operations (
+                operation_id,operation_kind,binding_json,
+                target_service_id,target_endpoint_id,target_session_id,
+                stage,effect,reconciliation_state,admitted_at_ms,dispatched_at_ms,updated_at_ms
+             ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            admission.operation_id.as_str(),
+            encode_enum(admission.operation_kind)?,
+            encode_closed(&admission.binding)?,
+            String::from(target.endpoint.service_id.clone()),
+            String::from(target.endpoint.endpoint_id.clone()),
+            String::from(target.session_id.clone()),
+            encode_enum(ProviderOperationStage::MayHaveDispatched)?,
+            encode_enum(ProviderOperationEffect::Unknown)?,
+            encode_enum(ProviderReconciliationState::Unresolved)?,
+            admission.admitted_at_ms,
+            dispatched_at_ms,
+            dispatched_at_ms,
+        )
+        .execute_as_transaction(self)
+        .await?;
+        if result.rows_affected() == 0 {
+            return Err(ProviderOperationStoreError::TransitionConflict);
+        }
+        self.inspect(&admission.operation_id)
+            .await?
+            .ok_or(ProviderOperationStoreError::InvalidRecord)
+    }
+
     pub async fn inspect(
         &mut self,
         operation_id: &OperationId,
@@ -302,67 +343,19 @@ impl ProviderOperationStore {
         .transpose()
     }
 
-    /// Every operation on `binding` whose durable effect is Unknown, with its
-    /// target (none for a binding-wide row), for seeding the binding's
-    /// uncertainty at start (D1 state machines, design note §14.1). The same
-    /// statement as `blocking_uncertain_operation_ids`, unfiltered by target.
+    /// Unacknowledged unknown operations for this binding, excluding completed
+    /// restore attempts whose local owner is already retired.
     pub async fn unknown_operations(
         &mut self,
         binding: &ProviderBindingIdentity,
     ) -> Result<Vec<(OperationId, Option<SessionRef>)>, ProviderOperationStoreError> {
-        let unknown = encode_enum(ProviderOperationEffect::Unknown)?;
-        let candidates = sqlx::query!(
-            "SELECT operation_id,operation_kind,stage,binding_json,target_service_id,target_endpoint_id,target_session_id
-             FROM provider_operations WHERE effect=? ORDER BY operation_id",
-            unknown,
-        )
-        .fetch_all(&mut self.connection)
-        .await?;
-        let mut unknown_operations = Vec::new();
-        for candidate in candidates {
-            if decode_enum::<ProviderOperationStage>(candidate.stage)?
-                == ProviderOperationStage::Terminal
-                && decode_enum::<ProviderOperationKind>(candidate.operation_kind)?.is_restore()
-            {
-                continue;
-            }
-            let same_scope = match decode_binding(&candidate.binding_json)? {
-                ConversationBindingIdentity::ExternalProvider { binding: stored } => {
-                    stored.endpoint == binding.endpoint
-                        && stored.runtime.provider == binding.runtime.provider
-                        && stored.generation == binding.generation
-                }
-                ConversationBindingIdentity::CodexAcp { .. } => false,
-            };
-            if !same_scope {
-                continue;
-            }
-            let target = match (
-                candidate.target_service_id,
-                candidate.target_endpoint_id,
-                candidate.target_session_id,
-            ) {
-                (None, None, None) => None,
-                (Some(service_id), Some(endpoint_id), Some(session_id)) => Some(SessionRef {
-                    endpoint: collaboration_protocol::EndpointRef {
-                        service_id: service_id
-                            .try_into()
-                            .map_err(|_| ProviderOperationStoreError::InvalidRecord)?,
-                        endpoint_id: collaboration_protocol::EndpointId::try_from(endpoint_id)
-                            .map_err(|_| ProviderOperationStoreError::InvalidRecord)?,
-                    },
-                    session_id: collaboration_protocol::SessionId::try_from(session_id)
-                        .map_err(|_| ProviderOperationStoreError::InvalidRecord)?,
-                }),
-                _ => return Err(ProviderOperationStoreError::InvalidRecord),
-            };
-            unknown_operations.push((
-                OperationId::try_from(candidate.operation_id)
-                    .map_err(|_| ProviderOperationStoreError::InvalidRecord)?,
-                target,
-            ));
-        }
-        Ok(unknown_operations)
+        Ok(self
+            .stored_uncertain_operations(binding)
+            .await?
+            .into_iter()
+            .filter(|row| row.stage != ProviderOperationStage::Terminal || !row.kind.is_restore())
+            .map(|row| (row.operation, row.target))
+            .collect())
     }
 
     pub async fn blocking_uncertain_operation_ids(
@@ -370,58 +363,13 @@ impl ProviderOperationStore {
         binding: &ProviderBindingIdentity,
         target: Option<&SessionRef>,
     ) -> Result<Vec<OperationId>, ProviderOperationStoreError> {
-        let unknown = encode_enum(ProviderOperationEffect::Unknown)?;
-        let candidates = sqlx::query!(
-            "SELECT operation_id,operation_kind,stage,binding_json,target_service_id,target_endpoint_id,target_session_id
-             FROM provider_operations WHERE effect=? ORDER BY operation_id",
-            unknown,
-        )
-        .fetch_all(&mut self.connection)
-        .await?;
-        let mut blocking = Vec::new();
-        for candidate in candidates {
-            if decode_enum::<ProviderOperationStage>(candidate.stage)?
-                == ProviderOperationStage::Terminal
-                && decode_enum::<ProviderOperationKind>(candidate.operation_kind)?.is_restore()
-            {
-                continue;
-            }
-            let stored_binding = decode_binding(&candidate.binding_json)?;
-            let same_scope = match stored_binding {
-                ConversationBindingIdentity::ExternalProvider { binding: stored } => {
-                    // A future in-serve process replacement must bump generation.
-                    stored.endpoint == binding.endpoint
-                        && stored.runtime.provider == binding.runtime.provider
-                        && stored.generation == binding.generation
-                }
-                ConversationBindingIdentity::CodexAcp { .. } => false,
-            };
-            if !same_scope {
-                continue;
-            }
-            let blocks = match (
-                target,
-                candidate.target_service_id,
-                candidate.target_endpoint_id,
-                candidate.target_session_id,
-            ) {
-                (_, None, None, None) => true,
-                (Some(target), Some(service_id), Some(endpoint_id), Some(session_id)) => {
-                    service_id == String::from(target.endpoint.service_id.clone())
-                        && endpoint_id == String::from(target.endpoint.endpoint_id.clone())
-                        && session_id == String::from(target.session_id.clone())
-                }
-                (None, Some(_), Some(_), Some(_)) => false,
-                _ => return Err(ProviderOperationStoreError::InvalidRecord),
-            };
-            if blocks {
-                blocking.push(
-                    OperationId::try_from(candidate.operation_id)
-                        .map_err(|_| ProviderOperationStoreError::InvalidRecord)?,
-                );
-            }
-        }
-        Ok(blocking)
+        Ok(self
+            .unknown_operations(binding)
+            .await?
+            .into_iter()
+            .filter(|(_, held_target)| held_target.is_none() || held_target.as_ref() == target)
+            .map(|(operation, _)| operation)
+            .collect())
     }
 
     pub async fn mark_may_have_dispatched(

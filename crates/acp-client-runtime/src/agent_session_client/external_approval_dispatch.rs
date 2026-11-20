@@ -77,7 +77,11 @@ pub(super) fn spawn_external_approval_dispatch<P: InteractionPort>(
     let request_id = serde_json::to_string(&(request.session_id.0.as_ref(), responder.id()))
         .map_err(|_| Error::internal_error())?;
     let request_cancellation = responder.cancellation();
-    let response_guard = context.as_ref().map(|context| context.responses.track());
+    let response_guard = context.as_ref().map(|context| {
+        context
+            .responses
+            .track("session/request_permission", responder.id())
+    });
     connection.spawn(async move {
         let outcome = match context {
             Some(context) => {

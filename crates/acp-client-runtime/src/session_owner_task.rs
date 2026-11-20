@@ -2,7 +2,7 @@
 
 use provider_session_machines::session_owner::{
     OwnerAddress, OwnerDeadline, OwnerEffect, OwnerEvent, OwnerMailboxEvent, SessionOwnerCommand,
-    SessionOwnerRejection, SessionOwnerState, SessionSnapshot,
+    SessionOwnerMachine, SessionOwnerRejection, SessionSnapshot,
 };
 use router_clock::{ClockInstant, RuntimeClock};
 use std::{
@@ -10,7 +10,7 @@ use std::{
     num::NonZeroUsize,
     sync::Arc,
 };
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
@@ -73,12 +73,20 @@ impl SessionOwnerHandle {
     }
 }
 
+struct Completion {
+    event: OwnerMailboxEvent,
+    stream_credit: Option<OwnedSemaphorePermit>,
+}
+
 #[derive(Clone)]
-pub struct OwnerCompletionPort(mpsc::Sender<OwnerMailboxEvent>);
+pub struct OwnerCompletionPort {
+    channel: mpsc::Sender<Completion>,
+    stream_credits: Arc<Semaphore>,
+}
 
 pub struct OwnerCompletion {
     address: OwnerAddress,
-    permit: mpsc::OwnedPermit<OwnerMailboxEvent>,
+    permit: mpsc::OwnedPermit<Completion>,
 }
 
 impl OwnerCompletionPort {
@@ -86,7 +94,7 @@ impl OwnerCompletionPort {
     /// spare mailbox space nor an await, even if the business mailbox is full.
     pub fn reserve(&self, address: OwnerAddress) -> Result<OwnerCompletion, OwnerTaskError> {
         let permit = self
-            .0
+            .channel
             .clone()
             .try_reserve_owned()
             .map_err(|error| match error {
@@ -95,13 +103,51 @@ impl OwnerCompletionPort {
             })?;
         Ok(OwnerCompletion { address, permit })
     }
+
+    /// A run's SDK reader can yield for its own completion channel and stop
+    /// if that run is retired.
+    pub async fn send_stream(
+        &self,
+        address: OwnerAddress,
+        event: OwnerEvent,
+        retired: &CancellationToken,
+    ) -> Result<(), OwnerTaskError> {
+        let send = async {
+            // Keep stream updates in the same order as completed effects.
+            // Their own budget leaves capacity for new effect receipts.
+            let credit = self
+                .stream_credits
+                .clone()
+                .acquire_owned()
+                .await
+                .map_err(|_| OwnerTaskError::ExecutorStopped)?;
+            self.channel
+                .send(Completion {
+                    event: OwnerMailboxEvent {
+                        owner: address,
+                        event,
+                    },
+                    stream_credit: Some(credit),
+                })
+                .await
+                .map_err(|_| OwnerTaskError::ExecutorStopped)
+        };
+        tokio::select! {
+            biased;
+            () = retired.cancelled() => Err(OwnerTaskError::ExecutorStopped),
+            result = send => result
+        }
+    }
 }
 
 impl OwnerCompletion {
     pub fn send(self, event: OwnerEvent) {
-        self.permit.send(OwnerMailboxEvent {
-            owner: self.address,
-            event,
+        self.permit.send(Completion {
+            event: OwnerMailboxEvent {
+                owner: self.address,
+                event,
+            },
+            stream_credit: None,
         });
     }
 }
@@ -124,10 +170,10 @@ struct ArmedDeadline {
 }
 
 pub struct SessionOwnerTask {
-    state: SessionOwnerState,
+    machine: SessionOwnerMachine,
     commands: mpsc::Receiver<Submission>,
     completion_port: OwnerCompletionPort,
-    completions: mpsc::Receiver<OwnerMailboxEvent>,
+    completions: mpsc::Receiver<Completion>,
     snapshots: watch::Sender<SessionSnapshot>,
     deadlines: BTreeMap<ClockInstant, VecDeque<ArmedDeadline>>,
     clock: Arc<dyn RuntimeClock>,
@@ -140,13 +186,16 @@ impl SessionOwnerTask {
         mailbox_capacity: NonZeroUsize,
         completion_capacity: NonZeroUsize,
     ) -> (Self, SessionOwnerHandle) {
-        let state = SessionOwnerState::new(address);
+        let machine = SessionOwnerMachine::new(address);
         let (commands, command_rx) = mpsc::channel(mailbox_capacity.get());
         let (completion_tx, completions) = mpsc::channel(completion_capacity.get());
-        let completion_port = OwnerCompletionPort(completion_tx);
-        let (snapshots, snapshot_rx) = watch::channel(state.snapshot());
+        let completion_port = OwnerCompletionPort {
+            channel: completion_tx,
+            stream_credits: Arc::new(Semaphore::new((completion_capacity.get() / 2).max(1))),
+        };
+        let (snapshots, snapshot_rx) = watch::channel(machine.snapshot());
         let task = Self {
-            state,
+            machine,
             commands: command_rx,
             completion_port: completion_port.clone(),
             completions,
@@ -182,8 +231,9 @@ impl SessionOwnerTask {
                         }, None, &mut ports)?;
                     }
                 }
-                Some(completion) = self.completions.recv() => {
-                    self.process(completion, None, &mut ports)?;
+                Some(Completion { event, stream_credit }) = self.completions.recv() => {
+                    self.process(event, None, &mut ports)?;
+                    drop(stream_credit);
                 }
                 submission = self.commands.recv(), if accepting_commands => {
                     if let Some(Submission { address, command, accepted }) = submission {
@@ -207,8 +257,9 @@ impl SessionOwnerTask {
     ) -> Result<(), OwnerTaskError> {
         let mut ready = VecDeque::from([(event, accepted)]);
         while let Some((event, accepted)) = ready.pop_front() {
-            let commit = match self.state.decide(event) {
-                Ok(commit) => commit,
+            let observed_at_ms = self.clock.utc_now().timestamp_millis();
+            let outbox = match self.machine.handle(event, observed_at_ms) {
+                Ok(outbox) => outbox,
                 Err(reason) => {
                     if let Some(accepted) = accepted {
                         let _reader_gone = accepted.send(Err(reason));
@@ -217,9 +268,8 @@ impl SessionOwnerTask {
                 }
             };
             let committed_at = self.clock.monotonic_now();
-            self.state = commit.next;
-            let address = commit.effects.owner;
-            for effect in commit.effects.effects {
+            let address = outbox.owner;
+            for effect in outbox.effects {
                 if let OwnerEffect::Arm { deadline, budget } = effect {
                     self.deadlines
                         .entry(committed_at.after(budget))
@@ -236,10 +286,10 @@ impl SessionOwnerTask {
                 }
             }
             self.deadlines.retain(|_, alarms| {
-                alarms.retain(|alarm| self.state.has_pending_deadline(&alarm.deadline));
+                alarms.retain(|alarm| self.machine.has_pending_deadline(&alarm.deadline));
                 !alarms.is_empty()
             });
-            let snapshot = self.state.snapshot();
+            let snapshot = self.machine.snapshot();
             self.snapshots.send_if_modified(|published| {
                 if *published == snapshot {
                     return false;

@@ -17,6 +17,12 @@ impl SessionOwnerState {
     #[must_use]
     pub fn has_pending_deadline(&self, deadline: &OwnerDeadline) -> bool {
         match deadline {
+            OwnerDeadline::DeliveryEvidence(placement) => {
+                self.ports.delivery_evidence.get(&placement.input.input)
+                    == Some(&super::super::DeliveryEvidenceState::Offered(
+                        placement.clone(),
+                    ))
+            }
             OwnerDeadline::ReadSetup(run) => self.waiting_for_restore(*run, RestoreWait::Setup),
             OwnerDeadline::RestoreWire(run) => self.waiting_for_restore(*run, RestoreWait::Wire),
             OwnerDeadline::RestoreMode(run) => self.waiting_for_restore(*run, RestoreWait::Mode),
@@ -50,6 +56,12 @@ impl SessionOwnerState {
                 .authorizations
                 .get(key)
                 .is_some_and(|pending| pending.status == AuthorizationStatus::Offered),
+            OwnerDeadline::CancelDrain(key) => self
+                .ports
+                .authorizations
+                .get(key)
+                .is_some_and(|pending| pending.status == AuthorizationStatus::DrainingCancel),
+            OwnerDeadline::CancelConfirmation(key) => self.cancel_confirmation_waiting(key),
             OwnerDeadline::SteerResult(key) => {
                 self.ports.authorizations.get(key).is_some_and(|pending| {
                     pending.status == AuthorizationStatus::Taken
@@ -81,12 +93,7 @@ impl SessionOwnerState {
     /// A projection of committed owner facts for readers outside the mailbox.
     #[must_use]
     pub fn snapshot(&self) -> SessionSnapshot {
-        let turn = match self.turn() {
-            SessionTurn::Running { turn } | SessionTurn::Cancelling { turn }
-                if self.ports.authorizations.values().any(|pending| matches!(&pending.work,
-                    AuthorizedWork::Prompt(input) if input.turn == turn && pending.status != AuthorizationStatus::Taken)) => SessionTurn::Idle,
-            turn => turn,
-        };
+        let turn = self.published_turn();
         let mut settings = self.ports.observed.clone();
         if !matches!(
             self.lifecycle(),
@@ -102,11 +109,28 @@ impl SessionOwnerState {
             owner: self.ports.address,
             lifecycle: self.lifecycle(),
             turn,
+            foreground: self
+                .prompts
+                .values()
+                .find(|pending| pending.wait == InputWait::Wire)
+                .map(|pending| pending.input.clone())
+                .or_else(|| self.ports.provider_started_turn.clone()),
+            recent_steer: self.ports.recent_steer.clone(),
             settings,
+            mode_reason: self.ports.mode_reason,
+            settings_block_input: self.cell.settings_held(),
             publication: self.ports.publication,
             history: self.ports.history,
             last_restore: self.ports.last_restore.clone(),
-            last_live_turn: self.ports.last_live_turn,
+            last_live_turn: self.ports.last_live_turn.clone(),
+            cancel_unconfirmed: self
+                .ports
+                .cancel_confirmation
+                .as_ref()
+                .filter(|pending| pending.is_unconfirmed())
+                .map(|pending| pending.input.clone()),
+            provider_started_turn: self.ports.provider_started_turn.clone(),
+            projection: self.project_snapshot(turn),
             queue: self
                 .prompts
                 .iter()
@@ -116,6 +140,15 @@ impl SessionOwnerState {
                     started: pending.wait == InputWait::Wire,
                 })
                 .collect(),
+        }
+    }
+
+    pub(super) fn published_turn(&self) -> SessionTurn {
+        match self.turn() {
+            SessionTurn::Running { turn } | SessionTurn::Cancelling { turn }
+                if self.ports.authorizations.values().any(|pending| matches!(&pending.work,
+                    AuthorizedWork::Prompt(input) if input.turn == turn && pending.status != AuthorizationStatus::Taken)) => SessionTurn::Idle,
+            turn => turn,
         }
     }
 }
@@ -155,6 +188,9 @@ impl OwnerTransition {
 
     pub(super) fn port_deadline(&mut self, deadline: OwnerDeadline) -> OwnerResult {
         match deadline {
+            OwnerDeadline::DeliveryEvidence(placement) => {
+                self.delivery_evidence_recorded(placement, super::super::EffectOutcome::Unknown)
+            }
             OwnerDeadline::TerminalStore(write) => {
                 self.terminal_recorded(write, super::super::EffectOutcome::Unknown)
             }
@@ -187,6 +223,12 @@ impl OwnerTransition {
             }
             OwnerDeadline::Enqueue(authorization) => {
                 self.revoke(&authorization, RevokeReason::EnqueueExpired)
+            }
+            OwnerDeadline::CancelDrain(authorization) => {
+                self.finish_cancel_drain(authorization, true)
+            }
+            OwnerDeadline::CancelConfirmation(authorization) => {
+                self.expire_cancel_confirmation(&authorization)
             }
             OwnerDeadline::SteerResult(authorization) => self.steer_expired(&authorization),
             OwnerDeadline::Publication(id) => self.publication_gap(id, PublicationGap::Expired),
@@ -223,22 +265,35 @@ impl OwnerTransition {
                 facts.extend(
                     replay
                         .into_iter()
-                        .map(|item| PublicationFact::Replay { run: *run, item }),
+                        .map(|event| PublicationFact::Replay { run: *run, event }),
                 );
             }
-            if let Some(setup) = self.next.ports.setup.take() {
-                facts.push(PublicationFact::Capabilities {
-                    run: run.generation,
-                    report: setup.capabilities,
-                });
-                facts.push(PublicationFact::Settings {
-                    run: run.generation,
-                    settings: setup.settings,
-                    observed: self.next.ports.observed.clone(),
-                });
-            }
+            self.append_setup(run.generation, &mut facts);
+        } else if let SessionPublication::Created(run) = &fact {
+            self.next.ports.history = HistoryAvailability::Available;
+            self.append_setup(*run, &mut facts);
         }
+        self.apply_committed_projection(&fact, &mut facts);
         facts.push(PublicationFact::Live(fact));
+        self.offer_commit(facts);
+    }
+
+    fn append_setup(&mut self, run: crate::SessionGeneration, facts: &mut Vec<PublicationFact>) {
+        if let Some(setup) = self.next.ports.setup.take() {
+            self.project_restore_setup(&setup.capabilities, &setup.settings);
+            facts.push(PublicationFact::Capabilities {
+                run,
+                report: setup.capabilities,
+            });
+            facts.push(PublicationFact::Settings {
+                run,
+                settings: setup.settings,
+                observed: self.next.ports.observed.clone(),
+            });
+        }
+    }
+
+    pub(super) fn offer_commit(&mut self, facts: Vec<PublicationFact>) {
         let id = self.next_batch();
         self.effects
             .push(OwnerEffect::Publish(PublicationBatch::Commit { id, facts }));

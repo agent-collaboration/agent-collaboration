@@ -1,57 +1,31 @@
-//! An actor that ends on its own hands its run's end to the session's cell
-//! and the hub before any later run of the session can load (D1 R14; Rev2
-//! M4 and M6, terminal facts delivered in order; Lead V1). The sink here
-//! checks each claim against the client's session runs, as the Host's does.
+//! An ended run is published before a later run activates.
 
 use super::NoInteraction;
 use super::scripted_line_agent::ScriptedLineAgent;
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::sim_points::ClientSimPoint;
 use acp_client_runtime::{
-    AgentSessionClient, EventSinkClosed, ExternalProviderRuntimeError, GenerationPublication,
-    HistoryReplayFuture, SessionEventSink, SessionRuns,
+    EventSinkClosed, ExternalProviderRuntimeError, GenerationPublication, HistoryReplayFuture,
+    SessionEventSink,
 };
 use provider_session_machines::SessionGeneration;
-use provider_session_machines::session_run_claims::RunClaim;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
 use turmoil::barriers::{Barrier, Reaction};
 
-/// A run fact the hub accepted, with its run's number.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum RunFact {
     Unloaded(u64),
-    Loading(u64),
+    Activated(u64),
 }
 
-/// Records the run facts whose claims the session's runs admit.
 #[derive(Default)]
 pub(super) struct RunCheckingSink {
-    runs: Mutex<Option<Arc<dyn SessionRuns>>>,
     accepted: Mutex<Vec<RunFact>>,
-    unloaded_outcome: Mutex<Option<GenerationPublication>>,
-    unloaded_attempted: tokio::sync::Notify,
+    changed: tokio::sync::Notify,
 }
 
 impl RunCheckingSink {
-    fn admit(&self, session_id: &str, claim: RunClaim, fact: RunFact) -> GenerationPublication {
-        let runs = self
-            .runs
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clone();
-        let Some(runs) = runs else {
-            return GenerationPublication::Ended;
-        };
-        runs.publish_if(session_id, claim, &mut || {
-            self.accepted
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .push(fact);
-            Ok(())
-        })
-        .unwrap_or(GenerationPublication::Ended)
-    }
-
     fn accepted(&self) -> Vec<RunFact> {
         self.accepted
             .lock()
@@ -59,21 +33,17 @@ impl RunCheckingSink {
             .clone()
     }
 
-    fn unloaded_outcome(&self) -> Option<GenerationPublication> {
-        *self
-            .unloaded_outcome
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-    }
-
-    /// Resolves once an Unloaded has been offered, whatever its outcome.
     pub(super) async fn unloaded_offered(&self) {
         loop {
-            let offered = self.unloaded_attempted.notified();
-            if self.unloaded_outcome().is_some() {
+            let changed = self.changed.notified();
+            if self
+                .accepted()
+                .iter()
+                .any(|fact| matches!(fact, RunFact::Unloaded(_)))
+            {
                 return;
             }
-            offered.await;
+            changed.await;
         }
     }
 }
@@ -81,57 +51,46 @@ impl RunCheckingSink {
 impl SessionEventSink for RunCheckingSink {
     fn publish_skill_view(
         &self,
-        _session_id: &str,
+        _session: &str,
         _view: session_event_model::SkillView,
     ) -> Result<(), EventSinkClosed> {
         Ok(())
     }
 
-    fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
+    fn begin_history_replay(&self, _session: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
 
     fn publish(
         &self,
-        _session_id: &str,
+        _session: &str,
         _event: session_event_model::SessionEvent,
     ) -> Result<(), EventSinkClosed> {
         Ok(())
     }
 
-    fn attach_session_runs(&self, runs: Arc<dyn SessionRuns>) {
-        *self.runs.lock().unwrap_or_else(PoisonError::into_inner) = Some(runs);
-    }
-
-    fn begin_history_replay_in(
+    fn publish_in(
         &self,
-        session_id: &str,
+        _session: &str,
         generation: SessionGeneration,
-    ) -> HistoryReplayFuture<'_> {
-        let _accepted = self.admit(
-            session_id,
-            RunClaim::Exact(generation),
-            RunFact::Loading(generation.number()),
-        );
-        Box::pin(async { Ok(()) })
-    }
-
-    fn publish_unloaded(
-        &self,
-        session_id: &str,
-        generation: SessionGeneration,
+        event: session_event_model::SessionEvent,
     ) -> Result<GenerationPublication, EventSinkClosed> {
-        let outcome = self.admit(
-            session_id,
-            RunClaim::Terminal(generation),
-            RunFact::Unloaded(generation.number()),
-        );
-        *self
-            .unloaded_outcome
+        use session_event_model::{SessionEvent, SessionState};
+        let fact = match event {
+            SessionEvent::StateChanged {
+                state: SessionState::Idle,
+            } => RunFact::Activated(generation.number()),
+            SessionEvent::StateChanged {
+                state: SessionState::Unloaded,
+            } => RunFact::Unloaded(generation.number()),
+            _ => return Ok(GenerationPublication::Published),
+        };
+        self.accepted
             .lock()
-            .unwrap_or_else(PoisonError::into_inner) = Some(outcome);
-        self.unloaded_attempted.notify_waiters();
-        Ok(outcome)
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(fact);
+        self.changed.notify_waiters();
+        Ok(GenerationPublication::Published)
     }
 }
 
@@ -152,7 +111,7 @@ async fn connected() -> (
             Arc::new(NoInteraction),
             Arc::clone(&sink) as Arc<dyn SessionEventSink>,
             Arc::new(crate::test_behavior::TestProviderBehavior),
-            Arc::new(router_clock::SystemRuntimeClock::new()),
+            Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
         )
         .await
         .expect("the connection initializes"),
@@ -161,6 +120,7 @@ async fn connected() -> (
         .create_session(PathBuf::from("/scenario"))
         .await
         .expect("session/new");
+    sink.accepted.lock().expect("initial publication").clear();
     (client, agent, sink, session)
 }
 
@@ -203,14 +163,13 @@ fn an_exited_runs_unloaded_lands_before_a_later_runs_load() {
     simulation.client("router", async move {
         // Arrange
         let mut handoff = Barrier::build(Reaction::Suspend, |point: &ClientSimPoint| {
-            *point == ClientSimPoint::ActorExitHandoff
+            *point == ClientSimPoint::RunLossReady
         });
         let (client, agent, sink, session) = connected().await;
 
         // Act: the actor ends; a load races its hand-off.
         client
-            .end_session_actor(session.clone())
-            .await
+            .signal_run_loss_fixture(&session)
             .expect("the connection takes the command");
         let held = handoff.wait().await.expect("the actor's exit is held");
         let (finished, loading) = load_while_held(&client, &agent, &session).await;
@@ -233,17 +192,12 @@ fn an_exited_runs_unloaded_lands_before_a_later_runs_load() {
 
         // Assert
         assert!(loaded.is_ok(), "{loaded:?}");
-        assert_eq!(
-            sink.unloaded_outcome(),
-            Some(GenerationPublication::Published),
-            "the exited run's Unloaded was refused: {accepted:?}"
-        );
         let unloaded = accepted
             .iter()
             .position(|fact| matches!(fact, RunFact::Unloaded(_)));
         let loading = accepted
             .iter()
-            .position(|fact| matches!(fact, RunFact::Loading(_)));
+            .position(|fact| matches!(fact, RunFact::Activated(_)));
         assert!(
             matches!((unloaded, loading), (Some(unloaded), Some(loading)) if unloaded < loading),
             "the old run's Unloaded precedes the new run's load: {accepted:?}"
@@ -251,7 +205,7 @@ fn an_exited_runs_unloaded_lands_before_a_later_runs_load() {
         assert!(
             matches!(
                 accepted.as_slice(),
-                [RunFact::Unloaded(old), RunFact::Loading(new)] if new > old
+                [RunFact::Unloaded(old), RunFact::Activated(new)] if new > old
             ),
             "{accepted:?}"
         );
@@ -272,14 +226,13 @@ fn a_load_before_the_exit_handoff_is_refused_and_one_after_it_starts_a_new_run()
     simulation.client("router", async move {
         // Arrange
         let mut handoff = Barrier::build(Reaction::Suspend, |point: &ClientSimPoint| {
-            *point == ClientSimPoint::ActorExitHandoff
+            *point == ClientSimPoint::RunLossReady
         });
         let (client, agent, sink, session) = connected().await;
 
         // Act
         client
-            .end_session_actor(session.clone())
-            .await
+            .signal_run_loss_fixture(&session)
             .expect("the connection takes the command");
         let held = handoff.wait().await.expect("the actor's exit is held");
         let (before, loading) = load_while_held(&client, &agent, &session).await;
@@ -312,7 +265,7 @@ fn a_load_before_the_exit_handoff_is_refused_and_one_after_it_starts_a_new_run()
         assert!(
             matches!(
                 accepted.as_slice(),
-                [RunFact::Unloaded(old), RunFact::Loading(new)] if new > old
+                [RunFact::Unloaded(old), RunFact::Activated(new)] if new > old
             ),
             "{accepted:?}"
         );

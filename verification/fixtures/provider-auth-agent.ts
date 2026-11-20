@@ -20,6 +20,7 @@ agent.respond(initialized, {
   agentInfo: { name: "auth-fixture", version: "1" },
 });
 await agent.newSession();
+if (process.argv[2] === "two-sessions") await agent.newSession("second-session");
 const prompt = await agent.read("session/prompt");
 agent.send({
   jsonrpc: "2.0",

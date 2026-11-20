@@ -9,6 +9,7 @@ await agent.initialize("multiblock-fixture", {
   _meta: mode === "steer" ? { steering: { supported: true } } : {},
 });
 await agent.newSession();
+const first = mode === "steer" ? await agent.read("session/prompt") : undefined;
 const request = await agent.read(mode === "steer" ? "_session/steering" : "session/prompt");
 const contents = [
   { type: "text", text: "Read" },
@@ -38,7 +39,9 @@ else if (mode === "approval") {
 } else assert.deepEqual(field(request, "params", "prompt"), contents);
 if (mode === "steer") {
   assert.equal(field(request, "params", "_meta", "steering", "idleBehavior"), "promptRequired");
-  agent.respond(request, { outcome: "promptRequired" });
+  agent.respond(request, { outcome: "injected" });
+  if (first === undefined) throw new Error("steer needs a foreground prompt");
+  agent.endTurn(first);
 } else agent.endTurn(request);
 await agent.drain();
 agent.close();

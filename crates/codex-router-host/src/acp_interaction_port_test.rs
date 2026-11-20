@@ -135,6 +135,7 @@ async fn stalled_session_notices_do_not_delay_turn_cancellation_or_resolution() 
     }))
     .expect("approver");
     let context = || ExternalProviderApprovalContext {
+        owner_scope: None,
         requester: target.clone().into(),
         approver: approver.clone().into(),
         target: target.clone(),
@@ -236,6 +237,7 @@ fn human_approver_reaches_typed_broker_without_a_synthetic_session() {
     }))
     .expect("target");
     let context = ExternalProviderApprovalContext {
+        owner_scope: None,
         requester: target.clone().into(),
         approver: serde_json::from_value(serde_json::json!({"humanId":"owner"})).expect("human"),
         target,

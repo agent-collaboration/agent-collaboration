@@ -1,33 +1,18 @@
 //! Own the ACP connection task, provider process, and Session admission loop.
-pub(super) mod admitted_setting_reply;
-
 #[cfg(any(test, feature = "test-observation"))]
 use super::{AtomicU64, ExternalProviderApprovalRefusalWarning};
 
-use super::provider_restore_activation::{
-    ProvisionalRestoreActor, RestorePublication, RestorePublicationReceiver,
-    take_provisional_restore,
-};
 use super::{
-    AcpProtocolVersion, ActiveApprovalContext, AgentSessionClient, Arc, CancellationToken, Client,
-    CreateAdmissionInputs, CursorPlanItems, Duration, ExternalProviderAdmission,
+    ActiveApprovalContext, AgentSessionClient, Arc, CancellationToken, Client, Duration,
     ExternalProviderApprovalRefusalReason, ExternalProviderLaunch, ExternalProviderRuntimeError,
-    HashMap, InteractionPort, Lines, MAX_ACP_FRAME_BYTES, McpServer, NewSessionRequest, Ordering,
-    PendingSessionAdmission, PermissionDispatchState, ProtocolVersion, ProviderAuthStatusHandler,
-    ProviderCapabilityReport, ProviderCommand, ProviderConnectionActivity,
+    HashMap, InteractionPort, Lines, MAX_ACP_FRAME_BYTES, McpServer, Ordering,
+    PermissionDispatchState, ProviderAuthStatusHandler, ProviderCommand,
     ProviderCursorCreatePlanHandler, ProviderCursorQuestionHandler, ProviderCursorTodoHandler,
-    ProviderFormElicitationHandler, ProviderFrameObservation, ProviderKnownSessions,
-    ProviderPromptDispatchObservation, ProviderRequestFallback, ProviderRequestSessionGuard,
-    ProviderSessionActivity, ProviderSessionCommand, ProviderSessionRuntimeHandles,
-    RequestPermissionRequest, SessionEventSink, StaticSessionActivation, ToolCallOwnershipHandler,
-    active_turn_cancellation, fail_pending_session_admission, initialize_provider_connection,
-    provider_lifecycle_requests, provider_session_restore, publish_pending_session_admission,
-    record_permission_refusal, register_provider_session, register_static_provider_session,
-    run_create_admission, spawn_external_approval_dispatch,
+    ProviderFormElicitationHandler, ProviderFrameObservation, ProviderRequestFallback,
+    ProviderRequestSessionGuard, RequestPermissionRequest, SessionEventSink,
+    initialize_provider_connection, provider_lifecycle_requests, record_permission_refusal,
+    spawn_external_approval_dispatch,
 };
-use crate::RestoreFailure;
-use provider_session_machines::session_cell_machine::SessionCellEvent;
-
 impl<P: InteractionPort> AgentSessionClient<P> {
     #[expect(
         clippy::too_many_arguments,
@@ -74,7 +59,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         behavior: Arc<dyn crate::ProviderBehavior>,
         clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
-        let initialize_deadline = tokio::time::Instant::now() + initialize_timeout;
+        let initialize_deadline = clock.monotonic_now().after(initialize_timeout);
         let super::provider_transport::ProviderTransport {
             writer,
             reader,
@@ -95,64 +80,28 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
         let (admission_settled_tx, admission_settled_rx) = tokio::sync::oneshot::channel();
         let (command_tx, mut command_rx) = tokio::sync::mpsc::channel(32);
+        let (owner_wire, owner_output) = crate::owner_wire::OwnerAcpWire::new(
+            std::num::NonZeroUsize::new(32).unwrap_or(std::num::NonZeroUsize::MIN),
+            Arc::clone(&behavior),
+        );
+        let owner_wire = Arc::new(owner_wire);
+        let callbacks = Arc::new(crate::owner_callback_routing::OwnerCallbackRouting::new(
+            owner_wire.clone(),
+        ));
+        let permission_callbacks = Arc::clone(&callbacks);
+        let request_routes = Arc::clone(&owner_wire);
+        let auth_routes = Arc::clone(&owner_wire);
+        let restore_routes = Arc::clone(&owner_wire);
         let auth_status = Arc::new(tokio::sync::RwLock::new(
             session_event_model::ProviderAuthStatus::NotReported,
         ));
-        let task_auth_status = Arc::clone(&auth_status);
         let callback_auth_status = Arc::clone(&auth_status);
+        let open_auth_status = Arc::clone(&auth_status);
         let callback_event_sink = Arc::clone(&event_sink);
-        // One typed lifecycle per provider session (design note §11.2): the
-        // client's close and the connection's admissions are transitions on
-        // the same cell.
-        let session_cells = Arc::new(crate::session_cell_table::SessionCellTable::default());
-        // The cells own every run; the sink checks each publication against
-        // them instead of keeping its own generations (D1 step 6).
-        event_sink.attach_session_runs(Arc::clone(&session_cells) as Arc<dyn crate::SessionRuns>);
-        let task_session_cells = Arc::clone(&session_cells);
-        let retirement_session_cells = Arc::clone(&session_cells);
-        // Each run's own state, fenced by its generation (design note §11.3).
-        let session_capabilities = Arc::new(crate::run_owned_state::RunOwnedMap::<
-            ProviderCapabilityReport,
-        >::new(Arc::clone(&session_cells)));
-        let task_session_capabilities = Arc::clone(&session_capabilities);
-        let callback_session_capabilities = Arc::clone(&session_capabilities);
-        let session_settings = Arc::new(crate::run_owned_state::RunOwnedMap::<
-            crate::ProviderSettingsCatalog,
-        >::new(Arc::clone(&session_cells)));
-        let task_session_settings = Arc::clone(&session_settings);
-        let tool_registry = Arc::new(ProviderConnectionActivity::new(Arc::clone(&session_cells)));
-        let task_tool_registry = Arc::clone(&tool_registry);
-        let permission_tool_registry = Arc::clone(&tool_registry);
-        let retirement_registry = Arc::clone(&tool_registry);
-        let todo_state = Arc::new(CursorPlanItems::default());
-        let task_todo_state = Arc::clone(&todo_state);
-        let retirement_todos = Arc::clone(&todo_state);
-        let in_folder_grants: crate::in_folder_allowance::InFolderGrants = Arc::new(
-            crate::run_owned_state::RunOwnedMap::new(Arc::clone(&session_cells)),
-        );
-        #[cfg(test)]
-        let client_in_folder_grants = Arc::clone(&in_folder_grants);
-        let (actor_exit_tx, mut actor_exit_rx) = tokio::sync::mpsc::unbounded_channel::<
-            crate::provider_session_runtime_handles::ActorExit,
-        >();
-        let task_runtime_handles = ProviderSessionRuntimeHandles {
-            connection_model_reasoning: crate::ModelReasoningMetadata::default(),
-            behavior: Arc::clone(&behavior),
-            clock: Arc::clone(&clock),
-            event_sink: Arc::clone(&event_sink),
-            sink_closed: sink_closed.clone(),
-            tool_registry: Arc::clone(&tool_registry),
-            todo_state: Arc::clone(&todo_state),
-            session_settings: Arc::clone(&task_session_settings),
-            session_capabilities: Arc::clone(&task_session_capabilities),
-            in_folder_grants: Arc::clone(&in_folder_grants),
-            session_cells: Arc::clone(&session_cells),
-            run_generation: provider_session_machines::SessionGeneration::UNTRACKED,
-            agent_steers: false,
-            actor_exits: actor_exit_tx,
-        };
+        let todo_state = owner_wire.cursor_plan_items();
+        let connection_behavior = Arc::clone(&behavior);
+        let permission_behavior = Arc::clone(&behavior);
         let task_event_sink = Arc::clone(&event_sink);
-        let retirement_event_sink = Arc::clone(&event_sink);
         #[cfg(any(test, feature = "test-observation"))]
         let permission_request_count = Arc::new(AtomicU64::new(0));
         #[cfg(any(test, feature = "test-observation"))]
@@ -174,12 +123,6 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         let callback_plan_port = Arc::clone(&interaction_port);
         let callback_elicitation_contexts = Arc::clone(&approval_contexts);
         let callback_elicitation_port = Arc::clone(&interaction_port);
-        let task_approval_contexts = Arc::clone(&approval_contexts);
-        let callback_in_folder_grants = Arc::clone(&in_folder_grants);
-        let callback_behavior = Arc::clone(&behavior);
-        let known_sessions = ProviderKnownSessions::default();
-        let request_known_sessions = known_sessions.clone();
-        let retirement_known_sessions = known_sessions.clone();
         let permission_refusal_reasons = Arc::new(std::sync::Mutex::new(HashMap::new()));
         let callback_permission_refusal_reasons = Arc::clone(&permission_refusal_reasons);
         let endpoint_id = Arc::new(tokio::sync::RwLock::new(None::<String>));
@@ -193,8 +136,9 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         #[cfg(any(test, feature = "test-observation"))]
         let test_tool_calls = Arc::new(std::sync::Mutex::new(Vec::new()));
         #[cfg(any(test, feature = "test-observation"))]
-        let session_test_tool_calls = Arc::clone(&test_tool_calls);
+        let observed_tool_calls = Arc::clone(&test_tool_calls);
         let client_clock = Arc::clone(&clock);
+        let provider_behavior = Arc::clone(&behavior);
         let task = tokio::spawn(async move {
             use futures_util::StreamExt as _;
             use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec};
@@ -202,13 +146,19 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             let stderr_task = stderr.map(|stderr| {
                 tokio::spawn(crate::provider_transport_diagnostics::drain_provider_stderr(stderr))
             });
+            let callback_claims =
+                Arc::new(crate::provider_callback_claims::ProviderCallbackClaims::default());
             let outgoing = crate::provider_transport_diagnostics::ObservedProviderSink::new(
                 futures_util::SinkExt::<String>::sink_map_err(
                     FramedWrite::new(writer, LinesCodec::new()),
                     std::io::Error::other,
                 ),
+                Arc::clone(&callback_claims),
             );
             let incoming_frame_observation = Arc::clone(&task_frame_observation);
+            let input_ended = CancellationToken::new();
+            let input_error = input_ended.clone();
+            let input_eof = input_ended.clone();
             let incoming =
                 FramedRead::new(reader, LinesCodec::new_with_max_length(MAX_ACP_FRAME_BYTES))
                     .map(move |line| {
@@ -216,6 +166,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                             crate::provider_transport_diagnostics::record_incoming_frame(frame);
                         }
                         line.map_err(|error| {
+                            input_error.cancel();
                             crate::provider_transport_diagnostics::record_incoming_error();
                             if matches!(
                                 error,
@@ -226,7 +177,14 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                             std::io::Error::other(error)
                         })
                     })
-                    .chain(futures_util::stream::once(async {
+                    .filter_map(move |line| {
+                        std::future::ready(match line {
+                            Ok(frame) => callback_claims.incoming(frame).map(Ok),
+                            Err(error) => Some(Err(error)),
+                        })
+                    })
+                    .chain(futures_util::stream::once(async move {
+                        input_eof.cancel();
                         Err(std::io::Error::new(
                             std::io::ErrorKind::UnexpectedEof,
                             "provider stdout closed",
@@ -234,43 +192,54 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                     }));
             let final_interaction_port = Arc::clone(&callback_interaction_port);
             let connection = Client.builder().name("codex-router-host")
-                .with_handler(ProviderRequestSessionGuard::new(request_known_sessions))
-                .with_handler(ToolCallOwnershipHandler::new(Arc::clone(&tool_registry)))
+                .with_handler(ProviderRequestSessionGuard::new(request_routes))
+                .with_handler(crate::owner_callback_routing::OwnerToolCallHandler::new(Arc::clone(&callbacks)))
+                .with_handler(crate::owner_restore_updates::OwnerRestoreUpdateRouter(restore_routes))
                 .on_receive_request(
                     async move |request: RequestPermissionRequest, responder, connection| {
                         crate::provider_transport_diagnostics::record_callback_entered(crate::provider_transport_diagnostics::ProviderFrameKind::Permission);
                         #[cfg(any(test, feature = "test-observation"))]
                         callback_permission_request_count.fetch_add(1, Ordering::Relaxed);
-                        if !permission_tool_registry.allows_session_permission(
+                        if !permission_callbacks.allows_session_permission(
                             request.session_id.0.as_ref(),
                             request.tool_call.tool_call_id.0.as_ref(),
                         ) {
-                            return responder.respond(
+                            let result = responder.respond(
                                 agent_client_protocol::schema::v1::RequestPermissionResponse::new(
                                     agent_client_protocol::schema::v1::RequestPermissionOutcome::Cancelled,
                                 ),
                             );
+                            #[cfg(any(test, feature = "test-observation"))]
+                            if result.is_ok() {
+                                callback_permission_outcome.store(1, Ordering::Relaxed);
+                            }
+                            return result;
                         }
-                        let in_folder_allowance = crate::in_folder_allowance::active_grant(
-                            &callback_in_folder_grants,
-                            request.session_id.0.as_ref(),
-                        )
-                            .and_then(|grant| grant.allow_once(&request.tool_call, &request.options, &|action, title| {
-                                callback_behavior.stated_permission_target(action, title)
-                            }));
-                        if let Some(option_id) = in_folder_allowance {
-                            // Inside the session's own folders auto mode needs no question (R4, Q3).
+                        let context = callback_approval_contexts.lock().ok().and_then(|contexts| {
+                            let scope = permission_callbacks.current_scope(request.session_id.0.as_ref());
+                            contexts.get(request.session_id.0.as_ref()).filter(|context| {
+                                scope.is_some_and(|(run, turn)| {
+                                    context.incarnation == run.incarnation
+                                        && context.generation == run.generation
+                                        && context.turn == Some(turn)
+                                })
+                            }).cloned()
+                        });
+                        if context.is_some()
+                            && let Some(option) = permission_callbacks.in_folder_grant(request.session_id.0.as_ref()).and_then(|grant| {
+                                grant.allow_once(&request.tool_call, &request.options, &|action, title| {
+                                    permission_behavior.stated_permission_target(action, title)
+                                })
+                            })
+                        {
                             return responder.respond(
                                 agent_client_protocol::schema::v1::RequestPermissionResponse::new(
                                     agent_client_protocol::schema::v1::RequestPermissionOutcome::Selected(
-                                        agent_client_protocol::schema::v1::SelectedPermissionOutcome::new(option_id),
+                                        agent_client_protocol::schema::v1::SelectedPermissionOutcome::new(option),
                                     ),
                                 ),
                             );
                         }
-                        let context = callback_approval_contexts.lock().ok().and_then(|contexts| {
-                            contexts.get(request.session_id.0.as_ref()).cloned()
-                        });
                         let dispatch_state = PermissionDispatchState {
                             interaction_port: Arc::clone(&callback_interaction_port),
                             refusal_reasons: Arc::clone(&callback_permission_refusal_reasons),
@@ -302,18 +271,16 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 )
                 .with_handler(ProviderAuthStatusHandler::new(
                     callback_auth_status,
-                    callback_session_capabilities,
+                    auth_routes,
                     callback_event_sink,
-                    task_shutdown.clone(),
-                    sink_closed.clone(),
                 ))
                 .with_handler(ProviderCursorQuestionHandler::new(
-                    Arc::clone(&tool_registry),
+                    Arc::clone(&callbacks),
                     callback_question_contexts,
                     callback_question_port,
                 ))
                 .with_handler(ProviderCursorCreatePlanHandler::new(
-                    Arc::clone(&tool_registry),
+                    Arc::clone(&callbacks),
                     Arc::clone(&todo_state),
                     Arc::clone(&task_event_sink),
                     callback_plan_contexts,
@@ -326,7 +293,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                     callback_elicitation_port,
                 ))
                 .with_handler(ProviderCursorTodoHandler::new(
-                    tool_registry,
+                    callbacks,
                     todo_state,
                     Arc::clone(&task_event_sink),
                     task_shutdown.clone(),
@@ -341,569 +308,69 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                         () = task_shutdown.cancelled() => {
                             return Ok(());
                         }
-                        response = tokio::time::timeout_at(
+                        response = router_clock::timeout_at(
+                            clock.as_ref(),
                             initialize_deadline,
                             initialize_provider_connection(
                                 &connection,
                                 model_picker,
-                                task_runtime_handles.behavior.initialization_authentication(),
+                                connection_behavior.initialization_authentication(),
                             ),
                         ) => match response {
                             Ok(response) => response,
                             Err(_) => Err(ExternalProviderRuntimeError::InitializeTimeout),
                         },
                     };
-                    let admission = match initialized {
-                        Ok(response) if response.protocol_version == ProtocolVersion::V1 => {
-                            let capability_report = ProviderCapabilityReport::from_initialize(&response);
-                            Ok((ExternalProviderAdmission {
-                                runtime_name: response
-                                    .agent_info
-                                    .as_ref()
-                                    .map(|info| info.name.clone()),
-                                runtime_version: response
-                                    .agent_info
-                                    .as_ref()
-                                    .map(|info| info.version.clone()),
-                                supports_load: response.agent_capabilities.load_session,
-                                supports_mcp_http: response
-                                    .agent_capabilities
-                                    .mcp_capabilities
-                                    .http,
-                                supports_steering: response.meta.as_ref()
-                                    .and_then(|meta| meta.get("steering"))
-                                    .and_then(|steering| steering.get("supported"))
-                                    .and_then(serde_json::Value::as_bool)
-                                    == Some(true),
-                            }, capability_report))
+                    let admission = initialized.and_then(super::provider_client_initialization::provider_protocol_admission);
+                    let opened = match admission {
+                        Ok((admission, capabilities)) => {
+                            let reasoning = super::provider_model_discovery::read_connection_models(
+                                &connection, connection_behavior.as_ref(), clock.as_ref(), initialize_deadline, &task_shutdown,
+                            ).await;
+                            let configuration = crate::owner_session_open::OwnerOpenConfiguration {
+                                behavior: connection_behavior,
+                                mcp_servers: if admission.supports_mcp_http { configured_mcp_servers } else { Vec::new() },
+                                capabilities: capabilities.clone(), reasoning,
+                                auth_status: open_auth_status,
+                                #[cfg(any(test, feature = "test-observation"))]
+                                observed_tool_calls,
+                            };
+                            let _reader_gone = ready_tx.send(Ok((admission, capabilities)));
+                            Some(configuration)
                         }
-                        Ok(response) => Err(ExternalProviderRuntimeError::UnsupportedProtocol {
-                            actual: AcpProtocolVersion::from_sdk(response.protocol_version),
-                        }),
-                        Err(error) => Err(error),
+                        Err(error) => { let _reader_gone = ready_tx.send(Err(error)); None }
                     };
-                    let admitted = admission.is_ok();
-                    let session_mcp_servers = if matches!(
-                        &admission,
-                        Ok((admission, _)) if admission.supports_mcp_http
-                    ) {
-                        configured_mcp_servers
-                    } else {
-                        Vec::new()
-                    };
-                    let base_capabilities = admission.as_ref().ok().map(|(_, report)| report.clone());
-                    let mut task_runtime_handles = task_runtime_handles;
-                    task_runtime_handles.agent_steers = base_capabilities.as_ref().is_some_and(|report| report.supports_steering);
-                    if admitted {
-                        task_runtime_handles.connection_model_reasoning = super::provider_model_discovery::read_connection_models(
-                            &connection, task_runtime_handles.behavior.as_ref(), initialize_deadline, &task_shutdown,
-                        ).await;
-                    }
-                    let _result = ready_tx.send(admission);
-                    let _result = admission_settled_tx.send(());
-                    if admitted {
-                        let mut sessions = HashMap::<
-                            String,
-                            tokio::sync::mpsc::UnboundedSender<ProviderSessionCommand<P, admitted_setting_reply::AdmittedSettingReply>>,
-                        >::new();
-                        let mut provisional_restores = HashMap::<String, ProvisionalRestoreActor>::new();
-                        let mut session_tasks = tokio::task::JoinSet::new();
-                        let mut admission_tasks = tokio::task::JoinSet::new();
-                        let (admission_tx, mut admission_rx) = tokio::sync::mpsc::channel(32);
-                        let session_cells = task_session_cells;
-                        let Some(base_capabilities) = base_capabilities else { return Ok(()); };
+                    let _reader_gone = admission_settled_tx.send(());
+                    if let Some(configuration) = opened {
+                        let mut executors = tokio::task::JoinSet::new();
+                        executors.spawn(owner_output.run(connection.clone(), configuration, task_connection_retirement.clone(), input_ended));
                         loop {
                             tokio::select! {
                                 () = task_shutdown.cancelled() => break,
-                                completion = admission_rx.recv() => {
-                                    let Some(completion) = completion else { continue; };
-                                    sessions.retain(|_, sender| !sender.is_closed());
-                                    match completion {
-                                        PendingSessionAdmission::Create { result, activation, reply } => {
-                                            let report = result.as_ref().as_ref().ok().map(|registration| {
-                                                base_capabilities.with_session_response(&registration.response)
-                                            });
-                                            let catalog = result.as_ref().as_ref().ok().map(|registration| {
-                                                registration.settings_catalog.clone()
-                                            });
-                                            let mut setup_error = None;
-                                            // Only an admitted identity opens a run: the session's cell
-                                            // admits the create (NotLoaded to Live) before the actor is
-                                            // registered, and a duplicate it refuses leaves the live
-                                            // run alone (D1 R14).
-                                            let mut created_generation = None;
-                                            let mut created_run_state = None;
-                                            let mut result = (*result).and_then(|mut registration| {
-                                                setup_error = registration.setup_error.take();
-                                                created_run_state = Some((registration.in_folder.take(), registration.keep_fast_off));
-                                                let provider_session_id = registration.provider_session_id.clone();
-                                                let generation = crate::session_cell_bookkeeping::admit_create(&session_cells, &provider_session_id)?;
-                                                match register_provider_session(registration, &mut sessions) {
-                                                    Ok(created) => {
-                                                        created_generation = Some(generation);
-                                                        Ok(created)
-                                                    }
-                                                    Err(error) => {
-                                                        crate::session_cell_bookkeeping::abandon_run(&session_cells, &provider_session_id, generation);
-                                                        Err(error)
-                                                    }
-                                                }
-                                            });
-                                            let mut settings_sink_closed = false;
-                                            if let Ok(created) = &mut result {
-                                                known_sessions.track(created.provider_session_id.clone()).await;
-                                                // The run's own state, under the generation just admitted (§11.3).
-                                                let generation = created_generation.unwrap_or(provider_session_machines::SessionGeneration::UNTRACKED);
-                                                if let Some((in_folder, keep_fast_off)) = created_run_state.take() {
-                                                    if let Some(grant) = in_folder {
-                                                        let _written = in_folder_grants.write(&created.provider_session_id, generation, grant);
-                                                    }
-                                                    if keep_fast_off {
-                                                        crate::session_cell_bookkeeping::set_keep_fast_off_in_run(&session_cells, &created.provider_session_id, generation, true);
-                                                    }
-                                                }
-                                                if let Some(report) = report {
-                                                    let report = report.with_auth_status(task_auth_status.read().await.clone());
-                                                    let _written = task_session_capabilities.write(&created.provider_session_id, generation, report);
-                                                }
-                                                if let Some(catalog) = catalog {
-                                                    created.effective_settings = catalog.effective_settings();
-                                                    if task_event_sink.publish_in(
-                                                        &created.provider_session_id,
-                                                        created_generation.unwrap_or(provider_session_machines::SessionGeneration::UNTRACKED),
-                                                        session_event_model::SessionEvent::SettingsChanged {
-                                                            settings: catalog.to_session_settings(),
-                                                        },
-                                                    ).is_err() {
-                                                        sink_closed.cancel();
-                                                        task_shutdown.cancel();
-                                                        settings_sink_closed = true;
-                                                    }
-                                                    let _written = task_session_settings.write(&created.provider_session_id, generation, catalog.clone());
-                                                }
-                                                // Keep the outcome for reporting and Accept. The
-                                                // cell decides whether it holds input.
-                                                let unresolved_kind = match setup_error.as_ref() {
-                                                    Some(ExternalProviderRuntimeError::InvalidSetting { setting, .. }) => Some((*setting, provider_session_machines::session_setting_machine::UnresolvedCause::DefiniteFailure)),
-                                                    Some(ExternalProviderRuntimeError::CreatedWithoutSettings { failed, .. }) => Some((failed.kind, if failed.reason == session_event_model::ProviderSettingFailureReason::OutcomeUnknown { provider_session_machines::session_setting_machine::UnresolvedCause::OutcomeUnknown } else { provider_session_machines::session_setting_machine::UnresolvedCause::DefiniteFailure })),
-                                                    _ => None,
-                                                };
-                                                if let Some((kind, cause)) = unresolved_kind {
-                                                    super::hold_setting_at_create(&session_cells, &created.provider_session_id, kind, cause);
-                                                }
-                                                if let Some(ExternalProviderRuntimeError::CreatedWithoutSettings { not_applied, .. }) = setup_error.as_ref() {
-                                                    for setting in not_applied.iter() {
-                                                        super::hold_setting_at_create(&session_cells, &created.provider_session_id, setting.kind, provider_session_machines::session_setting_machine::UnresolvedCause::DefiniteFailure);
-                                                    }
-                                                }
-                                            }
-                                            let result = if settings_sink_closed {
-                                                Err(ExternalProviderRuntimeError::SinkClosed)
-                                            } else {
-                                                result.and_then(|created| match setup_error {
-                                                    Some(error) => Err(error),
-                                                    None => Ok(created),
-                                                })
+                                command = command_rx.recv() => match command {
+                                    Some(ProviderCommand { cwd, reply }) => {
+                                        let connection = connection.clone();
+                                        let stopped = task_shutdown.clone();
+                                        executors.spawn(async move {
+                                            let result = tokio::select! {
+                                                () = stopped.cancelled() => Err(ExternalProviderRuntimeError::TransportFailure),
+                                                listed = provider_lifecycle_requests::list_provider_sessions(connection, cwd) => listed,
                                             };
-                                            if let Some(generation) = created_generation {
-                                                let _result = activation.send(generation);
-                                            }
-                                            let _result = reply.send(super::CreateAdmissionReply { result, generation: created_generation });
-                                        }
-                                        PendingSessionAdmission::Restore { provider_session_id, generation, attempt, result, dispatch, publication, in_folder, reply } => {
-                                            if !crate::session_cell_bookkeeping::is_current_load(&session_cells, &provider_session_id, attempt) {
-                                                let _sent = reply.send(Err(dispatch.failure(ExternalProviderRuntimeError::SessionReleased)));
-                                                continue;
-                                            }
-                                            let restored = match *result {
-                                                Ok(restored) => restored,
-                                                Err(failure) => {
-                                                    match failure.error() {
-                                                        ExternalProviderRuntimeError::RestoreNoAnswer => {
-                                                            let _retired = session_cells.transition(&provider_session_id, SessionCellEvent::LoadUnanswered { attempt }, crate::session_cell_table::EntryEffectRoute::Sink);
-                                                            if task_event_sink.publish_unloaded(&provider_session_id, generation).is_err() {
-                                                                sink_closed.cancel();
-                                                                task_shutdown.cancel();
-                                                            }
-                                                        }
-                                                        ExternalProviderRuntimeError::SinkClosed => {
-                                                            crate::session_cell_bookkeeping::settle_load(&session_cells, &provider_session_id, attempt, false);
-                                                            sink_closed.cancel();
-                                                            task_shutdown.cancel();
-                                                        }
-                                                        _ => { crate::session_cell_bookkeeping::settle_load(&session_cells, &provider_session_id, attempt, false); }
-                                                    }
-                                                    task_tool_registry.retire_run(&provider_session_id, generation);
-                                                    known_sessions.forget(&provider_session_id).await;
-                                                    let _sent = reply.send(Err(failure));
-                                                    continue;
-                                                }
-                                            };
-                                            let report = base_capabilities.with_session_response(&restored.session.response())
-                                                .with_auth_status(task_auth_status.read().await.clone());
-                                            let _written = task_session_capabilities.write(&provider_session_id, generation, report);
-                                            let settings = restored.settings_catalog;
-                                            if task_event_sink.publish_in(&provider_session_id, generation, session_event_model::SessionEvent::SettingsChanged {
-                                                settings: settings.to_session_settings(),
-                                            }).is_err() {
-                                                crate::session_cell_bookkeeping::settle_load(&session_cells, &provider_session_id, attempt, false);
-                                                sink_closed.cancel();
-                                                task_shutdown.cancel();
-                                                let _sent = reply.send(Err(RestoreFailure::attempted(ExternalProviderRuntimeError::SinkClosed)));
-                                                continue;
-                                            }
-                                            let _written = task_session_settings.write(&provider_session_id, generation, settings);
-                                            let mode_difference = restored.restored_mode.difference;
-                                            let permission_mode = crate::session_start_folders::grant_restored_session(&in_folder_grants, &provider_session_id, generation, in_folder, restored.restored_mode);
-                                            let earlier_restore_unanswered = session_cells.read(&provider_session_id, |cell| cell.last_unanswered_restore.is_some());
-                                            provisional_restores.insert(provider_session_id.clone(), ProvisionalRestoreActor {
-                                                generation, attempt, session: restored.session, item_projection: restored.item_projection,
-                                            });
-                                            let pending_admission_tx = admission_tx.clone();
-                                            let pending_shutdown = task_shutdown.clone();
-                                            admission_tasks.spawn(async move {
-                                                let RestorePublicationReceiver { decision, settled } = publication;
-                                                let decision = tokio::select! {
-                                                    () = pending_shutdown.cancelled() => return,
-                                                    decision = decision => decision.unwrap_or(RestorePublication::Failed),
-                                                };
-                                                publish_pending_session_admission(&pending_admission_tx, &pending_shutdown,
-                                                    PendingSessionAdmission::RestorePublication { provider_session_id, generation, decision, settled }).await;
-                                            });
-                                            let _sent = reply.send(Ok(super::RestoredSessionAdmission { generation, permission_mode, mode_difference, earlier_restore_unanswered }));
-                                        }
-                                        PendingSessionAdmission::RestorePublication { provider_session_id, generation, decision, settled } => {
-                                            let Some(provisional) = take_provisional_restore(&mut provisional_restores, &provider_session_id, generation) else {
-                                                let _sent = settled.send(if decision == RestorePublication::Failed { Ok(()) } else { Err(ExternalProviderRuntimeError::SessionReleased) });
-                                                continue;
-                                            };
-                                            if decision == RestorePublication::Published
-                                                && crate::session_cell_bookkeeping::settle_load(&session_cells, &provider_session_id, provisional.attempt, true)
-                                            {
-                                                let (activation, ready) = tokio::sync::oneshot::channel();
-                                                let result = register_static_provider_session(
-                                                    StaticSessionActivation { session: provisional.session, item_projection: provisional.item_projection, activation: ready },
-                                                    &mut sessions, &mut session_tasks, task_shutdown.clone(), Arc::clone(&task_frame_observation),
-                                                    task_runtime_handles.for_session_generation(generation),
-                                                    #[cfg(any(test, feature = "test-observation"))] Arc::clone(&session_test_tool_calls),
-                                                );
-                                                if result.is_ok() {
-                                                    if let Some(session) = sessions.get(&provider_session_id) {
-                                                        admitted_setting_reply::queue_restore_fast_off(&task_runtime_handles, &provider_session_id, generation, session);
-                                                    }
-                                                    let _sent = activation.send(());
-                                                    let _sent = settled.send(Ok(()));
-                                                    continue;
-                                                }
-                                                crate::session_cell_bookkeeping::report_actor_exit(&session_cells, task_event_sink.as_ref(), &provider_session_id, generation);
-                                                let _sent = settled.send(result.map(|_| ()));
-                                            } else {
-                                                let attempt = provisional.attempt;
-                                                drop(provisional);
-                                                if crate::session_cell_bookkeeping::settle_load(&session_cells, &provider_session_id, attempt, false)
-                                                    && task_event_sink.publish_unloaded(&provider_session_id, generation).is_err()
-                                                {
-                                                    sink_closed.cancel();
-                                                    task_shutdown.cancel();
-                                                }
-                                                let _sent = settled.send(match decision {
-                                                    RestorePublication::Published => Err(ExternalProviderRuntimeError::SessionReleased),
-                                                    RestorePublication::Failed => Ok(()),
-                                                });
-                                            }
-                                            known_sessions.forget(&provider_session_id).await;
-                                            crate::run_owned_state::end_run_state(&provider_session_id, generation, &task_session_capabilities, &task_session_settings, &in_folder_grants);
-                                            task_tool_registry.retire_run(&provider_session_id, generation);
-                                            task_todo_state.forget_session(&provider_session_id);
-                                        }
-                                        PendingSessionAdmission::Close { provider_session_id, attempt, result, reply } => {
-                                            // A done close ends NotLoaded and can be loaded again (ACP
-                                            // close); a failed one returns the cell to where it started.
-                                            let closing_load = crate::session_cell_bookkeeping::closing_load_generation(&session_cells, &provider_session_id, attempt);
-                                            if let Some(generation) = closing_load {
-                                                drop(take_provisional_restore(&mut provisional_restores, &provider_session_id, generation));
-                                            }
-                                            let closed_generation = crate::session_cell_bookkeeping::settle_close(&session_cells, &provider_session_id, attempt, result.is_ok());
-                                            if let Some(generation) = closed_generation {
-                                                // Closed ends the run's generation here, in the loop
-                                                // that admits restores, so no newer run can open
-                                                // between the close and its Closed (D1 R14).
-                                                if task_event_sink.publish_closed(&provider_session_id, Some(generation)).is_err() {
-                                                    sink_closed.cancel();
-                                                    task_shutdown.cancel();
-                                                }
-                                                sessions.remove(&provider_session_id);
-                                            }
-                                            if let Some(generation) = closed_generation.or(closing_load) {
-                                                if result.is_err() && task_event_sink.publish_unloaded(&provider_session_id, generation).is_err() {
-                                                    sink_closed.cancel();
-                                                    task_shutdown.cancel();
-                                                }
-                                                known_sessions.forget(&provider_session_id).await;
-                                                crate::run_owned_state::end_run_state(&provider_session_id, generation, &task_session_capabilities, &task_session_settings, &in_folder_grants);
-                                                task_tool_registry.retire_run(&provider_session_id, generation);
-                                                task_todo_state.forget_session(&provider_session_id);
-                                            }
-                                            let _result = reply.send(result);
-                                        }
+                                            let _reader_gone = reply.send(result);
+                                        });
                                     }
-                                }
-                                exit = actor_exit_rx.recv() => {
-                                    let Some(exit) = exit else { continue; };
-                                    // An actor that ended on its own ends its run here, in the
-                                    // loop that admits loads and creates: the cell's move and its
-                                    // Unloaded happen in this iteration, so no newer run can open
-                                    // between them (Lead V1).
-                                    sessions.retain(|_, sender| !sender.is_closed());
-                                    if crate::session_cell_bookkeeping::report_actor_exit(&session_cells, task_event_sink.as_ref(), &exit.provider_session_id, exit.generation) {
-                                        known_sessions.forget(&exit.provider_session_id).await;
-                                        crate::run_owned_state::end_run_state(&exit.provider_session_id, exit.generation, &task_session_capabilities, &task_session_settings, &in_folder_grants);
-                                        task_tool_registry.retire_run(&exit.provider_session_id, exit.generation);
-                                        task_todo_state.forget_session(&exit.provider_session_id);
-                                    }
-                                }
-                                completion = admission_tasks.join_next(), if !admission_tasks.is_empty() => {
-                                    if matches!(completion, Some(Err(_))) {
-                                        task_shutdown_failed.store(true, Ordering::Relaxed);
-                                        break;
-                                    }
-                                }
-                                completion = session_tasks.join_next(), if !session_tasks.is_empty() => {
-                                    if matches!(completion, Some(Err(_))) {
-                                        task_shutdown_failed.store(true, Ordering::Relaxed);
-                                        break;
-                                    }
-                                }
-                                command = command_rx.recv() => {
-                                    let Some(command) = command else { break; };
-                                    sessions.retain(|_, sender| !sender.is_closed());
-                                    match command {
-                                        ProviderCommand::Create { cwd, scratch_folder, work_roots, settings, reply } => {
-                                            // The scratch folder, then the work roots that exist (D1 R18).
-                                            let folders = crate::session_start_folders::session_start_folders(&cwd, scratch_folder.as_deref(), &work_roots, task_runtime_handles.behavior.as_ref(), base_capabilities.supports_additional_directories);
-                                            let mut request = NewSessionRequest::new(&cwd)
-                                                .mcp_servers(session_mcp_servers.clone())
-                                                .additional_directories(folders.additional_directories);
-                                            request.meta = folders.meta;
-                                            let in_folder = folders.in_folder;
-                                            let pending_connection = connection.clone();
-                                            let pending_shutdown = task_shutdown.clone();
-                                            let pending_admission_tx = admission_tx.clone();
-                                            let supports_close = base_capabilities.supports_close;
-                                            let pending_frame_observation = Arc::clone(&task_frame_observation);
-                                            let pending_runtime_handles = task_runtime_handles.clone();
-                                            #[cfg(any(test, feature = "test-observation"))]
-                                            let pending_test_tool_calls = Arc::clone(&session_test_tool_calls);
-                                            admission_tasks.spawn(async move {
-                                                run_create_admission(CreateAdmissionInputs {
-                                                    connection: pending_connection,
-                                                    request,
-                                                    in_folder,
-                                                    requested_settings: settings,
-                                                    supports_close,
-                                                    shutdown: pending_shutdown,
-                                                    admission_tx: pending_admission_tx,
-                                                    reply,
-                                                    frame_observation: pending_frame_observation,
-                                                    runtime_handles: pending_runtime_handles,
-                                                    #[cfg(any(test, feature = "test-observation"))]
-                                                    test_tool_calls: pending_test_tool_calls,
-                                                })
-                                                .await;
-                                            });
-                                        }
-                                        ProviderCommand::Restore { provider_session_id, cwd, mode, setup, admitted, dispatch, publication, reply } => {
-                                            // Only an admitted restore opens a new run; a refused
-                                            // one leaves the live run alone (D1 R14).
-                                            let attempt = provider_session_machines::session_lifecycle_machine::LoadAttempt(uuid::Uuid::now_v7());
-                                            let via = match mode {
-                                                provider_session_restore::RestoreHistoryMode::Replay => provider_session_machines::session_lifecycle_machine::RestoreVia::Load,
-                                                provider_session_restore::RestoreHistoryMode::WithoutReplay => provider_session_machines::session_lifecycle_machine::RestoreVia::Resume,
-                                            };
-                                            let generation = match crate::session_cell_bookkeeping::admit_load(&session_cells, &provider_session_id, via, attempt) {
-                                                Ok(generation) => generation,
-                                                Err(error) => {
-                                                    let _result = reply.send(Err(RestoreFailure::preflight(error)));
-                                                    continue;
-                                                }
-                                            };
-                                            if let Some(admitted) = admitted {
-                                                let _result = admitted.send(generation);
-                                            }
-                                            known_sessions.track(provider_session_id.clone()).await;
-                                            // The setup its create had, rebuilt (D1 R18; Decision 3).
-                                            let folders = crate::session_start_folders::session_start_folders(&cwd, setup.scratch_folder.as_deref(), &setup.work_roots, task_runtime_handles.behavior.as_ref(), base_capabilities.supports_additional_directories);
-                                            let inputs = provider_session_restore::RestoreAdmissionInputs {
-                                                folders,
-                                                requested_mode: setup.requested_mode,
-                                                connection_model_reasoning: task_runtime_handles.connection_model_reasoning.clone(),
-                                                behavior: Arc::clone(&task_runtime_handles.behavior),
-                                                connection: connection.clone(),
-                                                provider_session_id,
-                                                cwd,
-                                                mode,
-                                                mcp_servers: session_mcp_servers.clone(),
-                                                shutdown: task_shutdown.clone(),
-                                                event_sink: Arc::new(crate::session_event_sink::SessionGenerationSink::new(Arc::clone(&task_event_sink), generation)),
-                                                admission_tx: admission_tx.clone(),
-                                                generation,
-                                                attempt,
-                                                session_cells: Arc::clone(&session_cells),
-                                                clock: Arc::clone(&clock),
-                                                dispatch,
-                                                publication,
-                                                reply,
-                                            };
-                                            admission_tasks.spawn(async move {
-                                                provider_session_restore::run_restore_admission(inputs).await;
-                                            });
-                                        }
-                                        #[cfg(any(test, feature = "test-support"))]
-                                        ProviderCommand::EndActor { provider_session_id } => {
-                                            sessions.remove(&provider_session_id);
-                                        }
-                                        ProviderCommand::List { cwd, reply } => {
-                                            let pending_connection = connection.clone();
-                                            let pending_shutdown = task_shutdown.clone();
-                                            admission_tasks.spawn(async move {
-                                                let result = tokio::select! {
-                                                    () = pending_shutdown.cancelled() => Err(ExternalProviderRuntimeError::TransportFailure),
-                                                    result = provider_lifecycle_requests::list_provider_sessions(pending_connection, cwd) => result,
-                                                };
-                                                let _result = reply.send(result);
-                                            });
-                                        }
-                                        ProviderCommand::Close { provider_session_id, attempt, release_only, reply } => {
-                                            let pending_connection = connection.clone();
-                                            let pending_shutdown = task_shutdown.clone();
-                                            let pending_admission_tx = admission_tx.clone();
-                                            admission_tasks.spawn(async move {
-                                                let result = tokio::select! {
-                                                    () = pending_shutdown.cancelled() => Err(ExternalProviderRuntimeError::TransportFailure),
-                                                    result = async {
-                                                        if release_only {
-                                                            Ok(())
-                                                        } else {
-                                                            provider_lifecycle_requests::close_provider_session(pending_connection, provider_session_id.clone()).await
-                                                        }
-                                                    } => result,
-                                                };
-                                                publish_pending_session_admission(
-                                                    &pending_admission_tx,
-                                                    &pending_shutdown,
-                                                    PendingSessionAdmission::Close { provider_session_id, attempt, result, reply },
-                                                ).await;
-                                            });
-                                        }
-                                        ProviderCommand::Prompt { provider_session_id, input_id, operation_id, prompt, dispatch, reply } => {
-                                            if crate::session_cell_bookkeeping::is_closing(&session_cells, &provider_session_id) {
-                                                let answer = super::busy_answer(&session_cells, &provider_session_id, base_capabilities.supports_steering);
-                                                if let Some(dispatch) = dispatch {
-                                                    let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::Busy { answer: answer.clone() }));
-                                                }
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy { answer }));
-                                                continue;
-                                            }
-                                            if super::settings_held(&session_cells, &provider_session_id) {
-                                                let answer = super::settings_uncertainty_answer();
-                                                if let Some(dispatch) = dispatch {
-                                                    let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(crate::ProviderDispatchRefusal::SettingsUnresolved { answer: answer.clone() }));
-                                                }
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved { answer }));
-                                                continue;
-                                            }
-                                            let Some(session) = sessions.get(&provider_session_id) else {
-                                                if let Some(dispatch) = dispatch {
-                                                    let _result = dispatch.send(ProviderPromptDispatchObservation::NotSubmitted);
-                                                }
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::LocalNotFound));
-                                                continue;
-                                            };
-                                            let turn_cancellation = operation_id.as_ref().and_then(|operation_id| active_turn_cancellation(&task_approval_contexts, &task_interaction_port, &provider_session_id, Some(operation_id)));
-                                            if let Err(error) = session.send(ProviderSessionCommand::Prompt { input_id, operation_id, prompt, turn_cancellation, dispatch, reply })
-                                                && let ProviderSessionCommand::Prompt { dispatch: Some(dispatch), .. } = error.0
-                                            {
-                                                let _result = dispatch.send(ProviderPromptDispatchObservation::NotSubmitted);
-                                            }
-                                        }
-                                        ProviderCommand::Cancel { provider_session_id, expected_operation_id, reply } => {
-                                            let Some(session) = sessions.get(&provider_session_id) else {
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::LocalNotFound));
-                                                continue;
-                                            };
-                                            let _result = session.send(ProviderSessionCommand::Cancel { expected_operation_id, reply });
-                                        }
-                                        ProviderCommand::Steer { provider_session_id, input_id, prompt, reply } => {
-                                            if crate::session_cell_bookkeeping::is_closing(&session_cells, &provider_session_id) {
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy { answer: super::busy_answer(&session_cells, &provider_session_id, base_capabilities.supports_steering) }));
-                                                continue;
-                                            }
-                                            if super::settings_held(&session_cells, &provider_session_id) {
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved { answer: super::settings_uncertainty_answer() }));
-                                                continue;
-                                            }
-                                            let Some(session) = sessions.get(&provider_session_id) else {
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::LocalNotFound));
-                                                continue;
-                                            };
-                                            let _result = session.send(ProviderSessionCommand::Steer { input_id, prompt, reply });
-                                        }
-                                        ProviderCommand::InspectSession { provider_session_id, reply } => {
-                                            let Some(session) = sessions.get(&provider_session_id) else {
-                                                let _result = reply.send(ProviderSessionActivity::NotLoaded);
-                                                continue;
-                                            };
-                                            let _result = session.send(ProviderSessionCommand::Inspect { reply });
-                                        }
-                                        ProviderCommand::InspectActiveOperation { provider_session_id, reply } => {
-                                            let Some(session) = sessions.get(&provider_session_id) else {
-                                                let _result = reply.send(None);
-                                                continue;
-                                            };
-                                            let _result = session.send(ProviderSessionCommand::InspectActiveOperation { reply });
-                                        }
-                                        ProviderCommand::WaitSessionIdle { provider_session_id, reply } => {
-                                            let Some(session) = sessions.get(&provider_session_id) else {
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::LocalNotFound));
-                                                continue;
-                                            };
-                                            let _result = session.send(ProviderSessionCommand::WaitIdle { reply });
-                                        }
-                                        ProviderCommand::SetSetting { provider_session_id, request, reply } => {
-                                            if crate::session_cell_bookkeeping::is_closing(&session_cells, &provider_session_id) {
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy { answer: super::busy_answer(&session_cells, &provider_session_id, base_capabilities.supports_steering) }));
-                                                continue;
-                                            }
-                                            let Some(session) = sessions.get(&provider_session_id) else {
-                                                let _result = reply.send(Err(ExternalProviderRuntimeError::LocalNotFound));
-                                                continue;
-                                            };
-                                            // The loop admits the change to the run it hands it to,
-                                            // so the loop claims its Lost (Lead V4).
-                                            let kind = request.kind;
-                                            let reply = admitted_setting_reply::AdmittedSettingReply::admit(reply, &session_cells, &provider_session_id, kind);
-                                            let _result = session.send(ProviderSessionCommand::SetSetting { request, reply });
-                                        }
-                                    }
+                                    None => break,
+                                },
+                                Some(result) = executors.join_next(), if !executors.is_empty() => {
+                                    if result.is_err() { task_shutdown_failed.store(true, Ordering::Relaxed); }
                                 }
                             }
-                        }
-                        admission_rx.close();
-                        while let Ok(completion) = admission_rx.try_recv() {
-                            fail_pending_session_admission(completion);
                         }
                         task_connection_retirement.cancel();
-                        task_interaction_port.cancel_retired().await;
                         task_shutdown.cancel();
-                        while let Some(result) = admission_tasks.join_next().await {
-                            if result.is_err() {
-                                task_shutdown_failed.store(true, Ordering::Relaxed);
-                            }
-                        }
-                        while let Some(result) = session_tasks.join_next().await {
-                            if result.is_err() {
-                                task_shutdown_failed.store(true, Ordering::Relaxed);
-                            }
+                        task_interaction_port.cancel_retired().await;
+                        while let Some(result) = executors.join_next().await {
+                            if result.is_err() { task_shutdown_failed.store(true, Ordering::Relaxed); }
                         }
                     }
                     Ok(())
@@ -923,16 +390,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                 },
             };
             connection_retirement.cancel();
-            super::provider_connection_retirement::ConnectionRetirement {
-                session_cells: retirement_session_cells,
-                interaction_port: final_interaction_port,
-                activity: retirement_registry,
-                todos: retirement_todos,
-                known_sessions: retirement_known_sessions,
-                event_sink: retirement_event_sink,
-            }
-            .retire()
-            .await;
+            final_interaction_port.cancel_retired().await;
             if !child_exited {
                 lifetime.end().await;
             }
@@ -942,7 +400,9 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         });
 
         let (admission, base_capabilities) =
-            match tokio::time::timeout_at(initialize_deadline, ready_rx).await {
+            match router_clock::timeout_at(client_clock.as_ref(), initialize_deadline, ready_rx)
+                .await
+            {
                 Ok(Ok(Ok(admission))) => admission,
                 Ok(Ok(Err(error))) => {
                     shutdown.cancel();
@@ -965,19 +425,17 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         Ok(Self {
             admission,
             base_capabilities,
-            session_capabilities,
             auth_status,
-            session_settings,
-            session_cells,
             clock: client_clock,
             shutdown,
-            local_shutdown: CancellationToken::new(),
             sink_closed: client_sink_closed,
             retirement,
             task: tokio::sync::Mutex::new(Some(task)),
             shutdown_failed,
             frame_observation,
             commands: command_tx,
+            owner_wire,
+            provider_behavior,
             #[cfg(any(test, feature = "test-observation"))]
             permission_request_count,
             #[cfg(any(test, feature = "test-observation"))]
@@ -991,8 +449,6 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             approval_refusal_warnings,
             #[cfg(any(test, feature = "test-observation"))]
             test_tool_calls,
-            #[cfg(test)]
-            in_folder_grants: client_in_folder_grants,
         })
     }
 }

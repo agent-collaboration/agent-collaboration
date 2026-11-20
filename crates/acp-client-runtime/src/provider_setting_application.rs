@@ -1,7 +1,7 @@
 //! Apply requested settings against each newly advertised ACP option set.
 
 use agent_client_protocol::schema::v1::{
-    SessionConfigOption, SessionConfigOptionValue, SetSessionConfigOptionRequest,
+    SessionConfigOption, SessionConfigOptionValue, SessionId, SetSessionConfigOptionRequest,
     SetSessionModeRequest,
 };
 use agent_client_protocol::{ConnectionTo, JsonRpcMessage, UntypedMessage};
@@ -9,7 +9,7 @@ use provider_session_machines::ProviderSettingKind;
 
 use crate::provider_acp_error_mapping::acp_operation_error;
 use crate::{AppliedProviderSetting, ProviderSettingsCatalog, RequestedProviderSettings};
-use agent_client_protocol::{ActiveSession, Agent};
+use agent_client_protocol::Agent;
 use std::time::Duration;
 
 const SETTING_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -29,15 +29,7 @@ pub(crate) enum SettingSetupFailure {
     Uncertain {
         kind: ProviderSettingKind,
         value: String,
-        restore_readback: Option<RestoreModeObservation>,
     },
-}
-
-#[derive(Clone, Debug)]
-pub(crate) enum RestoreModeObservation {
-    Confirmed(String),
-    Unconfirmed,
-    NoAnswer,
 }
 
 enum SettingResponseFailure {
@@ -46,12 +38,10 @@ enum SettingResponseFailure {
         confirmed_current: bool,
     },
     Unknown,
-    RestoreReadback(RestoreModeObservation),
 }
 
 struct SettingResponseWait<'clock> {
     clock: &'clock dyn router_clock::RuntimeClock,
-    restore_claim: Option<crate::session_cell_bookkeeping::RestoreModeWriteClaim>,
 }
 
 /// The outcome of applying a start's settings in order.
@@ -73,26 +63,21 @@ struct PlannedMode {
     reason: Option<crate::PermissionModeReason>,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct InitialSettingTarget<'connection> {
+    pub(crate) connection: &'connection ConnectionTo<Agent>,
+    pub(crate) session_id: &'connection SessionId,
+}
+
 /// Applies the requested settings in order. A request without a mode leaves
 /// the agent's mode alone; a named mode that fails returns its failure under
 /// the explicit-setting rules (D1 spec R1, R2).
 pub(crate) async fn apply_initial_settings(
-    session: &ActiveSession<'_, Agent>,
+    session: InitialSettingTarget<'_>,
     requested: &RequestedProviderSettings,
     catalog: &mut ProviderSettingsCatalog,
     behavior: &dyn crate::ProviderBehavior,
     clock: &dyn router_clock::RuntimeClock,
-) -> InitialSettingsOutcome {
-    apply_settings(session, requested, catalog, behavior, clock, None).await
-}
-
-async fn apply_settings(
-    session: &ActiveSession<'_, Agent>,
-    requested: &RequestedProviderSettings,
-    catalog: &mut ProviderSettingsCatalog,
-    behavior: &dyn crate::ProviderBehavior,
-    clock: &dyn router_clock::RuntimeClock,
-    mut restore_claim: Option<crate::session_cell_bookkeeping::RestoreModeWriteClaim>,
 ) -> InitialSettingsOutcome {
     let requested_mode = crate::RequestedPermissionMode::from_request(requested.mode.as_deref());
     let router_auto_requested = requested_mode == crate::RequestedPermissionMode::Auto;
@@ -182,10 +167,7 @@ async fn apply_settings(
             kind,
             value,
             accepted_fallback,
-            SettingResponseWait {
-                clock,
-                restore_claim: restore_claim.take(),
-            },
+            SettingResponseWait { clock },
         )
         .await
         {
@@ -225,7 +207,7 @@ pub(crate) fn fast_off_requested(
 /// Sends the advertised off identifier for a select and false for a boolean.
 /// Only an answer that reads off confirms the change.
 async fn apply_fast_off(
-    session: &ActiveSession<'_, Agent>,
+    session: InitialSettingTarget<'_>,
     catalog: &mut ProviderSettingsCatalog,
     behavior: &dyn crate::ProviderBehavior,
     clock: &dyn router_clock::RuntimeClock,
@@ -256,21 +238,16 @@ async fn apply_fast_off(
         }
     };
     let request =
-        SetSessionConfigOptionRequest::new(session.session_id().clone(), option.id.clone(), value);
+        SetSessionConfigOptionRequest::new(session.session_id.clone(), option.id.clone(), value);
     let result = match request.to_untyped_message() {
-        Ok(request) => match send_setting_request(
-            session.connection(),
-            request,
-            SettingResponseWait {
-                clock,
-                restore_claim: None,
-            },
-        )
-        .await
-        {
-            Ok(response) => apply_fast_response(catalog, response, behavior),
-            Err(failure) => Err(failure),
-        },
+        Ok(request) => {
+            match send_setting_request(session.connection, request, SettingResponseWait { clock })
+                .await
+            {
+                Ok(response) => apply_fast_response(catalog, response, behavior),
+                Err(failure) => Err(failure),
+            }
+        }
         Err(_) => Err(SettingResponseFailure::Unknown),
     };
     result.map_err(|failure| match failure {
@@ -283,13 +260,10 @@ async fn apply_fast_off(
             reason,
             confirmed_current,
         },
-        SettingResponseFailure::Unknown | SettingResponseFailure::RestoreReadback(_) => {
-            SettingSetupFailure::Uncertain {
-                kind: ProviderSettingKind::Fast,
-                value: FAST_OFF.to_owned(),
-                restore_readback: None,
-            }
-        }
+        SettingResponseFailure::Unknown => SettingSetupFailure::Uncertain {
+            kind: ProviderSettingKind::Fast,
+            value: FAST_OFF.to_owned(),
+        },
     })
 }
 
@@ -359,196 +333,8 @@ fn judge_agent_mode(
     }
 }
 
-/// A restored session's mode report and Router-auto answer (D1 R18; owner
-/// Decision 3).
-#[derive(Clone, Debug)]
-pub(crate) struct RestoredPermissionMode {
-    pub(crate) report: crate::PermissionModeReport,
-    pub(crate) router_auto_active: bool,
-    pub(crate) difference: Option<crate::RestoredModeDifference>,
-}
-
-/// Judges the mode the agent reports for a restored session against the mode
-/// its record names, as a start judges the mode the agent confirmed. Nothing
-/// is sent here; `reapply_recorded_mode` sets the mode back first when the
-/// agent restored it in another one.
-pub(crate) fn restored_permission_mode(
-    requested: Option<&str>,
-    catalog: &ProviderSettingsCatalog,
-    behavior: &dyn crate::ProviderBehavior,
-) -> RestoredPermissionMode {
-    let requested_mode = crate::RequestedPermissionMode::from_request(requested);
-    let actual = catalog.effective_settings().mode;
-    let mut restored = RestoredPermissionMode {
-        report: crate::PermissionModeReport {
-            requested: requested_mode.requested_name().map(str::to_owned),
-            actual: actual.clone(),
-            reason: None,
-        },
-        router_auto_active: false,
-        difference: None,
-    };
-    if requested_mode == crate::RequestedPermissionMode::Unspecified {
-        return restored;
-    }
-    let router_auto_requested = requested_mode == crate::RequestedPermissionMode::Auto;
-    match crate::plan_permission_mode(
-        requested_mode,
-        &catalog.advertised_values(ProviderSettingKind::Mode),
-        behavior.auto_permission_mode(),
-    ) {
-        Err(_) => restored.difference = Some(crate::RestoredModeDifference::NotOffered),
-        Ok(crate::PermissionModePlan::Keep { reason, .. }) => restored.report.reason = reason,
-        Ok(crate::PermissionModePlan::Set {
-            mode,
-            accepted_fallback,
-            reason,
-            ..
-        }) => {
-            let judged = judge_agent_mode(
-                &PlannedMode {
-                    value: mode,
-                    accepted_fallback,
-                    reason,
-                },
-                actual.as_deref(),
-                router_auto_requested,
-            );
-            restored.report.reason = judged.reason;
-            restored.router_auto_active = judged.router_auto_active;
-        }
-    }
-    restored
-}
-
-/// Puts a restored session back in the mode its record names, the session's
-/// current mode (V6; owner Decision 3: a session's mode survives a restart).
-/// An agent can restore a session in another mode (Claude applies the user's
-/// defaultMode on load), so when the mode it reports differs from the planned
-/// one the Router sets it as a create does, before the session is registered
-/// and any prompt admitted. The result is judged on the mode in force after
-/// that. A set that fails leaves the session loaded without Router auto, its
-/// requested and actual modes describe what the agent confirmed.
-pub(crate) async fn reapply_recorded_mode(
-    session: &ActiveSession<'_, Agent>,
-    requested: Option<&str>,
-    catalog: &mut ProviderSettingsCatalog,
-    behavior: &dyn crate::ProviderBehavior,
-    earlier_write_pending: bool,
-    claim_write: impl FnOnce() -> Option<crate::session_cell_bookkeeping::RestoreModeWriteClaim>,
-    clock: &dyn router_clock::RuntimeClock,
-) -> RestoredPermissionMode {
-    let mut kept = restored_permission_mode(requested, catalog, behavior);
-    if earlier_write_pending {
-        catalog.mode_observation = crate::ProviderModeObservation::Unconfirmed;
-        kept.report.actual = None;
-        kept.router_auto_active = false;
-        kept.difference = Some(crate::RestoredModeDifference::EarlierWriteUnanswered);
-        return kept;
-    }
-    if !restored_mode_drifted(requested, catalog, behavior) {
-        return kept;
-    }
-    // The write belongs to this load attempt: a close that came first means
-    // nothing is sent, and the claim is held until the write is answered
-    // (review F1).
-    let Some(claim) = claim_write() else {
-        return RestoredPermissionMode {
-            report: crate::PermissionModeReport {
-                requested: kept.report.requested,
-                actual: catalog.effective_settings().mode,
-                reason: kept.report.reason,
-            },
-            router_auto_active: false,
-            difference: kept.difference,
-        };
-    };
-    let outcome = apply_settings(
-        session,
-        &RequestedProviderSettings {
-            mode: requested.map(str::to_owned),
-            ..RequestedProviderSettings::default()
-        },
-        catalog,
-        behavior,
-        clock,
-        Some(claim),
-    )
-    .await;
-    if let Some(failure) = outcome.failure {
-        use crate::RestoredModeDifference as Difference;
-        let (actual, difference) = match failure {
-            SettingSetupFailure::Uncertain {
-                restore_readback: Some(RestoreModeObservation::Confirmed(mode)),
-                ..
-            } => (Some(mode), Difference::DifferentReply),
-            SettingSetupFailure::Uncertain {
-                restore_readback, ..
-            } => {
-                catalog.mode_observation = crate::ProviderModeObservation::Unconfirmed;
-                (
-                    None,
-                    if matches!(restore_readback, Some(RestoreModeObservation::NoAnswer)) {
-                        Difference::NoAnswer
-                    } else {
-                        Difference::UnconfirmedReply
-                    },
-                )
-            }
-            SettingSetupFailure::Agent { .. } => {
-                (catalog.effective_settings().mode, Difference::Refused)
-            }
-            SettingSetupFailure::Invalid { .. } => {
-                (catalog.effective_settings().mode, Difference::NotOffered)
-            }
-        };
-        return RestoredPermissionMode {
-            report: crate::PermissionModeReport {
-                requested: kept.report.requested,
-                actual,
-                reason: kept.report.reason,
-            },
-            router_auto_active: false,
-            difference: Some(difference),
-        };
-    }
-    RestoredPermissionMode {
-        report: outcome.permission_mode,
-        router_auto_active: outcome.router_auto_active,
-        difference: None,
-    }
-}
-
-/// Whether the agent restored the session in a mode other than the one its
-/// record plans: neither the planned mode nor its accepted fallback.
-fn restored_mode_drifted(
-    requested: Option<&str>,
-    catalog: &ProviderSettingsCatalog,
-    behavior: &dyn crate::ProviderBehavior,
-) -> bool {
-    let requested_mode = crate::RequestedPermissionMode::from_request(requested);
-    if requested_mode == crate::RequestedPermissionMode::Unspecified {
-        return false;
-    }
-    let Ok(crate::PermissionModePlan::Set {
-        mode,
-        accepted_fallback,
-        ..
-    }) = crate::plan_permission_mode(
-        requested_mode,
-        &catalog.advertised_values(ProviderSettingKind::Mode),
-        behavior.auto_permission_mode(),
-    )
-    else {
-        return false;
-    };
-    let actual = catalog.effective_settings().mode;
-    actual.as_deref() != Some(mode.as_str())
-        && (accepted_fallback.is_none() || actual != accepted_fallback)
-}
-
 async fn apply_one_setting(
-    session: &ActiveSession<'_, Agent>,
+    session: InitialSettingTarget<'_>,
     catalog: &mut ProviderSettingsCatalog,
     behavior: &dyn crate::ProviderBehavior,
     kind: ProviderSettingKind,
@@ -564,15 +350,14 @@ async fn apply_one_setting(
             advertised,
         });
     }
-    let restore = wait.restore_claim.is_some();
     let result = if let Some(option) = catalog.config_option(kind) {
         let request = SetSessionConfigOptionRequest::new(
-            session.session_id().clone(),
+            session.session_id.clone(),
             option.id.clone(),
             SessionConfigOptionValue::value_id(value.clone()),
         );
         match request.to_untyped_message() {
-            Ok(request) => match send_setting_request(session.connection(), request, wait).await {
+            Ok(request) => match send_setting_request(session.connection, request, wait).await {
                 Ok(response) => apply_config_response(
                     catalog,
                     kind,
@@ -580,22 +365,21 @@ async fn apply_one_setting(
                     accepted_fallback,
                     response,
                     behavior,
-                    restore,
                 ),
                 Err(failure) => Err(failure),
             },
             Err(_) => Err(SettingResponseFailure::Unknown),
         }
     } else if kind == ProviderSettingKind::Mode && !catalog.modes.is_empty() {
-        let request = SetSessionModeRequest::new(session.session_id().clone(), value.clone());
+        let request = SetSessionModeRequest::new(session.session_id.clone(), value.clone());
         let result = match request.to_untyped_message() {
-            Ok(request) => send_setting_request(session.connection(), request, wait)
+            Ok(request) => send_setting_request(session.connection, request, wait)
                 .await
                 .and_then(|response| {
                     response
                         .is_object()
                         .then_some(())
-                        .ok_or_else(|| unconfirmed_response(restore))
+                        .ok_or(SettingResponseFailure::Unknown)
                 }),
             Err(_) => Err(SettingResponseFailure::Unknown),
         };
@@ -624,12 +408,6 @@ async fn apply_one_setting(
         SettingResponseFailure::Unknown => SettingSetupFailure::Uncertain {
             kind,
             value: value.clone(),
-            restore_readback: None,
-        },
-        SettingResponseFailure::RestoreReadback(readback) => SettingSetupFailure::Uncertain {
-            kind,
-            value: value.clone(),
-            restore_readback: Some(readback),
         },
     })
 }
@@ -641,20 +419,10 @@ fn apply_config_response(
     accepted_fallback: Option<&str>,
     response: serde_json::Value,
     behavior: &dyn crate::ProviderBehavior,
-    restore: bool,
 ) -> Result<(), SettingResponseFailure> {
-    let updated = catalog_from_config_response(catalog, &response, behavior)
-        .map_err(|_| unconfirmed_response(restore))?;
+    let updated = catalog_from_config_response(catalog, &response, behavior)?;
     let effective = updated.effective_settings();
     let selected = match kind {
-        ProviderSettingKind::Mode if restore => {
-            updated
-                .config_option(kind)
-                .and_then(|option| match &option.current_value {
-                    crate::ProviderConfigValue::Select(value) => Some(value.as_str()),
-                    crate::ProviderConfigValue::Boolean(_) => None,
-                })
-        }
         ProviderSettingKind::Mode => effective.mode.as_deref(),
         ProviderSettingKind::Model => effective.model.as_deref(),
         ProviderSettingKind::Effort => effective.effort.as_deref(),
@@ -662,12 +430,7 @@ fn apply_config_response(
         ProviderSettingKind::Fast => return Err(SettingResponseFailure::Unknown),
     };
     if selected != Some(value) && (selected.is_none() || selected != accepted_fallback) {
-        if restore && let Some(mode) = selected {
-            let readback = RestoreModeObservation::Confirmed(mode.to_owned());
-            *catalog = updated;
-            return Err(SettingResponseFailure::RestoreReadback(readback));
-        }
-        return Err(unconfirmed_response(restore));
+        return Err(SettingResponseFailure::Unknown);
     }
     *catalog = updated;
     Ok(())
@@ -706,35 +469,24 @@ async fn send_setting_request(
     wait: SettingResponseWait<'_>,
 ) -> Result<serde_json::Value, SettingResponseFailure> {
     let (reply, result) = tokio::sync::oneshot::channel();
-    let SettingResponseWait {
-        clock,
-        restore_claim,
-    } = wait;
-    let restore = restore_claim.is_some();
+    let clock = wait.clock;
     connection
         .send_request(request)
         .on_receiving_result(async move |response| {
             // This callback is owned by the connection's response correlation.
             // It stays registered when the local timeout drops `result`.
-            drop(restore_claim);
             let _result = reply.send(response);
             Ok(())
         })
-        .map_err(|_| unconfirmed_response(restore))?;
+        .map_err(|_| SettingResponseFailure::Unknown)?;
     let response = router_clock::timeout(clock, SETTING_RESPONSE_TIMEOUT, result)
         .await
-        .map_err(|_| {
-            if restore {
-                SettingResponseFailure::RestoreReadback(RestoreModeObservation::NoAnswer)
-            } else {
-                SettingResponseFailure::Unknown
-            }
-        })?
-        .map_err(|_| unconfirmed_response(restore))?;
+        .map_err(|_| SettingResponseFailure::Unknown)?
+        .map_err(|_| SettingResponseFailure::Unknown)?;
     match response {
         Ok(response) => Ok(response),
         Err(error) if agent_client_protocol::is_incoming_transport_closed(&error) => {
-            Err(unconfirmed_response(restore))
+            Err(SettingResponseFailure::Unknown)
         }
         Err(error) => Err(SettingResponseFailure::Rejected {
             reason: acp_operation_error(error).to_string(),
@@ -743,10 +495,36 @@ async fn send_setting_request(
     }
 }
 
-fn unconfirmed_response(restore: bool) -> SettingResponseFailure {
-    if restore {
-        SettingResponseFailure::RestoreReadback(RestoreModeObservation::Unconfirmed)
-    } else {
-        SettingResponseFailure::Unknown
+pub(crate) fn current_mode_grants_auto(
+    requested: Option<&str>,
+    catalog: &ProviderSettingsCatalog,
+    behavior: &dyn crate::ProviderBehavior,
+) -> bool {
+    let requested_mode = crate::RequestedPermissionMode::from_request(requested);
+    if requested_mode != crate::RequestedPermissionMode::Auto {
+        return false;
     }
+    let Ok(crate::PermissionModePlan::Set {
+        mode,
+        accepted_fallback,
+        reason,
+        ..
+    }) = crate::plan_permission_mode(
+        requested_mode,
+        &catalog.advertised_values(ProviderSettingKind::Mode),
+        behavior.auto_permission_mode(),
+    )
+    else {
+        return false;
+    };
+    judge_agent_mode(
+        &PlannedMode {
+            value: mode,
+            accepted_fallback,
+            reason,
+        },
+        catalog.effective_settings().mode.as_deref(),
+        true,
+    )
+    .router_auto_active
 }

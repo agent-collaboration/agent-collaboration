@@ -8,10 +8,17 @@ use super::{
 use crate::session_cell_machine::{SessionCellEffect, SessionCellEvent, SessionCellMachine};
 use state_machine_core::{StateMachine, TransitionError};
 
+mod cancel_confirmation;
+pub(super) use cancel_confirmation::PendingCancelConfirmation;
+mod delivery_evidence_effects;
 mod dispatch_effects;
 mod input_effects;
 mod lifecycle_effects;
+mod provider_started_turn;
+pub(super) use provider_started_turn::PreviousPromptSettlement;
 mod publication_effects;
+mod publication_projection;
+pub(super) use publication_projection::OwnerProjection;
 mod registry_effects;
 mod setting_effects;
 mod store_effects;
@@ -19,7 +26,16 @@ mod tool_effects;
 
 impl SessionOwnerState {
     /// Reduces one mailbox event. Discarded events release no executor work.
+    #[cfg(test)]
     pub fn decide(&self, event: OwnerMailboxEvent) -> SessionOwnerDecision {
+        self.decide_at(event, 0)
+    }
+
+    pub(super) fn decide_at(
+        &self,
+        event: OwnerMailboxEvent,
+        observed_at_ms: i64,
+    ) -> SessionOwnerDecision {
         let attaching = event.event == OwnerEvent::ConnectionAttached
             && !self.ports.connection_alive
             && event.owner.incarnation == self.ports.address.incarnation
@@ -37,6 +53,8 @@ impl SessionOwnerState {
         let mut transition = OwnerTransition {
             next: self.clone(),
             effects: Vec::new(),
+            observed_at_ms,
+            completing_prompt: None,
         };
         if transition.next.ports.latest_batch.is_none() {
             transition.offer_rebase()?;
@@ -61,6 +79,11 @@ impl SessionOwnerState {
 struct OwnerTransition {
     next: SessionOwnerState,
     effects: Vec<OwnerEffect>,
+    observed_at_ms: i64,
+    completing_prompt: Option<(
+        super::InputId,
+        Result<super::PromptCompletion, super::ProviderWireFailure>,
+    )>,
 }
 
 type OwnerResult<T = ()> = Result<T, OwnerRejection>;
@@ -75,6 +98,9 @@ impl OwnerTransition {
     fn apply(&mut self, event: OwnerEvent) -> OwnerResult {
         match event {
             OwnerEvent::Command(command) => self.apply_command(command),
+            OwnerEvent::DeliveryEvidence { placement, outcome } => {
+                self.delivery_evidence_recorded(placement, outcome)
+            }
             OwnerEvent::Wire(result) => self.apply_wire(result),
             OwnerEvent::Store(result) => self.apply_store(result),
             OwnerEvent::Publication(result) => self.publication_result(result),
@@ -83,8 +109,23 @@ impl OwnerTransition {
             OwnerEvent::Dispatch(result) => self.dispatch_result(result),
             OwnerEvent::Create(progress) => self.create_progress(progress),
             OwnerEvent::ConnectionLost => self.connection_lost(),
+            OwnerEvent::RunLost(run) => self.run_lost(run),
             OwnerEvent::ConnectionAttached => Err(OwnerRejection::IgnoredLate),
             OwnerEvent::Prepare(progress) => self.restore_preparation(progress),
+            OwnerEvent::Stream {
+                run,
+                expected_turn,
+                event,
+            } => self.observe_stream(run, expected_turn, event),
+            OwnerEvent::SubmittedInput { input, item } => {
+                self.observe_submitted_input(&input, item)
+            }
+            OwnerEvent::Replay { run, events } => self.observe_replay(run, events),
+            OwnerEvent::SkillView { run, view } => self.observe_skill_view(run, view),
+            OwnerEvent::ObservedTurnEnded { run, turn, outcome } => {
+                self.observed_turn_ended(run, turn, outcome)
+            }
+            OwnerEvent::OutputLimit { run, turn } => self.cancel_turn(run, turn),
         }
     }
 
@@ -108,7 +149,24 @@ impl OwnerTransition {
             }
             SessionOwnerCommand::WarmPrompt(input) => self.admit_warm(input),
             SessionOwnerCommand::Prompt { input, admission } => self.admit_prompt(input, admission),
+            SessionOwnerCommand::PromptWithSkills {
+                input,
+                admission,
+                selected,
+            } => self.admit_selected_prompt(input, admission, selected),
             SessionOwnerCommand::Steer { input, supported } => self.admit_steer(input, supported),
+            SessionOwnerCommand::SteerExisting { input, supported } => {
+                self.admit_existing_steer(input, supported)
+            }
+            SessionOwnerCommand::PlaceDelivery { input, delivery } => {
+                self.place_delivery(input, delivery)
+            }
+            SessionOwnerCommand::QueueColdDelivery {
+                input,
+                attempt,
+                selected,
+                record_evidence,
+            } => self.queue_cold_delivery(input, attempt, selected, record_evidence),
             SessionOwnerCommand::CancelTurn { generation, turn } => {
                 self.cancel_turn(generation, turn)
             }
@@ -119,7 +177,27 @@ impl OwnerTransition {
                 input,
                 setting,
                 value,
-            } => self.start_setting(input, setting, value),
+                expected_model,
+            } => self.admit_setting(super::QueuedSetting {
+                input,
+                setting,
+                value,
+                expected_model,
+                context: None,
+            }),
+            SessionOwnerCommand::SetInContext {
+                input,
+                setting,
+                value,
+                expected_model,
+                reuse_confirmed,
+            } => self.admit_setting(super::QueuedSetting {
+                input,
+                setting,
+                value,
+                expected_model,
+                context: Some(super::TurnSettingContext { reuse_confirmed }),
+            }),
             SessionOwnerCommand::CancelSetting { input, setting } => {
                 self.cancel_setting(&input, setting)
             }
@@ -173,6 +251,12 @@ impl OwnerTransition {
             SessionStoreResult::SteerDispatch { input, outcome } => {
                 self.steer_marked(&input, outcome)
             }
+            SessionStoreResult::DispatchBlockedByUnknown { input, operation } => {
+                self.dispatch_blocked_by_unknown(&input, operation)
+            }
+            SessionStoreResult::LateCancelledPromptReconciled { input, outcome } => {
+                self.late_cancelled_prompt_reconciled(&input, outcome)
+            }
             SessionStoreResult::ConfirmedSetting { setting, outcome } => {
                 self.setting_recorded(setting, outcome)
             }
@@ -183,6 +267,9 @@ impl OwnerTransition {
         let (next, effects) = SessionCellMachine::transition(&self.next.cell, event).map_err(
             |error| match error {
                 TransitionError::Stale => OwnerRejection::IgnoredLate,
+                TransitionError::Domain(crate::session_cell_machine::SessionCellRefusal::Turn(
+                    crate::session_turn_machine::SessionTurnRefusal::CannotSteer,
+                )) => SessionOwnerRefusal::CannotSteer.into(),
                 refusal => OwnerRejection::Refused(SessionOwnerRefusal::Cell(refusal)),
             },
         )?;
@@ -206,6 +293,11 @@ impl OwnerTransition {
             SessionOwnerEffect::Wire(request) => self.effects.push(OwnerEffect::Wire(request)),
             SessionOwnerEffect::Store(request) => self.effects.push(OwnerEffect::Store(request)),
             SessionOwnerEffect::Publish(fact) => self.publish_fact(fact),
+            SessionOwnerEffect::Reply(
+                reply @ (super::SessionOwnerReply::SettingFinished { .. }
+                | super::SessionOwnerReply::SettingNotSent { .. }
+                | super::SessionOwnerReply::ModelFastFinished { .. }),
+            ) => self.effects.push(OwnerEffect::Reply(reply)),
             SessionOwnerEffect::Reply(reply) => self.record_terminal(reply),
             SessionOwnerEffect::RetireRoute(run) => {
                 self.effects.push(OwnerEffect::RetireRoute(run))
@@ -241,9 +333,9 @@ impl OwnerTransition {
     }
 }
 
-fn remote_effect(outcome: &WireOutcome<()>) -> RemoteEffect {
+fn remote_effect<T>(outcome: &WireOutcome<T>) -> RemoteEffect {
     match outcome {
-        WireOutcome::Confirmed(()) => RemoteEffect::Applied,
+        WireOutcome::Confirmed(_) => RemoteEffect::Applied,
         WireOutcome::Refused => RemoteEffect::None,
         WireOutcome::Unknown => RemoteEffect::Unknown,
     }

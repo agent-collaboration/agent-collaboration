@@ -1,12 +1,13 @@
 //! Ordered operation and saved-setup stores for a single provider session.
 
+use crate::binding_dispatch_permit::{BindingUncertainty, UnknownRecovery, lock};
 use collaboration_protocol::{
     OperationId, ProviderOperationEffect, ProviderPromptStopReason, ProviderReconciliationState,
     SessionRef,
 };
 use collaboration_runtime::{
-    ProviderOperationRecord, ProviderOperationStore, ProviderOperationStoreError,
-    ProviderSessionRecord,
+    ProviderOperationAdmission, ProviderOperationRecord, ProviderOperationStore,
+    ProviderOperationStoreError, ProviderSessionRecord,
 };
 use provider_session_machines::session_owner::OwnerIncarnation;
 use router_clock::{ClockInstant, RuntimeClock};
@@ -31,11 +32,17 @@ pub struct MarkedInput {
 pub enum SessionStoreWrite {
     MarkDispatch(MarkedInput),
     UndoDispatch(MarkedInput),
+    ReconcileLateCancelledPrompt(OperationId),
     Terminal {
         operation: OperationId,
         effect: ProviderOperationEffect,
         reconciliation: ProviderReconciliationState,
         stop_reason: Option<ProviderPromptStopReason>,
+        recovery: UnknownRecovery,
+    },
+    ActivatedSession {
+        operation: OperationId,
+        record: Box<ProviderSessionRecord>,
     },
     SaveMode(String),
 }
@@ -45,6 +52,7 @@ pub enum SessionStoreSettlement {
     Operation(Box<ProviderOperationRecord>),
     Setup(Option<Box<ProviderSessionRecord>>),
     ModeSaved,
+    Activated,
     MarkNeverWritten,
     HandedOver,
 }
@@ -55,6 +63,8 @@ pub enum SessionStoreOfferError {
     Replaced,
     #[error("the session's store lane stopped")]
     Stopped,
+    #[error("not sent: an earlier outcome is unknown")]
+    EarlierOutcomeUnknown { operation: uuid::Uuid },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -63,6 +73,8 @@ pub enum SessionStoreWaitError {
     Elapsed,
     #[error("the session's store lane stopped")]
     Stopped,
+    #[error("not sent: an earlier outcome is unknown")]
+    EarlierOutcomeUnknown { operation: uuid::Uuid },
     #[error(transparent)]
     Store(#[from] ProviderOperationStoreError),
 }
@@ -109,7 +121,11 @@ pub struct SessionStoreLaneTask {
 
 struct LaneQueue {
     state: Mutex<LaneState>,
+    target: SessionRef,
+    binding: Arc<std::sync::OnceLock<Arc<BindingUncertainty>>>,
     ready: Notify,
+    #[cfg(any(test, feature = "test-support"))]
+    mark_accepted: Notify,
     clock: Arc<dyn RuntimeClock>,
 }
 
@@ -118,6 +134,18 @@ struct LaneState {
     closed: bool,
     queue: VecDeque<LaneEntry>,
     marks: BTreeMap<OperationId, AcceptedMark>,
+    queued_admissions: BTreeMap<OperationId, QueuedAdmission>,
+}
+
+struct QueuedAdmission {
+    owner: OwnerIncarnation,
+    state: QueuedAdmissionState,
+}
+
+enum QueuedAdmissionState {
+    Waiting(Box<ProviderOperationAdmission>),
+    MarkOffered,
+    MarkRefused,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -134,6 +162,10 @@ struct AcceptedMark {
 
 enum LaneRequest {
     Write(SessionStoreWrite),
+    FirstQueuedDispatch {
+        marked: MarkedInput,
+        admission: Box<ProviderOperationAdmission>,
+    },
     ReadSetup,
     SettleFailedOwnerMark(MarkedInput),
     Handover,
@@ -153,6 +185,16 @@ impl SessionStoreLane {
         store: Arc<AsyncMutex<ProviderOperationStore>>,
         clock: Arc<dyn RuntimeClock>,
     ) -> (Self, SessionStoreLaneTask) {
+        Self::with_binding(owner, target, store, clock, Arc::default())
+    }
+
+    pub(crate) fn with_binding(
+        owner: OwnerIncarnation,
+        target: SessionRef,
+        store: Arc<AsyncMutex<ProviderOperationStore>>,
+        clock: Arc<dyn RuntimeClock>,
+        binding: Arc<std::sync::OnceLock<Arc<BindingUncertainty>>>,
+    ) -> (Self, SessionStoreLaneTask) {
         let lane = Self {
             inner: Arc::new(LaneQueue {
                 state: Mutex::new(LaneState {
@@ -160,8 +202,13 @@ impl SessionStoreLane {
                     closed: false,
                     queue: VecDeque::new(),
                     marks: BTreeMap::new(),
+                    queued_admissions: BTreeMap::new(),
                 }),
+                target: target.clone(),
+                binding,
                 ready: Notify::new(),
+                #[cfg(any(test, feature = "test-support"))]
+                mark_accepted: Notify::new(),
                 clock,
             }),
         };
@@ -195,15 +242,78 @@ impl SessionStoreLane {
         self.enqueue(owner, LaneRequest::ReadSetup)
     }
 
+    pub(crate) fn defer_queued_admission(
+        &self,
+        owner: OwnerIncarnation,
+        admission: ProviderOperationAdmission,
+    ) -> Result<(), SessionStoreOfferError> {
+        let mut state = self.state();
+        state.check(owner)?;
+        state.queued_admissions.insert(
+            admission.operation_id.clone(),
+            QueuedAdmission {
+                owner,
+                state: QueuedAdmissionState::Waiting(Box::new(admission)),
+            },
+        );
+        Ok(())
+    }
+
+    pub(crate) fn release_queued_admission(
+        &self,
+        owner: OwnerIncarnation,
+        operation: &OperationId,
+    ) {
+        let mut state = self.state();
+        if state
+            .queued_admissions
+            .get(operation)
+            .is_some_and(|queued| {
+                queued.owner == owner && matches!(queued.state, QueuedAdmissionState::Waiting(_))
+            })
+        {
+            state.queued_admissions.remove(operation);
+            state.marks.remove(operation);
+        }
+    }
+
     fn enqueue(
         &self,
         owner: OwnerIncarnation,
         request: LaneRequest,
     ) -> Result<SessionStoreTicket, SessionStoreOfferError> {
-        let (entry, ticket) = self.entry(owner, request);
+        let (mut entry, ticket) = self.entry(owner, request);
         let mut state = self.state();
         state.check(owner)?;
+        if let LaneRequest::Write(SessionStoreWrite::Terminal { operation, .. }) = &entry.request
+            && state.has_no_queued_row(owner, operation)
+        {
+            state.queued_admissions.remove(operation);
+            let _caller_gone = entry
+                .reply
+                .send(Ok(SessionStoreSettlement::MarkNeverWritten));
+            return Ok(ticket);
+        }
+        let mut outcomes = self
+            .inner
+            .binding
+            .get()
+            .and_then(|binding| binding.outcomes.get())
+            .map(lock);
         if let LaneRequest::Write(SessionStoreWrite::MarkDispatch(marked)) = &entry.request {
+            if self.inner.binding.get().is_some() && outcomes.is_none() {
+                return Err(SessionStoreOfferError::Stopped);
+            }
+            if let Some(blocker) = outcomes.as_ref().and_then(|outcomes| {
+                outcomes
+                    .blockers(Some(&self.inner.target), true)
+                    .into_iter()
+                    .next()
+            }) {
+                let operation = uuid::Uuid::parse_str(blocker.as_str())
+                    .map_err(|_| SessionStoreOfferError::Stopped)?;
+                return Err(SessionStoreOfferError::EarlierOutcomeUnknown { operation });
+            }
             state.marks.insert(
                 marked.operation.clone(),
                 AcceptedMark {
@@ -212,8 +322,43 @@ impl SessionStoreLane {
                     status: MarkStatus::Accepted,
                 },
             );
+            #[cfg(any(test, feature = "test-support"))]
+            self.inner.mark_accepted.notify_waiters();
+            if let Some(QueuedAdmission {
+                owner: waiting_owner,
+                state: admission_state,
+            }) = state.queued_admissions.get_mut(&marked.operation)
+                && *waiting_owner == owner
+                && matches!(admission_state, QueuedAdmissionState::Waiting(_))
+                && let QueuedAdmissionState::Waiting(admission) =
+                    std::mem::replace(admission_state, QueuedAdmissionState::MarkOffered)
+            {
+                entry.request = LaneRequest::FirstQueuedDispatch {
+                    marked: marked.clone(),
+                    admission,
+                };
+            }
+        }
+        if let LaneRequest::Write(SessionStoreWrite::Terminal {
+            operation,
+            effect: ProviderOperationEffect::Unknown,
+            recovery,
+            ..
+        }) = &entry.request
+        {
+            if self.inner.binding.get().is_some() && outcomes.is_none() {
+                return Err(SessionStoreOfferError::Stopped);
+            }
+            if let Some(outcomes) = &mut outcomes {
+                outcomes.record_unknown(
+                    operation.clone(),
+                    Some(self.inner.target.clone()),
+                    *recovery,
+                );
+            }
         }
         state.queue.push_back(entry);
+        drop(outcomes);
         self.inner.ready.notify_one();
         Ok(ticket)
     }
@@ -231,6 +376,29 @@ impl SessionStoreLane {
                 input: accepted.input.clone(),
             })
             .collect()
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn notice_fixture_wait(
+        &self,
+        wait: crate::binding_store_fixture::BindingFixtureWait,
+    ) {
+        if let Some(binding) = self.inner.binding.get() {
+            binding.fixture.waiting(&self.inner.target, wait);
+        }
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) async fn wait_for_accepted_mark(&self, operation: &OperationId) {
+        loop {
+            let accepted = self.inner.mark_accepted.notified();
+            tokio::pin!(accepted);
+            accepted.as_mut().enable();
+            if self.state().marks.contains_key(operation) {
+                return;
+            }
+            accepted.await;
+        }
     }
 
     pub fn handover(
@@ -286,6 +454,12 @@ impl SessionStoreLane {
 }
 
 impl LaneState {
+    fn has_no_queued_row(&self, owner: OwnerIncarnation, operation: &OperationId) -> bool {
+        self.queued_admissions.get(operation).is_some_and(|queued| {
+            queued.owner == owner && !matches!(queued.state, QueuedAdmissionState::MarkOffered)
+        })
+    }
+
     fn check(&self, owner: OwnerIncarnation) -> Result<(), SessionStoreOfferError> {
         if self.closed {
             Err(SessionStoreOfferError::Stopped)
@@ -331,6 +505,26 @@ impl SessionStoreLaneTask {
         } = entry;
         let result = match request {
             LaneRequest::Write(write) => self.write(owner, write, offered_at_ms).await,
+            LaneRequest::FirstQueuedDispatch { marked, admission } => {
+                let result = self
+                    .store
+                    .lock()
+                    .await
+                    .admit_queued_prompt_at_dispatch(*admission, &self.target, offered_at_ms)
+                    .await;
+                self.record_mark_result(owner, &marked, &result);
+                if matches!(result, Err(ProviderOperationStoreError::TransitionConflict))
+                    && let Some(queued) = self
+                        .lane
+                        .state()
+                        .queued_admissions
+                        .get_mut(&marked.operation)
+                    && queued.owner == owner
+                {
+                    queued.state = QueuedAdmissionState::MarkRefused;
+                }
+                result.map(|row| SessionStoreSettlement::Operation(Box::new(row)))
+            }
             LaneRequest::ReadSetup => self
                 .store
                 .lock()
@@ -339,10 +533,11 @@ impl SessionStoreLaneTask {
                 .await
                 .map(|setup| SessionStoreSettlement::Setup(setup.map(Box::new))),
             LaneRequest::Handover => {
-                self.lane
-                    .state()
-                    .marks
-                    .retain(|_, mark| mark.owner != owner);
+                let mut state = self.lane.state();
+                state.marks.retain(|_, mark| mark.owner != owner);
+                state
+                    .queued_admissions
+                    .retain(|_, queued| queued.owner != owner);
                 Ok(SessionStoreSettlement::HandedOver)
             }
             LaneRequest::SettleFailedOwnerMark(marked) => {
@@ -364,6 +559,7 @@ impl SessionStoreLaneTask {
                             effect: ProviderOperationEffect::None,
                             reconciliation: ProviderReconciliationState::Confirmed,
                             stop_reason: None,
+                            recovery: UnknownRecovery::Blocks,
                         },
                         offered_at_ms,
                     )
@@ -382,22 +578,33 @@ impl SessionStoreLaneTask {
         request: SessionStoreWrite,
         offered_at_ms: i64,
     ) -> Result<SessionStoreSettlement, ProviderOperationStoreError> {
+        if let SessionStoreWrite::Terminal { operation, .. } = &request {
+            let mut state = self.lane.state();
+            if state.has_no_queued_row(owner, operation) {
+                state.queued_admissions.remove(operation);
+                state.marks.remove(operation);
+                return Ok(SessionStoreSettlement::MarkNeverWritten);
+            }
+        }
+        #[cfg(any(test, feature = "test-support"))]
+        if let Some(binding) = self.lane.inner.binding.get() {
+            match &request {
+                SessionStoreWrite::Terminal { operation, .. } => {
+                    binding.fixture.hold_terminal_write(operation).await
+                }
+                SessionStoreWrite::SaveMode(value) => {
+                    binding.fixture.hold_mode_write(&self.target, value).await
+                }
+                _ => {}
+            }
+        }
         let mut store = self.store.lock().await;
         match request {
             SessionStoreWrite::MarkDispatch(marked) => {
                 let result = store
                     .mark_may_have_dispatched(&marked.operation, offered_at_ms)
                     .await;
-                if matches!(
-                    result,
-                    Err(ProviderOperationStoreError::NotFound
-                        | ProviderOperationStoreError::TransitionConflict)
-                ) && let Some(mark) = self.lane.state().marks.get_mut(&marked.operation)
-                    && mark.owner == owner
-                    && mark.input == marked.input
-                {
-                    mark.status = MarkStatus::DefinitivelyFailed;
-                }
+                self.record_mark_result(owner, &marked, &result);
                 result.map(|row| SessionStoreSettlement::Operation(Box::new(row)))
             }
             SessionStoreWrite::UndoDispatch(marked) => {
@@ -407,11 +614,27 @@ impl SessionStoreLaneTask {
                 self.lane.state().marks.remove(&marked.operation);
                 Ok(SessionStoreSettlement::Operation(Box::new(row)))
             }
+            SessionStoreWrite::ReconcileLateCancelledPrompt(operation) => {
+                let row = store
+                    .confirm_recorded_target(&operation, offered_at_ms)
+                    .await?;
+                if let Some(outcomes) = self
+                    .lane
+                    .inner
+                    .binding
+                    .get()
+                    .and_then(|binding| binding.outcomes.get())
+                {
+                    lock(outcomes).record_reconciled(operation);
+                }
+                Ok(SessionStoreSettlement::Operation(Box::new(row)))
+            }
             SessionStoreWrite::Terminal {
                 operation,
                 effect,
                 reconciliation,
                 stop_reason,
+                ..
             } => {
                 let row = store
                     .record_terminal(
@@ -422,8 +645,14 @@ impl SessionStoreLaneTask {
                         offered_at_ms,
                     )
                     .await?;
-                self.lane.state().marks.remove(&operation);
+                let mut state = self.lane.state();
+                state.marks.remove(&operation);
+                state.queued_admissions.remove(&operation);
                 Ok(SessionStoreSettlement::Operation(Box::new(row)))
+            }
+            SessionStoreWrite::ActivatedSession { operation, record } => {
+                store.settle_session_operation(&operation, &record).await?;
+                Ok(SessionStoreSettlement::Activated)
             }
             SessionStoreWrite::SaveMode(requested) => {
                 store
@@ -431,6 +660,24 @@ impl SessionStoreLaneTask {
                     .await?;
                 Ok(SessionStoreSettlement::ModeSaved)
             }
+        }
+    }
+
+    fn record_mark_result(
+        &self,
+        owner: OwnerIncarnation,
+        marked: &MarkedInput,
+        result: &Result<ProviderOperationRecord, ProviderOperationStoreError>,
+    ) {
+        if matches!(
+            result,
+            Err(ProviderOperationStoreError::NotFound
+                | ProviderOperationStoreError::TransitionConflict)
+        ) && let Some(mark) = self.lane.state().marks.get_mut(&marked.operation)
+            && mark.owner == owner
+            && mark.input == marked.input
+        {
+            mark.status = MarkStatus::DefinitivelyFailed;
         }
     }
 }

@@ -114,6 +114,7 @@ async fn broker_rig() -> BrokerRig {
 impl BrokerRig {
     fn context(&self) -> ExternalProviderApprovalContext {
         ExternalProviderApprovalContext {
+            owner_scope: None,
             requester: self.requester.clone().into(),
             approver: self.approver.clone(),
             target: self.target.clone(),

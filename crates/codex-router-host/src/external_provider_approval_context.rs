@@ -14,4 +14,11 @@ pub struct ExternalProviderApprovalContext {
     pub operation_id: OperationId,
     pub binding_generation: CodexGeneration,
     pub binding_retirement: CancellationToken,
+    pub owner_scope: Option<OwnerApprovalScope>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct OwnerApprovalScope {
+    pub run: provider_session_machines::SessionGeneration,
+    pub turn: provider_session_machines::session_turn_machine::TurnId,
 }

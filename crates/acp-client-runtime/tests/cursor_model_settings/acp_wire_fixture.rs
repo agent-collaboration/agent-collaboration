@@ -1,9 +1,10 @@
 use std::{path::PathBuf, sync::Arc};
 
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::{
-    AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
-    HistoryReplayFuture, InteractionFuture, InteractionPort, ProviderBehavior,
-    ProviderPersistenceTarget, RefusedApprovalOffer, SessionEventSink,
+    ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch, HistoryReplayFuture,
+    InteractionFuture, InteractionPort, ProviderBehavior, ProviderPersistenceTarget,
+    RefusedApprovalOffer, SessionEventSink,
 };
 use session_event_model::{ApprovalRequest, SessionEvent, SessionSettings};
 use tokio_util::sync::CancellationToken;

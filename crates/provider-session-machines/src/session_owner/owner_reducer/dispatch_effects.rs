@@ -3,10 +3,10 @@ use crate::SessionGeneration;
 use crate::queued_entry_machine::SentOutcome;
 use crate::session_cell_machine::SessionCellEvent;
 use crate::session_owner::{
-    AuthorizationStatus, AuthorizationTarget, AuthorizedWork, DispatchAuthorization,
-    DispatchResult, InputWait, OwnerDeadline, OwnerEffect, OwnerInput, PendingAuthorization,
-    RevokeReason, SessionOwnerEffect, SessionPublication, SessionTurn, TurnId, TurnMembership,
-    WireOutcome,
+    AuthorizationStatus, AuthorizationTarget, AuthorizedWork, CancelDrainReport,
+    DispatchAuthorization, DispatchResult, InputWait, OwnerDeadline, OwnerEffect, OwnerInput,
+    PendingAuthorization, RevokeReason, SessionOwnerEffect, SessionPublication, SessionTurn,
+    TurnId, TurnMembership, WireOutcome,
 };
 use session_event_model::InputId;
 
@@ -67,6 +67,13 @@ impl OwnerTransition {
                     && pending.wait == InputWait::Wire
             })
             .map(|pending| pending.input.clone())
+            .or_else(|| {
+                self.next
+                    .ports
+                    .provider_started_turn
+                    .clone()
+                    .filter(|input| input.generation == generation && input.turn == turn)
+            })
             .ok_or(OwnerRejection::IgnoredLate)?;
         self.issue_authorization(AuthorizedWork::Cancel(foreground))
     }
@@ -98,21 +105,30 @@ impl OwnerTransition {
                 },
             ));
         }
+        let cancel = matches!(work, AuthorizedWork::Cancel(_));
         self.next.ports.authorizations.insert(
             authorization.clone(),
             PendingAuthorization {
                 work: work.clone(),
-                status: AuthorizationStatus::Offered,
+                status: if cancel {
+                    AuthorizationStatus::DrainingCancel
+                } else {
+                    AuthorizationStatus::Offered
+                },
             },
         );
-        self.effects.push(OwnerEffect::Authorize {
-            authorization: authorization.clone(),
-            work,
-        });
-        self.arm(
-            OwnerDeadline::Enqueue(authorization),
-            super::publication_effects::LOCAL_BUDGET,
-        );
+        let deadline = if cancel {
+            self.effects
+                .push(OwnerEffect::DrainCancel(authorization.clone()));
+            OwnerDeadline::CancelDrain(authorization)
+        } else {
+            self.effects.push(OwnerEffect::Authorize {
+                authorization: authorization.clone(),
+                work,
+            });
+            OwnerDeadline::Enqueue(authorization)
+        };
+        self.arm(deadline, super::publication_effects::LOCAL_BUDGET);
         Ok(())
     }
 
@@ -143,7 +159,11 @@ impl OwnerTransition {
             .authorizations
             .iter()
             .filter(|(key, pending)| {
-                key.run == run && !matches!(pending.work, AuthorizedWork::Cancel(_))
+                key.run == run
+                    && matches!(
+                        pending.status,
+                        AuthorizationStatus::DrainingCancel | AuthorizationStatus::Offered
+                    )
             })
             .map(|(key, _)| key.clone())
             .collect();
@@ -163,7 +183,10 @@ impl OwnerTransition {
             .authorizations
             .get_mut(authorization)
             .ok_or(OwnerRejection::IgnoredLate)?;
-        if pending.status != AuthorizationStatus::Offered {
+        if !matches!(
+            pending.status,
+            AuthorizationStatus::DrainingCancel | AuthorizationStatus::Offered
+        ) {
             return Err(OwnerRejection::IgnoredLate);
         }
         pending.status = AuthorizationStatus::Revoking(reason);
@@ -176,8 +199,15 @@ impl OwnerTransition {
 
     pub(super) fn dispatch_result(&mut self, result: DispatchResult) -> OwnerResult {
         match result {
+            DispatchResult::CancelDrainFinished(authorization) => {
+                self.finish_cancel_drain(authorization, false)
+            }
+            DispatchResult::CancelTaken {
+                authorization,
+                drain,
+            } => self.authorization_taken(&authorization, Some(drain)),
             DispatchResult::Taken(key) | DispatchResult::AlreadyTaken(key) => {
-                self.authorization_taken(&key)
+                self.authorization_taken(&key, None)
             }
             DispatchResult::Revoked(key) => self.authorization_unsent(&key, Unsent::Revoked),
             DispatchResult::DefinitelyUnsent(key) => {
@@ -195,6 +225,21 @@ impl OwnerTransition {
                 };
                 self.finish_prompt(&input, outcome)
             }
+            DispatchResult::PromptFailed {
+                authorization,
+                failure,
+            } => {
+                let AuthorizedWork::Prompt(input) = self.take_wire_result(&authorization)? else {
+                    return Err(OwnerRejection::IgnoredLate);
+                };
+                self.completing_prompt = Some((input.input.clone(), Err(failure)));
+                let outcome = if failure.definitely_no_effect() {
+                    WireOutcome::Refused
+                } else {
+                    WireOutcome::Unknown
+                };
+                self.finish_prompt(&input, outcome)
+            }
             DispatchResult::SteerFinished {
                 authorization,
                 outcome,
@@ -203,6 +248,28 @@ impl OwnerTransition {
                     return Err(OwnerRejection::IgnoredLate);
                 };
                 self.finish_steer(&input, outcome)
+            }
+            DispatchResult::SteerInvalidReply(authorization) => {
+                let AuthorizedWork::Steer(input) = self.take_wire_result(&authorization)? else {
+                    return Err(OwnerRejection::IgnoredLate);
+                };
+                if !self.steer_is_pending(&input, InputWait::Wire) {
+                    return Err(OwnerRejection::IgnoredLate);
+                }
+                self.next.steer = None;
+                self.record_terminal(crate::session_owner::SessionOwnerReply::SteerInvalidReply {
+                    input,
+                });
+                Ok(())
+            }
+            DispatchResult::SteerStartedNewTurn {
+                authorization,
+                turn,
+            } => {
+                let AuthorizedWork::Steer(input) = self.take_wire_result(&authorization)? else {
+                    return Err(OwnerRejection::IgnoredLate);
+                };
+                self.steer_started_new_turn(input, turn)
             }
             DispatchResult::PromptRequired {
                 authorization,
@@ -228,24 +295,72 @@ impl OwnerTransition {
                 let AuthorizedWork::Setting { setting, .. } = pending.work else {
                     return Err(OwnerRejection::IgnoredLate);
                 };
-                self.setting_on_wire(setting, observation)?;
                 self.next.ports.authorizations.remove(&authorization);
+                self.setting_on_wire(setting, observation)?;
+                self.continue_close()
+            }
+            DispatchResult::SettingKept {
+                authorization,
+                reason,
+            } => {
+                let Some(pending) = self.next.ports.authorizations.get(&authorization) else {
+                    return Err(OwnerRejection::IgnoredLate);
+                };
+                let AuthorizedWork::Setting { setting, .. } = pending.work else {
+                    return Err(OwnerRejection::IgnoredLate);
+                };
+                if pending.status != AuthorizationStatus::Offered
+                    || setting.kind != crate::ProviderSettingKind::Mode
+                {
+                    return Err(OwnerRejection::IgnoredLate);
+                }
+                self.next.ports.authorizations.remove(&authorization);
+                self.setting_kept(setting, reason)?;
                 self.continue_close()
             }
         }
     }
 
-    fn authorization_taken(&mut self, key: &DispatchAuthorization) -> OwnerResult {
+    pub(super) fn finish_cancel_drain(
+        &mut self,
+        authorization: DispatchAuthorization,
+        expired: bool,
+    ) -> OwnerResult {
+        let pending = self
+            .next
+            .ports
+            .authorizations
+            .get_mut(&authorization)
+            .filter(|pending| pending.status == AuthorizationStatus::DrainingCancel)
+            .ok_or(OwnerRejection::IgnoredLate)?;
+        pending.status = AuthorizationStatus::Offered;
+        self.effects.push(OwnerEffect::TakeCancel {
+            authorization,
+            expired,
+        });
+        Ok(())
+    }
+
+    fn authorization_taken(
+        &mut self,
+        key: &DispatchAuthorization,
+        drain: Option<CancelDrainReport>,
+    ) -> OwnerResult {
         let pending = self
             .next
             .ports
             .authorizations
             .get_mut(key)
             .ok_or(OwnerRejection::IgnoredLate)?;
+        if matches!(pending.work, AuthorizedWork::Cancel(_)) != drain.is_some() {
+            return Err(OwnerRejection::IgnoredLate);
+        }
         let revoke_reason = match pending.status {
             AuthorizationStatus::Offered => None,
             AuthorizationStatus::Revoking(reason) => Some(reason),
-            AuthorizationStatus::Taken => return Err(OwnerRejection::IgnoredLate),
+            AuthorizationStatus::DrainingCancel | AuthorizationStatus::Taken => {
+                return Err(OwnerRejection::IgnoredLate);
+            }
         };
         pending.status = AuthorizationStatus::Taken;
         match pending.work.clone() {
@@ -257,15 +372,19 @@ impl OwnerTransition {
                     .find(|pending| pending.input == input)
                     .ok_or(OwnerRejection::IgnoredLate)?;
                 prompt.wait = InputWait::Wire;
+                self.effects.push(OwnerEffect::PromptTaken(input.clone()));
                 if self.is_live(input.generation) {
                     self.release(SessionOwnerEffect::Publish(
                         SessionPublication::TurnStarted {
                             generation: input.generation,
                             turn: input.turn,
+                            input: input.input.clone(),
                         },
                     ));
                     if revoke_reason == Some(RevokeReason::Cancelled) {
                         self.cancel_turn(input.generation, input.turn)?;
+                    } else {
+                        self.steer_contending_auto_after_take(&input)?;
                     }
                 } else if self
                     .closing()
@@ -287,12 +406,18 @@ impl OwnerTransition {
             }
             AuthorizedWork::Setting { setting, .. } => self.setting_taken(setting),
             AuthorizedWork::Cancel(input) => {
+                let drain = drain.ok_or(OwnerRejection::IgnoredLate)?;
                 if self.is_live(input.generation)
                     && self.next.turn() == (SessionTurn::Running { turn: input.turn })
                 {
                     self.cell_move(SessionCellEvent::CancelTurn)?;
+                    self.wait_for_cancel_confirmation(key.clone(), input);
                 }
                 self.next.ports.authorizations.remove(key);
+                self.effects.push(OwnerEffect::CancelSent {
+                    authorization: key.clone(),
+                    drain,
+                });
                 self.continue_close()?;
             }
         }
@@ -317,6 +442,7 @@ impl OwnerTransition {
             }
             (
                 AuthorizationStatus::Taken
+                | AuthorizationStatus::DrainingCancel
                 | AuthorizationStatus::Offered
                 | AuthorizationStatus::Revoking(_),
                 Unsent::Transport,
@@ -353,10 +479,20 @@ impl OwnerTransition {
             }
             AuthorizedWork::Steer(input) => self.unmark_steer_unsent(&input, reason),
             AuthorizedWork::Setting { setting, .. } => self.setting_unsent(setting)?,
-            AuthorizedWork::Cancel(_) => self.effects.push(OwnerEffect::CancelNotSent {
-                authorization: key.clone(),
-                reason,
-            }),
+            AuthorizedWork::Cancel(input) => {
+                self.effects.push(OwnerEffect::CancelNotSent {
+                    authorization: key.clone(),
+                    reason,
+                });
+                if reason == RevokeReason::Closed
+                    && self
+                        .closing()
+                        .is_some_and(|(run, _)| run.generation == input.generation)
+                    && self.next.turn() == (SessionTurn::Cancelling { turn: input.turn })
+                {
+                    self.issue_cancel(input.generation, input.turn)?;
+                }
+            }
         }
         self.continue_close()
     }
@@ -409,7 +545,12 @@ impl OwnerTransition {
             .collect();
         for (key, pending) in pending {
             match (&pending.status, &pending.work) {
-                (AuthorizationStatus::Offered | AuthorizationStatus::Revoking(_), _) => {
+                (
+                    AuthorizationStatus::DrainingCancel
+                    | AuthorizationStatus::Offered
+                    | AuthorizationStatus::Revoking(_),
+                    _,
+                ) => {
                     let unsent = if matches!(pending.status, AuthorizationStatus::Revoking(_)) {
                         Unsent::Revoked
                     } else {

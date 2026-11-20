@@ -5,9 +5,12 @@ import { AcpExchange } from "./acp-exchange.ts";
 import { requireArgument } from "./acp-stdio.ts";
 import { FixtureControlSocket } from "./fixture-control-socket.ts";
 import { sendSocketNotice } from "./fixture-socket-notice.ts";
+import { fileAppears, startReleaseBarrier } from "./release-barrier.ts";
 
 const mode = requireArgument(2);
 const path = requireArgument(3);
+const holdFirstRefusal = mode === "load" && process.argv[4] === "hold-first-refusal";
+if (holdFirstRefusal) startReleaseBarrier(path);
 const agent = new AcpExchange();
 agent.respond(await agent.read(), {
   protocolVersion: 1,
@@ -45,12 +48,15 @@ async function gatedPrompt(notice: string): Promise<Record<string, unknown>> {
   return request;
 }
 if (mode === "load") {
+  let loads = 0;
   for (;;) {
     const request = await agent.readRequest();
     if (request === undefined) break;
     assert.equal(request.method, "session/load");
     assert.equal(field(request, "params", "sessionId"), "fixture-session");
     appendFileSync(path, "session/load\n");
+    loads += 1;
+    if (holdFirstRefusal && loads === 1) await fileAppears(`${path}.release-first`);
     agent.send({
       jsonrpc: "2.0",
       id: request.id,

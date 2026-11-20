@@ -70,9 +70,18 @@ pub(crate) fn acp_blocks_from_prompt_content(contents: Vec<PromptContent>) -> Ve
 #[derive(Clone, Debug)]
 pub struct ProviderPromptContent {
     blocks: Vec<ContentBlock>,
+    history_text: Option<String>,
+    selected_skills: Vec<session_event_model::SelectedSkill>,
 }
 
 impl ProviderPromptContent {
+    pub fn from_session_contents(
+        contents: Vec<PromptContent>,
+        capabilities: &ProviderCapabilityReport,
+    ) -> Result<Self, ExternalProviderRuntimeError> {
+        Self::new(acp_blocks_from_prompt_content(contents), capabilities)
+    }
+
     pub(crate) fn new(
         blocks: Vec<ContentBlock>,
         capabilities: &ProviderCapabilityReport,
@@ -92,18 +101,41 @@ impl ProviderPromptContent {
                 return Err(ExternalProviderRuntimeError::UnsupportedContent { content_type });
             }
         }
-        Ok(Self { blocks })
+        let history_text =
+            join_submitted_text_blocks(blocks.iter().filter_map(|block| match block {
+                ContentBlock::Text(content) => Some(content.text.as_str()),
+                _ => None,
+            }));
+        Ok(Self {
+            blocks,
+            history_text: Some(history_text),
+            selected_skills: Vec::new(),
+        })
     }
 
     pub(crate) fn into_blocks(self) -> Vec<ContentBlock> {
         self.blocks
     }
 
-    pub(crate) fn submitted_text(&self) -> String {
-        join_submitted_text_blocks(self.blocks.iter().filter_map(|block| match block {
-            ContentBlock::Text(content) => Some(content.text.as_str()),
-            _ => None,
-        }))
+    pub fn submitted_text(&self) -> Option<&str> {
+        self.history_text.as_deref()
+    }
+
+    pub(crate) fn is_compaction(&self) -> bool {
+        self.history_text.is_none()
+    }
+
+    pub fn selected_skills(&self) -> &[session_event_model::SelectedSkill] {
+        &self.selected_skills
+    }
+
+    pub(crate) fn set_input_context(
+        &mut self,
+        text: Option<String>,
+        selected: Vec<session_event_model::SelectedSkill>,
+    ) {
+        self.history_text = text;
+        self.selected_skills = selected;
     }
 
     #[cfg(feature = "test-observation")]

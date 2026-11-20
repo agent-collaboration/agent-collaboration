@@ -41,45 +41,71 @@ impl HostInteractionPort {
         *self.event_sink.write().await = Some(event_sink);
     }
 
-    /// The session's run now: an interaction publishes into the run it was
-    /// requested in, even after a long wait for its answer (D1 R14).
-    async fn current_generation(&self, session_id: &str) -> Option<SessionGeneration> {
-        let event_sink = self.event_sink.read().await.clone()?;
-        Some(event_sink.current_generation(session_id))
+    async fn publication_scope(
+        &self,
+        session_id: &str,
+        context: &ExternalProviderApprovalContext,
+    ) -> PublicationScope {
+        if let Some(scope) = context.owner_scope {
+            return PublicationScope::Turn(scope);
+        }
+        self.event_sink
+            .read()
+            .await
+            .as_ref()
+            .map_or(PublicationScope::Current, |sink| {
+                PublicationScope::Run(sink.current_generation(session_id))
+            })
     }
 
-    /// Publishes into `generation`'s run (dropped once it ended), or, with
-    /// none, whatever run is current: only connection-wide work does that.
     async fn publish(
         &self,
         session_id: &str,
-        generation: Option<SessionGeneration>,
+        scope: PublicationScope,
         event: SessionEvent,
     ) -> bool {
-        let Some(event_sink) = self.event_sink.read().await.clone() else {
+        use acp_client_runtime::GenerationPublication;
+        let Some(sink) = self.event_sink.read().await.clone() else {
             return true;
         };
-        let published = match generation {
-            Some(generation) => event_sink
+        let published = match scope {
+            PublicationScope::Turn(expected) => sink
+                .publish_for_turn(session_id, expected.run, expected.turn, event)
+                .map(|result| result == GenerationPublication::Published),
+            PublicationScope::Run(generation) => sink
                 .publish_in(session_id, generation, event)
-                .map(|_| ()),
-            None => event_sink.publish(session_id, event),
+                .map(|result| result == GenerationPublication::Published),
+            PublicationScope::Current => sink.publish(session_id, event).map(|()| true),
         };
         if published.is_err() {
             tracing::error!(
                 session_id,
                 "provider interaction event could not be published"
             );
-            return false;
         }
-        true
+        published.unwrap_or(false)
     }
+}
+
+#[derive(Clone, Copy)]
+enum PublicationScope {
+    Current,
+    Run(SessionGeneration),
+    Turn(crate::external_provider_approval_context::OwnerApprovalScope),
 }
 
 impl InteractionPort for HostInteractionPort {
     type Context = ExternalProviderApprovalContext;
     type OperationId = OperationId;
 
+    fn bind_owner_scope(
+        context: &mut Self::Context,
+        run: SessionGeneration,
+        turn: provider_session_machines::session_turn_machine::TurnId,
+    ) {
+        context.owner_scope =
+            Some(crate::external_provider_approval_context::OwnerApprovalScope { run, turn });
+    }
     fn operation_id(context: &Self::Context) -> Self::OperationId {
         context.operation_id.clone()
     }
@@ -104,7 +130,7 @@ impl InteractionPort for HostInteractionPort {
             };
             let request_id = request.request_id.clone();
             let session_id = String::from(context.target.session_id.clone());
-            let generation = self.current_generation(&session_id).await;
+            let scope = self.publication_scope(&session_id, &context).await;
             let pending_event = SessionEvent::InteractionRequested {
                 interaction: PendingInteraction::Approval {
                     approver: approver.clone(),
@@ -161,7 +187,7 @@ impl InteractionPort for HostInteractionPort {
                     return ApprovalPortOutcome::Unavailable;
                 }
             };
-            if !self.publish(&session_id, generation, pending_event).await {
+            if !self.publish(&session_id, scope, pending_event).await {
                 let _ = broker
                     .cancel_typed_approval(&request_id, "eventPublicationFailed")
                     .await;
@@ -198,7 +224,7 @@ impl InteractionPort for HostInteractionPort {
                 let _ = self
                     .publish(
                         &session_id,
-                        generation,
+                        scope,
                         SessionEvent::InteractionResolved { request_id },
                     )
                     .await;
@@ -242,7 +268,7 @@ impl InteractionPort for HostInteractionPort {
             }
             let request_id = request.request_id.clone();
             let session_id = String::from(context.target.session_id.clone());
-            let generation = self.current_generation(&session_id).await;
+            let scope = self.publication_scope(&session_id, &context).await;
             let pending_event = SessionEvent::InteractionRequested {
                 interaction: PendingInteraction::Question {
                     approver: approver.clone(),
@@ -264,7 +290,7 @@ impl InteractionPort for HostInteractionPort {
                     return QuestionResponse::Cancelled;
                 }
             };
-            if !self.publish(&session_id, generation, pending_event).await {
+            if !self.publish(&session_id, scope, pending_event).await {
                 let _ = broker
                     .cancel_question(&request_id, "eventPublicationFailed")
                     .await;
@@ -297,7 +323,7 @@ impl InteractionPort for HostInteractionPort {
                 let _ = self
                     .publish(
                         &session_id,
-                        generation,
+                        scope,
                         SessionEvent::InteractionResolved { request_id },
                     )
                     .await;
@@ -364,12 +390,12 @@ impl InteractionPort for HostInteractionPort {
             match broker.cancel_typed_approvals(&requester, reason).await {
                 Ok(request_ids) => {
                     let session_id = String::from(context.target.session_id.clone());
-                    let generation = self.current_generation(&session_id).await;
+                    let scope = self.publication_scope(&session_id, &context).await;
                     for request_id in request_ids {
                         let _ = self
                             .publish(
                                 &session_id,
-                                generation,
+                                scope,
                                 SessionEvent::InteractionResolved { request_id },
                             )
                             .await;
@@ -382,12 +408,12 @@ impl InteractionPort for HostInteractionPort {
             match broker.cancel_questions(&requester, reason).await {
                 Ok(request_ids) => {
                     let session_id = String::from(context.target.session_id.clone());
-                    let generation = self.current_generation(&session_id).await;
+                    let scope = self.publication_scope(&session_id, &context).await;
                     for request_id in request_ids {
                         let _ = self
                             .publish(
                                 &session_id,
-                                generation,
+                                scope,
                                 SessionEvent::InteractionResolved { request_id },
                             )
                             .await;
@@ -402,24 +428,10 @@ impl InteractionPort for HostInteractionPort {
 
     fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
         Box::pin(async move {
-            if let Some(broker) = self.broker().await {
-                match broker.cancel_retired_typed_approvals().await {
-                    Ok(retired) => {
-                        for (requester, request_id) in retired {
-                            let _ = self
-                                .publish(
-                                    requester.session_id.as_str(),
-                                    // Provider retirement is connection-wide.
-                                    None,
-                                    SessionEvent::InteractionResolved { request_id },
-                                )
-                                .await;
-                        }
-                    }
-                    Err(error) => {
-                        tracing::error!(%error, "failed to cancel retired provider approvals")
-                    }
-                }
+            if let Some(broker) = self.broker().await
+                && let Err(error) = broker.cancel_retired_typed_approvals().await
+            {
+                tracing::error!(%error, "failed to cancel retired provider approvals");
             }
         })
     }
@@ -456,34 +468,6 @@ fn approval_receiver_outcome(
             ApprovalPortOutcome::Cancelled
         }
         Err(_) => ApprovalPortOutcome::Cancelled,
-    }
-}
-
-/// Test-only stand-in for direct runtime fixtures without a Router Host.
-pub(crate) struct NoopSessionEventSink;
-
-impl SessionEventSink for NoopSessionEventSink {
-    fn publish_skill_view(
-        &self,
-        _session_id: &str,
-        _view: session_event_model::SkillView,
-    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
-        Ok(())
-    }
-
-    fn begin_history_replay(
-        &self,
-        _session_id: &str,
-    ) -> acp_client_runtime::HistoryReplayFuture<'_> {
-        Box::pin(async { Ok(()) })
-    }
-
-    fn publish(
-        &self,
-        _session_id: &str,
-        _event: session_event_model::SessionEvent,
-    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
-        Ok(())
     }
 }
 

@@ -41,12 +41,20 @@ mod callback_router;
 mod external_permission_options;
 mod in_folder_allowance;
 mod interaction_port;
+mod owner_callback_routing;
+mod owner_restore_updates;
+pub mod owner_session_creation;
+pub mod owner_session_open;
+mod owner_session_replay;
+pub mod owner_session_setting;
+pub mod owner_session_stream;
+pub mod owner_wire;
 mod permission_mode_plan;
 mod provider_acp_error_mapping;
 mod provider_behavior;
+mod provider_callback_claims;
 mod provider_capability_report;
 mod provider_client_contract;
-mod provider_connection_activity;
 mod provider_cursor_plan_items;
 mod provider_frame_observation;
 mod provider_item_projection;
@@ -54,21 +62,14 @@ mod provider_model_picker;
 mod provider_model_reasoning;
 mod provider_persistence_target;
 mod provider_prompt_content;
-mod provider_prompt_observation;
 mod provider_prompt_result_codec;
 mod provider_restore_failure;
-mod provider_session_actor;
-mod provider_session_runtime_handles;
-mod provider_session_setting_update;
 mod provider_session_settings;
 mod provider_setting_application;
 mod provider_setting_choice;
 mod provider_settings_catalog_codec;
 mod provider_transport_diagnostics;
 mod provider_update_kind;
-mod run_owned_state;
-mod session_cell_bookkeeping;
-mod session_cell_table;
 mod session_event_sink;
 pub mod session_owner_task;
 mod session_runs;
@@ -81,11 +82,16 @@ pub use session_runs::SessionRuns;
 extern crate self as acp_client_runtime;
 #[cfg(test)]
 #[path = "../tests/support/provider_behavior.rs"]
+#[expect(
+    dead_code,
+    reason = "The shared Claude behavior is used by the integration harness."
+)]
 mod test_behavior;
 
 pub use acp_protocol_version::AcpProtocolVersion;
 pub use agent_session_client::*;
 pub(crate) use approval_presentation::reviewed_approval_fields;
+pub use approval_turn_cancellation::{OwnerApprovalDrain, OwnerCancelDrainExecutor};
 pub use external_permission_options::RefusedPermissionOption;
 pub(crate) use external_permission_options::map_permission_options;
 pub use interaction_port::{
@@ -99,12 +105,12 @@ pub use permission_mode_plan::{
 pub use provider_behavior::*;
 pub use provider_capability_report::ProviderCapabilityReport;
 pub use provider_client_contract::ProviderPromptDispatchObservation;
+pub use provider_client_contract::{ProviderSessionActivity, ProviderSteeringOutcome};
 pub use provider_model_picker::ProviderModelPicker;
 pub use provider_model_reasoning::*;
 pub use provider_persistence_target::ProviderPersistenceTarget;
 pub use provider_prompt_content::ProviderPromptContent;
 pub use provider_restore_failure::{RestoreFailure, RestorePhase};
-pub use provider_session_actor::{ProviderSessionActivity, ProviderSteeringOutcome};
 pub use provider_session_settings::{
     AppliedProviderSetting, EffectiveProviderSettings, FailedProviderSetting, FastObserved,
     FastRequest, InvalidSettingSessionDisposition, NotAppliedProviderSetting, ProviderConfigOption,
@@ -112,7 +118,6 @@ pub use provider_session_settings::{
     ProviderSettingRequest, ProviderSettingsCatalog, RequestedProviderSettings,
 };
 pub use provider_setting_choice::ProviderSettingChoice;
-pub use session_cell_table::QueueEntrySink;
 pub use session_event_sink::{
     EventSinkClosed, GenerationPublication, HistoryReplayFuture, HistoryReplayUnavailable,
     SessionEventSink,

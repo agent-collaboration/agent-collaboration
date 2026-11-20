@@ -1,17 +1,50 @@
 use super::{OwnerRejection, OwnerResult, OwnerTransition, remote_effect};
 use crate::queued_entry_machine::{QueuedEntryEffect, SentOutcome};
 use crate::session_cell_machine::{QueuedOperation, SessionCellEffect, SessionCellEvent};
-use crate::session_owner::{AuthorizedWork, OwnerEffect, RevokeReason, TurnMembership};
+use crate::session_lifecycle_machine::SessionLifecycle;
 use crate::session_owner::{
-    EffectOutcome, InputWait, OwnerInput, PendingPrompt, PromptAdmission, RemoteEffect,
-    SessionDeadline, SessionOwnerEffect, SessionOwnerRefusal, SessionOwnerReply,
-    SessionPublication, SessionStoreRequest, WireOutcome,
+    AuthorizedWork, DeliveryPlacementKind, OwnerEffect, RevokeReason, TurnMembership,
+};
+use crate::session_owner::{
+    EffectOutcome, InputWait, LastLiveTurn, OwnerInput, PendingPrompt, PromptAdmission,
+    PromptCompletion, RemoteEffect, SessionDeadline, SessionOwnerEffect, SessionOwnerRefusal,
+    SessionOwnerReply, SessionPublication, SessionStoreRequest, WireOutcome,
 };
 use crate::session_turn_machine::{SessionTurn, TurnId};
 use crate::{SessionGeneration, session_turn_machine::SessionTurnEffect};
-use session_event_model::InputId;
+use session_event_model::{InputId, TurnLostReason, TurnOutcome};
+
+const MAX_WAITING_PROMPTS: usize = 128;
 
 impl OwnerTransition {
+    pub(super) fn admit_selected_prompt(
+        &mut self,
+        input: OwnerInput,
+        admission: PromptAdmission,
+        selected: Vec<session_event_model::SelectedSkill>,
+    ) -> OwnerResult {
+        if !selected.is_empty()
+            && self.is_live(input.generation)
+            && (!selected
+                .iter()
+                .all(|skill| self.next.ports.projection.skills.contains_selection(skill))
+                || matches!(
+                    admission,
+                    PromptAdmission::Auto { .. }
+                        | PromptAdmission::DeliveryAuto {
+                            steering_supported: true
+                        }
+                ) && self.next.turn() != SessionTurn::Idle)
+        {
+            return Err(SessionOwnerRefusal::SkillSelectionChanged.into());
+        }
+        self.next
+            .ports
+            .selected_skills
+            .insert(input.input.clone(), selected);
+        self.admit_prompt(input, admission)
+    }
+
     pub(super) fn admit_prompt(
         &mut self,
         input: OwnerInput,
@@ -32,17 +65,51 @@ impl OwnerTransition {
         if self.next.cell.settings_held() {
             return Err(SessionOwnerRefusal::SettingsUnresolved.into());
         }
-        if let (PromptAdmission::Auto { steering_supported }, SessionTurn::Running { turn }) =
-            (admission, self.next.turn())
-        {
-            // The owner selects the turn from its current session state.
-            return self.admit_steer(OwnerInput { turn, ..input }, steering_supported);
+        let earlier_work_waits = self.next.ports.delivery_evidence.contains_key(&input.input)
+            && matches!(admission, PromptAdmission::DeliveryAuto { .. })
+            && (!self.next.prompts.is_empty() || self.next.setting.is_some())
+            && self.next.turn() == SessionTurn::Idle;
+        let queued = admission == PromptAdmission::Queue
+            || earlier_work_waits
+            || matches!(self.next.lifecycle(), SessionLifecycle::Loading { .. })
+            || matches!(
+                (admission, self.next.turn()),
+                (
+                    PromptAdmission::DeliveryAuto {
+                        steering_supported: false
+                    },
+                    SessionTurn::Running { .. }
+                )
+            );
+        if let SessionTurn::Running { turn } = self.next.turn() {
+            match admission {
+                PromptAdmission::Auto { steering_supported } => {
+                    return self.admit_steer(OwnerInput { turn, ..input }, steering_supported);
+                }
+                PromptAdmission::DeliveryAuto {
+                    steering_supported: true,
+                } => {
+                    return self.admit_steer(OwnerInput { turn, ..input }, true);
+                }
+                _ => {}
+            }
         }
         if admission == PromptAdmission::Direct
             && self.is_live(input.generation)
             && self.prompt_in_progress()
         {
             return Err(SessionOwnerRefusal::EffectInProgress.into());
+        }
+        if queued
+            && self
+                .next
+                .prompts
+                .values()
+                .filter(|pending| pending.wait != InputWait::Wire)
+                .count()
+                >= MAX_WAITING_PROMPTS
+        {
+            return Err(SessionOwnerRefusal::QueueFull.into());
         }
         if !replacement {
             self.require_new_input(&input.input)?;
@@ -59,11 +126,20 @@ impl OwnerTransition {
             return Err(OwnerRejection::IgnoredLate);
         };
         self.next.ports.admitted_inputs.insert(input.input.clone());
+        if queued && !self.await_delivery_evidence(&input, DeliveryPlacementKind::Queue) {
+            self.effects.push(OwnerEffect::InputQueued(input.clone()));
+        }
         self.next.prompts.insert(
             sequence,
             PendingPrompt {
                 input,
                 wait: InputWait::Admission,
+                choose_steer_if_a_turn_starts: matches!(
+                    admission,
+                    PromptAdmission::Auto {
+                        steering_supported: true
+                    }
+                ) && !queued,
             },
         );
         self.drive_prompt_line()
@@ -91,16 +167,85 @@ impl OwnerTransition {
         {
             return Ok(());
         }
-        let Some((&sequence, pending)) = self.next.prompts.first_key_value() else {
-            return Ok(());
-        };
-        if !self.is_live(pending.input.generation) {
+        while let Some((&sequence, pending)) = self.next.prompts.first_key_value() {
+            if !self.is_live(pending.input.generation) {
+                return Ok(());
+            }
+            let input = pending.input.clone();
+            if !self.selected_skills_current(&input.input) {
+                let operation = QueuedOperation(input.input.as_str().to_owned());
+                self.next
+                    .ports
+                    .unsent_prompts
+                    .insert(input, RevokeReason::SkillSelectionChanged);
+                let effects = self.cell_move(SessionCellEvent::CancelEntry { operation })?;
+                self.apply_entry_effects(effects)?;
+            } else {
+                if self.await_delivery_evidence(&input, DeliveryPlacementKind::Start) {
+                    return Ok(());
+                }
+                self.cell_move(SessionCellEvent::Claim { sequence })?;
+                self.cell_move(SessionCellEvent::Commit { sequence })?;
+                let effects = self.cell_move(SessionCellEvent::StartSendClaimed { sequence })?;
+                return self.apply_entry_effects(effects);
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn steer_contending_auto_after_take(
+        &mut self,
+        foreground: &OwnerInput,
+    ) -> OwnerResult {
+        if self.next.steer.is_some() {
             return Ok(());
         }
-        self.cell_move(SessionCellEvent::Claim { sequence })?;
-        self.cell_move(SessionCellEvent::Commit { sequence })?;
-        let effects = self.cell_move(SessionCellEvent::StartSendClaimed { sequence })?;
-        self.apply_entry_effects(effects)
+        let Some((&sequence, waiting)) = self
+            .next
+            .prompts
+            .iter()
+            .find(|(_, pending)| pending.wait == InputWait::Admission)
+        else {
+            return Ok(());
+        };
+        if !waiting.choose_steer_if_a_turn_starts
+            || waiting.input.generation != foreground.generation
+            || self
+                .next
+                .ports
+                .selected_skills
+                .get(&waiting.input.input)
+                .is_some_and(|items| !items.is_empty())
+        {
+            return Ok(());
+        }
+        // Auto was waiting for a placement. Its line entry has never reached
+        // a mark, so withdraw it locally and keep the same operation and input.
+        let input = OwnerInput {
+            turn: foreground.turn,
+            ..waiting.input.clone()
+        };
+        let operation = QueuedOperation(input.input.as_str().to_owned());
+        let effects = self.cell_move(SessionCellEvent::CancelEntry { operation })?;
+        if !matches!(effects.as_slice(), [SessionCellEffect::Entry { sequence: removed, effect: QueuedEntryEffect::SettleNotSent(_), .. }] if *removed == sequence)
+        {
+            return Err(OwnerRejection::IgnoredLate);
+        }
+        self.next.prompts.remove(&sequence);
+        self.next.ports.admitted_inputs.remove(&input.input);
+        self.admit_existing_steer(input, true)
+    }
+
+    fn selected_skills_current(&self, input: &InputId) -> bool {
+        self.next
+            .ports
+            .selected_skills
+            .get(input)
+            .is_none_or(|selected| {
+                selected
+                    .iter()
+                    .all(|skill| self.next.ports.projection.skills.contains_selection(skill))
+            })
     }
 
     pub(super) fn admit_warm(&mut self, input: OwnerInput) -> OwnerResult {
@@ -215,6 +360,15 @@ impl OwnerTransition {
         outcome: EffectOutcome,
     ) -> OwnerResult {
         let sequence = self.prompt_sequence(input, InputWait::DispatchStore)?;
+        if self.is_live(input.generation) && !self.selected_skills_current(&input.input) {
+            let operation = QueuedOperation(input.input.as_str().to_owned());
+            let withdrawn = self.cell_move(SessionCellEvent::CancelEntry { operation })?;
+            self.apply_entry_effects(withdrawn)?;
+            self.next
+                .ports
+                .unsent_prompts
+                .insert(input.clone(), RevokeReason::SkillSelectionChanged);
+        }
         let event = match outcome {
             EffectOutcome::Applied => SessionCellEvent::MarkCommitted {
                 sequence,
@@ -236,7 +390,12 @@ impl OwnerTransition {
         input: &OwnerInput,
         outcome: EffectOutcome,
     ) -> OwnerResult {
-        if let Some(reason) = self.next.ports.unsent_prompts.remove(input) {
+        let pending_prompt = self.prompt_sequence(input, InputWait::UndoStore);
+        if pending_prompt.is_err()
+            && let Some(reason) = self.next.ports.unsent_prompts.remove(input)
+        {
+            self.next.ports.selected_skills.remove(&input.input);
+            self.next.ports.delivery_evidence.remove(&input.input);
             if self.steer_is_pending(input, InputWait::UndoStore) {
                 self.next.steer = None;
             }
@@ -257,7 +416,7 @@ impl OwnerTransition {
             self.reply_input(input.clone(), RemoteEffect::None);
             return Ok(());
         }
-        let sequence = self.prompt_sequence(input, InputWait::UndoStore)?;
+        let sequence = pending_prompt?;
         let event = if outcome == EffectOutcome::Applied {
             SessionCellEvent::UnmarkCommitted { sequence }
         } else {
@@ -266,6 +425,22 @@ impl OwnerTransition {
         let effects = self.cell_move(event)?;
         self.apply_entry_effects(effects)?;
         self.drive_prompt_line()
+    }
+
+    pub(super) fn dispatch_blocked_by_unknown(
+        &mut self,
+        input: &OwnerInput,
+        operation: uuid::Uuid,
+    ) -> OwnerResult {
+        let reason = RevokeReason::EarlierOutcomeUnknown { operation };
+        self.next.ports.unsent_prompts.insert(input.clone(), reason);
+        if self.steer_is_pending(input, InputWait::DispatchStore) {
+            return self.steer_marked(input, EffectOutcome::Failed);
+        }
+        let sequence = self.prompt_sequence(input, InputWait::DispatchStore)?;
+        let effects = self.cell_move(SessionCellEvent::MarkFailed { sequence })?;
+        self.apply_entry_effects(effects)?;
+        self.retire_waiting_inputs(reason)
     }
 
     pub(super) fn cancel_queued(
@@ -282,6 +457,16 @@ impl OwnerTransition {
         }
         if self.revoke_input(generation, input, RevokeReason::Cancelled) {
             return Ok(());
+        }
+        if let Some(pending) =
+            self.next.prompts.values().find(|pending| {
+                pending.input.generation == generation && &pending.input.input == input
+            })
+        {
+            self.next
+                .ports
+                .unsent_prompts
+                .insert(pending.input.clone(), RevokeReason::QueueCancelled);
         }
         let operation = QueuedOperation(input.as_str().to_owned());
         let effects = self.cell_move(SessionCellEvent::CancelEntry { operation })?;
@@ -315,20 +500,117 @@ impl OwnerTransition {
     pub(super) fn finish_prompt(
         &mut self,
         input: &OwnerInput,
-        outcome: WireOutcome<()>,
+        outcome: WireOutcome<PromptCompletion>,
     ) -> OwnerResult {
+        if let Some(previous) = self.next.ports.previous_wire_prompts.get(input).cloned() {
+            return self.finish_previous_prompt(input, previous, outcome);
+        }
         self.prompt_sequence(input, InputWait::Wire)?;
-        let outcome = match outcome {
-            WireOutcome::Confirmed(()) => SentOutcome::Applied,
-            WireOutcome::Refused => SentOutcome::Refused,
-            WireOutcome::Unknown => SentOutcome::Unknown,
+        if self.cancel_unconfirmed_for(input) {
+            return self.reconcile_cancelled_prompt(input, outcome);
+        }
+        self.finish_observed_prompt(input, outcome)
+    }
+
+    pub(super) fn finish_observed_prompt(
+        &mut self,
+        input: &OwnerInput,
+        outcome: WireOutcome<PromptCompletion>,
+    ) -> OwnerResult {
+        let (outcome, observed) = match outcome {
+            WireOutcome::Confirmed(completion) => {
+                let observed = TurnOutcome::Ended {
+                    stop_reason: completion.stop_reason.clone(),
+                    local_cause: completion.local_cause.clone(),
+                };
+                self.completing_prompt = Some((input.input.clone(), Ok(completion)));
+                (SentOutcome::Applied, observed)
+            }
+            WireOutcome::Refused => (
+                SentOutcome::Refused,
+                TurnOutcome::Lost {
+                    reason: TurnLostReason::ProviderTurnFailed,
+                },
+            ),
+            WireOutcome::Unknown => (
+                SentOutcome::Unknown,
+                TurnOutcome::Lost {
+                    reason: if matches!(self.completing_prompt, Some((_, Err(_)))) {
+                        TurnLostReason::ProviderTurnFailed
+                    } else {
+                        TurnLostReason::EndNotObservable
+                    },
+                },
+            ),
         };
-        self.finish_turn(input, outcome, self.is_live(input.generation))?;
+        self.finish_turn(
+            input,
+            outcome,
+            Some(observed),
+            self.is_live(input.generation),
+        )?;
         self.continue_close()?;
-        self.drive_prompt_line()
+        if outcome == SentOutcome::Unknown {
+            self.retire_waiting_inputs(RevokeReason::EarlierOutcomeUnknown {
+                operation: input.operation,
+            })
+        } else {
+            self.drive_prompt_line()
+        }
+    }
+
+    pub(super) fn retire_waiting_inputs(&mut self, reason: RevokeReason) -> OwnerResult {
+        let queued: Vec<_> = self
+            .next
+            .prompts
+            .values()
+            .filter(|pending| pending.wait == InputWait::Admission)
+            .map(|pending| pending.input.clone())
+            .collect();
+        for input in queued {
+            let operation = QueuedOperation(input.input.as_str().to_owned());
+            self.next.ports.unsent_prompts.insert(input, reason);
+            let effects = self.cell_move(SessionCellEvent::CancelEntry { operation })?;
+            self.apply_entry_effects(effects)?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn tag_waiting_inputs(&mut self, run: SessionGeneration, reason: RevokeReason) {
+        for pending in self.next.prompts.values() {
+            if pending.input.generation == run && pending.wait == InputWait::Admission {
+                self.next
+                    .ports
+                    .unsent_prompts
+                    .insert(pending.input.clone(), reason);
+            }
+        }
     }
 
     pub(super) fn end_turn_locally(&mut self, turn: TurnId) -> OwnerResult {
+        self.end_unobservable_turn(turn, TurnLostReason::ProviderRetired)
+    }
+
+    pub(super) fn end_unobservable_turn(
+        &mut self,
+        turn: TurnId,
+        reason: TurnLostReason,
+    ) -> OwnerResult {
+        if let Some(input) = self
+            .next
+            .ports
+            .provider_started_turn
+            .clone()
+            .filter(|input| input.turn == turn)
+        {
+            self.next.ports.provider_started_turn = None;
+            return self.finish_turn(
+                &input,
+                SentOutcome::Unknown,
+                Some(TurnOutcome::Lost { reason }),
+                false,
+            );
+        }
         let input = self
             .next
             .prompts
@@ -340,27 +622,47 @@ impl OwnerTransition {
             .map(|pending| pending.input.clone())
             .ok_or(OwnerRejection::IgnoredLate)?;
         self.abandon_taken_prompt(&input);
-        self.finish_turn(&input, SentOutcome::Unknown, false)
+        let observed = self
+            .prompt_sequence(&input, InputWait::Wire)
+            .is_ok()
+            .then_some(TurnOutcome::Lost { reason });
+        self.finish_turn(&input, SentOutcome::Unknown, observed, false)
     }
 
-    fn finish_turn(&mut self, input: &OwnerInput, outcome: SentOutcome, idle: bool) -> OwnerResult {
+    pub(super) fn finish_turn(
+        &mut self,
+        input: &OwnerInput,
+        outcome: SentOutcome,
+        observed: Option<TurnOutcome>,
+        idle: bool,
+    ) -> OwnerResult {
         let effects = self.cell_move(SessionCellEvent::TurnEnded {
             turn: input.turn,
             outcome,
         })?;
         self.retire_turn_tools(input.generation, input.turn);
-        self.next.ports.last_live_turn = Some(input.turn);
-        self.effects
-            .push(OwnerEffect::CallbackMembership(TurnMembership::End {
-                run: input.generation,
+        if let Some(observed) = observed {
+            self.next.ports.last_live_turn = Some(LastLiveTurn {
                 turn: input.turn,
+                input: input.input.clone(),
+                outcome: observed.clone(),
+                observed_at_ms: self.observed_at_ms,
+            });
+            self.effects
+                .push(OwnerEffect::CallbackMembership(TurnMembership::End {
+                    run: input.generation,
+                    turn: input.turn,
+                }));
+            self.release(SessionOwnerEffect::Publish(SessionPublication::TurnEnded {
+                generation: input.generation,
+                turn: input.turn,
+                outcome: observed,
+                idle,
             }));
-        self.release(SessionOwnerEffect::Publish(SessionPublication::TurnEnded {
-            generation: input.generation,
-            turn: input.turn,
-            idle,
-        }));
-        self.apply_entry_effects(effects)
+        }
+        self.apply_entry_effects(effects)?;
+        self.clear_cancel_confirmation(input);
+        Ok(())
     }
 
     pub(super) fn prompt_deadline(&mut self, input: &OwnerInput, wait: InputWait) -> OwnerResult {
@@ -388,6 +690,15 @@ impl OwnerTransition {
             if !matches!(wait, InputWait::Enqueue | InputWait::Wire) {
                 self.prompt_deadline(&input, wait)?;
             }
+        }
+        if let Some(pending) = self.next.steer.clone().filter(|pending| {
+            pending.input.generation == generation && pending.wait == InputWait::Admission
+        }) {
+            self.reject_delivery_placement(
+                pending.input,
+                DeliveryPlacementKind::Steer,
+                RevokeReason::RunReplaced,
+            )?;
         }
         Ok(())
     }
@@ -437,7 +748,24 @@ impl OwnerTransition {
     }
 
     pub(super) fn admit_steer(&mut self, input: OwnerInput, supported: bool) -> OwnerResult {
+        if self.next.turn() == SessionTurn::Idle {
+            self.require_live(input.generation)?;
+            self.effects
+                .push(OwnerEffect::IdleSteerUsesPrompt(input.clone()));
+            return self.admit_prompt(input, PromptAdmission::Direct);
+        }
+        self.admit_existing_steer(input, supported)
+    }
+
+    pub(super) fn admit_existing_steer(
+        &mut self,
+        input: OwnerInput,
+        supported: bool,
+    ) -> OwnerResult {
         self.require_live(input.generation)?;
+        if self.next.turn() != (SessionTurn::Running { turn: input.turn }) {
+            return Err(SessionOwnerRefusal::GenerationChanged.into());
+        }
         self.require_new_input(&input.input)?;
         if self.next.cell.settings_held() {
             return Err(SessionOwnerRefusal::SettingsUnresolved.into());
@@ -453,12 +781,24 @@ impl OwnerTransition {
         })) {
             return Err(SessionOwnerRefusal::GenerationChanged.into());
         }
+        self.next.ports.admitted_inputs.insert(input.input.clone());
+        if self.await_delivery_evidence(&input, DeliveryPlacementKind::Steer) {
+            self.next.steer = Some(PendingPrompt {
+                input,
+                wait: InputWait::Admission,
+                choose_steer_if_a_turn_starts: false,
+            });
+        } else {
+            self.start_steer_mark(input);
+        }
+        Ok(())
+    }
+
+    pub(super) fn start_steer_mark(&mut self, input: OwnerInput) {
         self.release(SessionOwnerEffect::Store(
             SessionStoreRequest::MarkSteerDispatch(input.clone()),
         ));
-        self.next.ports.admitted_inputs.insert(input.input.clone());
         self.wait_for_steer(input, InputWait::DispatchStore);
-        Ok(())
     }
 
     pub(super) fn steer_marked(
@@ -479,6 +819,7 @@ impl OwnerTransition {
             self.next.steer = Some(PendingPrompt {
                 input: input.clone(),
                 wait: InputWait::Enqueue,
+                choose_steer_if_a_turn_starts: false,
             });
             self.issue_authorization(AuthorizedWork::Steer(input.clone()))?;
         } else {
@@ -498,12 +839,33 @@ impl OwnerTransition {
         if !self.steer_is_pending(input, InputWait::Wire) {
             return Err(OwnerRejection::IgnoredLate);
         }
+        if outcome == WireOutcome::Confirmed(())
+            && self.is_live(input.generation)
+            && matches!(self.next.turn(), SessionTurn::Running { turn } | SessionTurn::Cancelling { turn } if turn == input.turn)
+        {
+            self.next.ports.recent_steer = Some(input.clone());
+            self.offer_commit(vec![super::super::PublicationFact::Stream {
+                run: input.generation,
+                event: session_event_model::SessionEvent::InputAccepted {
+                    input_id: input.input.clone(),
+                    turn_id: input.turn.0.to_string(),
+                },
+            }]);
+            self.effects
+                .push(OwnerEffect::SteerSubmitted(input.clone()));
+        }
         self.next.steer = None;
+        if outcome == WireOutcome::Refused {
+            self.next
+                .ports
+                .unsent_prompts
+                .insert(input.clone(), RevokeReason::ProviderSteerRefused);
+        }
         self.reply_input(input.clone(), remote_effect(&outcome));
         Ok(())
     }
 
-    fn steer_is_pending(&self, input: &OwnerInput, wait: InputWait) -> bool {
+    pub(super) fn steer_is_pending(&self, input: &OwnerInput, wait: InputWait) -> bool {
         self.next
             .steer
             .as_ref()
@@ -514,6 +876,7 @@ impl OwnerTransition {
         self.next.steer = Some(PendingPrompt {
             input: input.clone(),
             wait,
+            choose_steer_if_a_turn_starts: false,
         });
         self.release(SessionOwnerEffect::ArmDeadline(SessionDeadline::Steer {
             input,
@@ -535,12 +898,34 @@ impl OwnerTransition {
 
     fn finish_entry(&mut self, sequence: u64, input: OwnerInput, remote: RemoteEffect) {
         self.next.prompts.remove(&sequence);
-        self.reply_input(input, remote);
+        if !self.cancel_unconfirmed_for(&input)
+            && !self.next.ports.previous_wire_prompts.contains_key(&input)
+        {
+            self.reply_input(input, remote);
+        }
     }
 
-    fn reply_input(&mut self, input: OwnerInput, remote: RemoteEffect) {
-        self.release(SessionOwnerEffect::Reply(
-            SessionOwnerReply::InputFinished { input, remote },
-        ));
+    pub(super) fn reply_input(&mut self, input: OwnerInput, remote: RemoteEffect) {
+        self.next.ports.selected_skills.remove(&input.input);
+        self.next.ports.delivery_evidence.remove(&input.input);
+        if remote == RemoteEffect::None
+            && let Some(reason) = self.next.ports.unsent_prompts.remove(&input)
+        {
+            self.release(SessionOwnerEffect::Reply(SessionOwnerReply::InputUnsent {
+                input,
+                reason,
+            }));
+            return;
+        }
+        let reply = match self.completing_prompt.take_if(|(id, _)| id == &input.input) {
+            Some((_, Ok(completion))) => SessionOwnerReply::PromptCompleted { input, completion },
+            Some((_, Err(failure))) => SessionOwnerReply::PromptFailed {
+                input,
+                remote,
+                failure,
+            },
+            None => SessionOwnerReply::InputFinished { input, remote },
+        };
+        self.release(SessionOwnerEffect::Reply(reply));
     }
 }

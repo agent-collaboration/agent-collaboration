@@ -76,9 +76,12 @@ impl Sink<String> for ControlledSink {
 fn buffered_or_pending_prompt_is_never_reported_flushed() {
     let capture = DiagnosticCapture::default();
     tracing::subscriber::with_default(capture.subscriber(), || {
-        let mut sink = ObservedProviderSink::new(ControlledSink {
-            disposition: FlushDisposition::Pending,
-        });
+        let mut sink = ObservedProviderSink::new(
+            ControlledSink {
+                disposition: FlushDisposition::Pending,
+            },
+            Default::default(),
+        );
         let mut context = Context::from_waker(futures_util::task::noop_waker_ref());
         Pin::new(&mut sink)
             .start_send(r#"{"method":"session/prompt","params":{"text":"PRIVATE_CANARY"}}"#.into())
@@ -104,9 +107,12 @@ fn buffered_or_pending_prompt_is_never_reported_flushed() {
 fn flush_failure_is_distinct_from_delivery_and_scrubs_error_text() {
     let capture = DiagnosticCapture::default();
     tracing::subscriber::with_default(capture.subscriber(), || {
-        let mut sink = ObservedProviderSink::new(ControlledSink {
-            disposition: FlushDisposition::Error,
-        });
+        let mut sink = ObservedProviderSink::new(
+            ControlledSink {
+                disposition: FlushDisposition::Error,
+            },
+            Default::default(),
+        );
         let mut context = Context::from_waker(futures_util::task::noop_waker_ref());
         Pin::new(&mut sink)
             .start_send(r#"{"method":"session/prompt"}"#.into())

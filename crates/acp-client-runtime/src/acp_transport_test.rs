@@ -29,6 +29,41 @@ fn authorization(run: TransportRun, target: AuthorizationTarget) -> DispatchAuth
     }
 }
 
+#[test]
+fn cancelled_setting_before_take_releases_the_reserved_writer_slot_without_a_frame() {
+    let (transport, mut writer) = new_transport(1);
+    let run = route(1);
+    transport.open_route(run, "session".into());
+    transport.activate_route(run);
+    let cancelled = authorization(run, AuthorizationTarget::Session);
+    transport
+        .offer(cancelled.clone(), None, "cancelled setting")
+        .expect("offered");
+
+    assert_eq!(
+        transport.take_when(&cancelled, || false),
+        Ok(DispatchResult::DefinitelyUnsent(cancelled.clone()))
+    );
+    assert_eq!(
+        transport.take(&cancelled),
+        Ok(DispatchResult::DefinitelyUnsent(cancelled))
+    );
+    assert!(matches!(writer.try_recv(), Err(TryRecvError::Empty)));
+
+    let successor = authorization(run, AuthorizationTarget::Session);
+    transport
+        .offer(successor.clone(), None, "current setting")
+        .expect("successor offered");
+    assert_eq!(
+        transport.take(&successor),
+        Ok(DispatchResult::Taken(successor))
+    );
+    assert_eq!(
+        writer.try_recv().expect("the capacity was released").frame,
+        "current setting"
+    );
+}
+
 fn foreground(transport: &AcpTransport<&str>, run: TransportRun, label: &'static str) -> TurnId {
     let turn = TurnId(Uuid::now_v7());
     let token = authorization(run, AuthorizationTarget::NewTurn);
@@ -271,7 +306,19 @@ fn callback_collision_outlives_retirement_and_idle_resolution_checks_continuatio
         transport.activate_route(key);
     }
     let turn = foreground(&transport, first, "first");
+    assert_eq!(
+        transport.resolve_callback("unseen", CallbackKind::Request),
+        CallbackResolution::NeverObserved {
+            sole_eligible: Some((first, turn))
+        },
+    );
     foreground(&transport, other, "other");
+    assert_eq!(
+        transport.resolve_callback("unseen", CallbackKind::Request),
+        CallbackResolution::NeverObserved {
+            sole_eligible: None
+        },
+    );
     for tool in ["shared", "idle-item"] {
         assert!(matches!(
             transport.observe_tool(first, tool, ToolObservation::Announcement),
@@ -291,6 +338,7 @@ fn callback_collision_outlives_retirement_and_idle_resolution_checks_continuatio
         transport.resolve_callback("shared", CallbackKind::Request),
         CallbackResolution::Ambiguous
     );
+    assert!(transport.allows_explicit_tool_request("one", "shared"));
 
     transport.apply_membership(
         first.incarnation,
@@ -314,5 +362,84 @@ fn callback_collision_outlives_retirement_and_idle_resolution_checks_continuatio
     assert_eq!(
         transport.resolve_callback("idle-item", CallbackKind::Continuation),
         CallbackResolution::Retired
+    );
+}
+
+#[test]
+fn known_retired_tool_cannot_use_the_fallback_after_repeated_reloads() {
+    let (transport, mut writer) = new_transport(3);
+    let first = route(1);
+    transport.open_route(first, "session".into());
+    transport.activate_route(first);
+    foreground(&transport, first, "first");
+    assert!(matches!(
+        transport.observe_tool(first, "old-tool", ToolObservation::Announcement),
+        ToolOwnershipEffect::ForwardFrame { .. }
+    ));
+    assert_eq!(writer.try_recv().expect("first prompt").frame, "first");
+    transport.apply_membership(first.incarnation, TurnMembership::Retire(first.generation));
+
+    for number in [2, 3] {
+        let current = TransportRun {
+            generation: SessionGeneration::from_number(number),
+            ..first
+        };
+        transport.open_route(current, "session".into());
+        transport.activate_route(current);
+        let turn = foreground(&transport, current, "successor");
+        assert_eq!(
+            writer.try_recv().expect("successor prompt").frame,
+            "successor"
+        );
+        assert_eq!(
+            transport.observe_tool(current, "old-tool", ToolObservation::Continuation),
+            ToolOwnershipEffect::None
+        );
+        assert_eq!(
+            transport.observe_tool(current, "old-tool", ToolObservation::Announcement),
+            ToolOwnershipEffect::None
+        );
+        assert_eq!(
+            transport.resolve_callback("old-tool", CallbackKind::Request),
+            CallbackResolution::Retired
+        );
+        assert!(!transport.allows_explicit_tool_request("session", "old-tool"));
+        assert!(transport.allows_explicit_tool_request("session", "never-observed"));
+        assert_eq!(
+            transport.resolve_callback("never-observed", CallbackKind::Request),
+            CallbackResolution::NeverObserved {
+                sole_eligible: Some((current, turn))
+            }
+        );
+        transport.apply_membership(
+            current.incarnation,
+            TurnMembership::Retire(current.generation),
+        );
+    }
+}
+
+#[test]
+fn provider_observed_turn_is_eligible_without_enqueuing_any_frame() {
+    let (transport, mut writer) = new_transport(1);
+    let run = route(1);
+    transport.open_route(run, "session".into());
+    transport.activate_route(run);
+    let observed = TurnId(Uuid::now_v7());
+    transport.apply_membership(
+        run.incarnation,
+        TurnMembership::ObservedEligible {
+            run: run.generation,
+            turn: observed,
+        },
+    );
+    assert_eq!(
+        transport.resolve_callback("unseen", CallbackKind::Request),
+        CallbackResolution::NeverObserved {
+            sole_eligible: Some((run, observed))
+        }
+    );
+    assert!(
+        matches!(writer.try_recv(), Err(TryRecvError::Empty)),
+        "observing a provider-issued turn must never enqueue a second send"
     );
 }

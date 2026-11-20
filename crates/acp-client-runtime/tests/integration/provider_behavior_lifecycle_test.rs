@@ -1,7 +1,8 @@
 //! Same-ID fixture lifecycle through the real ACP client, including actual history replay.
 
 use super::{CountingEventSink, NoopInteractionPort};
-use acp_client_runtime::{AgentSessionClient, ExternalProviderLaunch, ProviderPersistenceTarget};
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
+use acp_client_runtime::{ExternalProviderLaunch, ProviderPersistenceTarget};
 use session_event_model::{
     InputId, PromptContent, ProviderSubmission, SessionEvent, SessionItemKind,
 };

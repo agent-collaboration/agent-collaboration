@@ -5,10 +5,11 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::{
-    AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
-    ExternalProviderRuntimeError, HistoryReplayFuture, HistoryReplayUnavailable, InteractionFuture,
-    InteractionPort, RefusedApprovalOffer, SessionEventSink,
+    ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch, HistoryReplayFuture,
+    HistoryReplayUnavailable, InteractionFuture, InteractionPort, ProviderSessionActivity,
+    RefusedApprovalOffer, SessionEventSink,
 };
 use session_event_model::{ApprovalRequest, SessionEvent};
 use tokio_util::sync::CancellationToken;
@@ -227,11 +228,9 @@ async fn live_update_continues_replayed_item_projection() {
     )), "the retired tool callback fell back to the next live turn");
 }
 
-/// Oracle: ACP v1 session/load replays updates before its response
-/// (docs/protocol/v1/session-setup.mdx:150-211); program design requires the
-/// hub reset to finish before the request can be sent.
+/// T4 and T6 buffer load replay and publish it with the activation batch.
 #[tokio::test]
-async fn history_replay_reset_precedes_session_load() {
+async fn history_replay_is_buffered_until_the_activation_batch() {
     let root = tempfile::tempdir().expect("fixture root");
     let marker = root.path().join("reset-finished");
     let events = Arc::new(Mutex::new(Vec::new()));
@@ -258,11 +257,36 @@ async fn history_replay_reset_precedes_session_load() {
 
     assert!(result.is_ok(), "load result: {result:?}");
     assert!(marker.exists(), "reset completed");
+    assert!(
+        marker.with_extension("load").exists(),
+        "the provider saw session/load"
+    );
     assert_eq!(
         catalog.effective_settings().model.as_deref(),
         Some("model-a")
     );
     let published = events.lock().expect("events");
+    let replayed_item = published
+        .iter()
+        .position(|event| {
+            matches!(
+                event,
+                SessionEvent::ItemStarted { item } if item.text.as_deref() == Some("Replayed input")
+            )
+        })
+        .expect("replayed item");
+    let idle = published
+        .iter()
+        .position(|event| {
+            matches!(
+                event,
+                SessionEvent::StateChanged {
+                    state: session_event_model::SessionState::Idle
+                }
+            )
+        })
+        .expect("activation Idle");
+    assert!(replayed_item < idle);
     assert!(published.iter().any(|event| matches!(event,
         SessionEvent::SettingsChanged { settings }
             if settings.model.as_deref() == Some("model-a"))));
@@ -274,23 +298,23 @@ async fn history_replay_reset_precedes_session_load() {
     ));
     assert!(
         !marker.with_extension("early").exists(),
-        "load waited for reset"
+        "the hub reset followed the provider's load"
     );
 }
 
-/// Oracle: program design AgentSessionClient.attach requires a failed hub reset
-/// to abort the load, so the agent cannot replay into stale history.
+/// T6 treats a refused publication batch independently of the committed run.
 #[tokio::test]
-async fn failed_history_replay_never_sends_session_load() {
+async fn refused_replay_publication_keeps_the_run_usable_without_partial_history() {
     let root = tempfile::tempdir().expect("fixture root");
     let marker = root.path().join("reset-finished");
+    let events = Arc::new(Mutex::new(Vec::new()));
     let client = AgentSessionClient::initialize(
         fixture_launch(&marker),
         Arc::new(TestInteractionPort),
         Arc::new(ReplaySink {
             marker: marker.clone(),
             fail: true,
-            events: None,
+            events: Some(Arc::clone(&events)),
         }),
         std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
@@ -300,13 +324,25 @@ async fn failed_history_replay_never_sends_session_load() {
     let result = client
         .load_session("fixture-session".to_owned(), root.path().to_path_buf())
         .await;
+    let activity = client.session_activity("fixture-session".to_owned());
     client.shutdown().await;
 
-    assert!(matches!(
-        result,
-        Err(ExternalProviderRuntimeError::HistoryReplayAdmissionFailed)
-    ));
-    assert!(!marker.with_extension("early").exists(), "no ACP load sent");
+    assert!(result.is_ok(), "provider acknowledged the load: {result:?}");
+    assert!(
+        marker.with_extension("load").exists(),
+        "provider received the load"
+    );
+    assert_eq!(
+        activity.expect("owner remains available"),
+        ProviderSessionActivity::Idle
+    );
+    assert!(
+        !events.lock().expect("events").iter().any(|event| matches!(
+            event,
+            SessionEvent::TurnStarted { .. } | SessionEvent::ItemStarted { .. }
+        )),
+        "the refused batch did not publish partial history"
+    );
 }
 
 /// Oracle: E4/R25 rebuild one historical Turn per replayed user message,

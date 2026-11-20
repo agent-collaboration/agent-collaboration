@@ -1,4 +1,123 @@
 use super::*;
+
+#[test]
+fn queued_explicit_settings_wait_for_confirmed_storage_and_cancel_known_unsent() {
+    let mut state = fresh();
+    let run = restore_live(&mut state, 1);
+    let mode = |number| OwnerSetting {
+        change: RunAttempt {
+            generation: run.generation,
+            attempt: SettingApplication(uuid(number)),
+        },
+        kind: ProviderSettingKind::Mode,
+    };
+    let (first, cancelled, successor) = (mode(2), mode(3), mode(4));
+    let active = setting_authorized(&mut state, first, 20);
+    for (setting, number) in [(cancelled, 30), (successor, 40)] {
+        let effects = command(&mut state, setting_command(setting, number));
+        assert_eq!(
+            effects,
+            vec![OwnerEffect::SettingQueued {
+                input: input(run.generation, number).input,
+                setting,
+            }]
+        );
+    }
+    let removed = command(
+        &mut state,
+        SessionOwnerCommand::CancelSetting {
+            input: input(run.generation, 30).input,
+            setting: cancelled,
+        },
+    );
+    assert_eq!(
+        removed,
+        vec![OwnerEffect::Reply(SessionOwnerReply::SettingFinished {
+            setting: cancelled,
+            remote: RemoteEffect::None,
+            saved: false,
+        })]
+    );
+    let confirmed = apply(
+        &mut state,
+        OwnerEvent::Dispatch(DispatchResult::SettingFinished {
+            authorization: active,
+            observation: SettingObservation::Applied(SettingValueId("off".into())),
+        }),
+    );
+    assert!(confirmed.iter().any(|effect| matches!(effect,
+        OwnerEffect::Store(SessionStoreRequest::RecordConfirmedSetting { setting, .. }) if *setting == first
+    )));
+    assert!(
+        !confirmed
+            .iter()
+            .any(|effect| matches!(effect, OwnerEffect::Authorize { .. }))
+    );
+
+    let saved = apply(
+        &mut state,
+        OwnerEvent::Store(SessionStoreResult::ConfirmedSetting {
+            setting: first,
+            outcome: EffectOutcome::Applied,
+        }),
+    );
+    let terminal = saved.iter().position(|effect| matches!(effect,
+        OwnerEffect::Reply(SessionOwnerReply::SettingFinished { setting, saved: true, .. }) if *setting == first
+    )).expect("the first write settles");
+    let next = saved.iter().position(|effect| matches!(effect,
+        OwnerEffect::Authorize { work: AuthorizedWork::Setting { setting, .. }, .. } if *setting == successor
+    )).expect("the next live setting gets its turn");
+    assert!(terminal < next);
+}
+
+#[test]
+fn setting_deadline_releases_a_waiter_without_passing_an_unanswered_same_kind_fence() {
+    let mut state = fresh();
+    let run = restore_live(&mut state, 1);
+    let first = OwnerSetting {
+        change: RunAttempt {
+            generation: run.generation,
+            attempt: SettingApplication(uuid(2)),
+        },
+        kind: ProviderSettingKind::Mode,
+    };
+    let second = OwnerSetting {
+        change: RunAttempt {
+            attempt: SettingApplication(uuid(3)),
+            ..first.change
+        },
+        ..first
+    };
+    setting_authorized(&mut state, first, 20);
+    let queued = command(&mut state, setting_command(second, 30));
+    assert_eq!(
+        queued,
+        vec![OwnerEffect::SettingQueued {
+            input: input(run.generation, 30).input,
+            setting: second,
+        }]
+    );
+
+    let expired = deadline(&mut state, OwnerDeadline::SettingWire(first));
+    assert!(
+        expired.contains(&OwnerEffect::Reply(SessionOwnerReply::SettingFinished {
+            setting: first,
+            remote: RemoteEffect::Unknown,
+            saved: false,
+        }))
+    );
+    assert!(
+        expired.contains(&OwnerEffect::Reply(SessionOwnerReply::SettingFinished {
+            setting: second,
+            remote: RemoteEffect::None,
+            saved: false,
+        }))
+    );
+    assert!(!expired.iter().any(|effect| matches!(
+        effect,
+        OwnerEffect::Authorize { .. } | OwnerEffect::Store(_)
+    )));
+}
 use crate::tool_ownership::{SessionlessCallbackOwner, sessionless_callback_owner};
 
 fn retired(state: &SessionOwnerState, generation: SessionGeneration) {
@@ -33,9 +152,9 @@ fn cold_auto_input_waiting_on_a_silent_restore_is_never_sent_after_reload() {
     let effects = deadline(&mut state, OwnerDeadline::RestoreWire(first));
     failed_restore(&effects, first, RemoteEffect::Unknown);
     assert!(
-        effects.contains(&OwnerEffect::Reply(SessionOwnerReply::InputFinished {
+        effects.contains(&OwnerEffect::Reply(SessionOwnerReply::InputUnsent {
             input: old.clone(),
-            remote: RemoteEffect::None
+            reason: RevokeReason::RestoreDidNotActivate,
         }))
     );
     let next = restore_live(&mut state, 3);
@@ -180,9 +299,9 @@ fn post_wire_prerequisite_failure_reports_the_remote_restore_and_ends_cold_auto(
     let effects = apply(&mut state, failed_prepare(run));
     failed_restore(&effects, run, RemoteEffect::Applied);
     assert!(
-        effects.contains(&OwnerEffect::Reply(SessionOwnerReply::InputFinished {
+        effects.contains(&OwnerEffect::Reply(SessionOwnerReply::InputUnsent {
             input: old.clone(),
-            remote: RemoteEffect::None
+            reason: RevokeReason::RestoreDidNotActivate,
         }))
     );
     restore_live(&mut state, 3);
@@ -273,7 +392,10 @@ fn input_waits_for_owner_commit_and_failed_preparation_never_waits_for_a_turn() 
     let mut state = fresh();
     let run = open_wire(&mut state, 1);
     let waiting = input(run.generation, 2);
-    assert!(enqueue_prompt(&mut state, &waiting).is_empty());
+    assert_eq!(
+        enqueue_prompt(&mut state, &waiting),
+        [OwnerEffect::InputQueued(waiting.clone())]
+    );
     let prepared = apply(&mut state, restore_reply(run));
     assert!(prepared.contains(&OwnerEffect::PrepareHost(run)));
     assert!(
@@ -285,9 +407,9 @@ fn input_waits_for_owner_commit_and_failed_preparation_never_waits_for_a_turn() 
     let failed = apply(&mut state, failed_prepare(run));
     retired(&state, run.generation);
     assert!(
-        failed.contains(&OwnerEffect::Reply(SessionOwnerReply::InputFinished {
+        failed.contains(&OwnerEffect::Reply(SessionOwnerReply::InputUnsent {
             input: waiting,
-            remote: RemoteEffect::None
+            reason: RevokeReason::RestoreDidNotActivate,
         }))
     );
 }

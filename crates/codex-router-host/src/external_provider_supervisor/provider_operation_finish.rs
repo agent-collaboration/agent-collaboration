@@ -4,7 +4,7 @@
 //! the operation stops counting as live, and then the durable row is
 //! settled.
 
-use super::{LiveOperation, SupervisorInner, failure, now_ms};
+use super::{LiveOperation, SupervisorInner, failure};
 use crate::provider_operation_settlement::ProviderOperationCompletion;
 use collaboration_protocol::{
     ConversationOperationFailure, ConversationOperationFailureKind,
@@ -21,26 +21,6 @@ impl SupervisorInner {
         live: Arc<LiveOperation>,
         completion: ProviderOperationCompletion,
     ) {
-        // A test holds this operation here, before its terminal write.
-        #[cfg(any(test, feature = "test-support"))]
-        let terminal_write_test_pause = {
-            let mut pause = self
-                .terminal_write_test_pause
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            match pause.take() {
-                Some((held, pause)) if held == operation_id => Some(pause),
-                other => {
-                    *pause = other;
-                    None
-                }
-            }
-        };
-        #[cfg(any(test, feature = "test-support"))]
-        if let Some(pause) = terminal_write_test_pause {
-            let _result = pause.entered.send(());
-            let _result = pause.release.await;
-        }
         // The operation's record takes its outcome first; an unknown one
         // stays live until the binding's uncertainty cell holds it.
         live.completed(match &completion {
@@ -59,6 +39,19 @@ impl SupervisorInner {
                     provider_session_machines::operation_record_machine::AttemptEnding::Unknown
                 }
             },
+            ProviderOperationCompletion::Owned { result, .. } => {
+                match result.as_ref().err().map(|failure| failure.effect) {
+                    None | Some(ProviderOperationEffect::Applied) => {
+                        provider_session_machines::operation_record_machine::AttemptEnding::Applied
+                    }
+                    Some(ProviderOperationEffect::None) => {
+                        provider_session_machines::operation_record_machine::AttemptEnding::Refused
+                    }
+                    Some(ProviderOperationEffect::Unknown) => {
+                        provider_session_machines::operation_record_machine::AttemptEnding::Unknown
+                    }
+                }
+            }
         });
         let (result, retention) = match completion {
             ProviderOperationCompletion::Success {
@@ -126,7 +119,7 @@ impl SupervisorInner {
                     if operation_failure.effect == ProviderOperationEffect::Applied {
                         match target.as_ref() {
                             Some(target) => store
-                                .record_target(&operation_id, target, now_ms())
+                                .record_target(&operation_id, target, self.now_ms())
                                 .await
                                 .is_err(),
                             None => false,
@@ -146,7 +139,7 @@ impl SupervisorInner {
                         operation_failure.effect,
                         reconciliation,
                         None,
-                        now_ms(),
+                        self.now_ms(),
                     )
                     .await
                     .is_err()
@@ -181,6 +174,45 @@ impl SupervisorInner {
                     )
                 } else {
                     (Err(failure), Retention::Settled)
+                }
+            }
+            ProviderOperationCompletion::Owned {
+                result,
+                target,
+                saved,
+            } => {
+                if result
+                    .as_ref()
+                    .is_err_and(|failure| failure.effect == ProviderOperationEffect::Unknown)
+                {
+                    live.uncertainty_recorded();
+                }
+                if saved {
+                    (result, Retention::Settled)
+                } else {
+                    let unsaved = match result {
+                        Ok(_) => failure(
+                            ConversationOperationFailureKind::Unavailable,
+                            ConversationOperationFailureStage::Settlement,
+                            ProviderOperationEffect::Applied,
+                            "the provider effect was applied; the saved result isn't available and may differ",
+                            operation_id.clone(),
+                            Some(target),
+                        ),
+                        Err(mut observed) => {
+                            let summary = format!(
+                                "{}; the saved result isn't available and may differ",
+                                String::from(observed.message.clone())
+                            );
+                            if let Ok(message) =
+                                collaboration_protocol::NonEmptyText::try_from(summary)
+                            {
+                                observed.message = message;
+                            }
+                            observed
+                        }
+                    };
+                    (Err(unsaved), Retention::PersistenceFailed)
                 }
             }
         };

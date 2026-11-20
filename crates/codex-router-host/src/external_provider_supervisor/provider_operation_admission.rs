@@ -10,7 +10,7 @@ use super::{
     ConversationOperationSnapshot, ExternalProviderSupervisor, LiveOperation, OperationId,
     PreparedOperation, ProviderBindingIdentity, ProviderOperationAdmission,
     ProviderOperationAdmissionResult, ProviderOperationEffect, ProviderOperationKind,
-    ProviderOperationRecord, SessionRef, admission_failure, failure, now_ms, snapshot_failure,
+    ProviderOperationRecord, SessionRef, admission_failure, failure, snapshot_failure,
     snapshot_from_record, unavailable_failure,
 };
 /// When an admitted operation is marked as possibly dispatched.
@@ -34,11 +34,6 @@ pub(super) struct AdmissionBlockers {
 }
 
 impl AdmissionBlockers {
-    /// Every blocking operation.
-    pub(super) fn operations(&self) -> impl Iterator<Item = &OperationId> {
-        self.unknown.iter().chain(&self.in_flight)
-    }
-
     /// The refusal's one line: each blocking state and its valid next step
     /// (D1 M8); none when nothing blocks.
     pub(super) fn answer(&self) -> Option<String> {
@@ -52,7 +47,7 @@ impl AdmissionBlockers {
         let mut clauses = Vec::new();
         if !self.unknown.is_empty() {
             clauses.push(format!(
-                "an earlier send's outcome is unknown; reconcile {} first",
+                "an earlier prompt's outcome is unknown; check the session, then run operation reconcile for {}",
                 ids(&self.unknown)
             ));
         }
@@ -127,19 +122,23 @@ impl ExternalProviderSupervisor {
         binding: &ProviderBindingIdentity,
         known_target: Option<&SessionRef>,
         mark: DispatchMark,
+        operation_kind: ProviderOperationKind,
     ) -> Result<AdmissionBlockers, ()> {
         let cell = self.inner.binding_uncertainty(binding).await?;
-        let unknown = match super::provider_operation_index::apply_uncertainty(
-            &cell,
-            provider_session_machines::uncertainty_cell_machine::UncertaintyEvent::AdmissionCheck {
-                target: known_target.cloned(),
-            },
-        ) {
-            Ok(()) => Vec::new(),
-            Err(provider_session_machines::uncertainty_cell_machine::UncertaintyRefusal::EarlierOutcomeUnknown {
-                operations,
-            }) => operations,
-        };
+        let can_recover_close = operation_kind.is_restore()
+            || known_target.is_some_and(|target| {
+                self.owner_session_activity(target) != crate::ProviderSessionActivity::NotLoaded
+            });
+        let mut unknown = crate::binding_dispatch_permit::lock(cell.outcomes.get().ok_or(())?)
+            .blockers(known_target, can_recover_close);
+        if operation_kind == ProviderOperationKind::ConversationClose
+            && let Some(input) = known_target
+                .and_then(|target| self.owner_session_snapshot(target))
+                .and_then(|snapshot| snapshot.cancel_unconfirmed)
+        {
+            let foreground = input.operation.to_string();
+            unknown.retain(|operation| operation.as_str() != foreground);
+        }
         let in_flight = if mark == DispatchMark::AtAdmission {
             self.inner
                 .live_operations
@@ -150,6 +149,88 @@ impl ExternalProviderSupervisor {
             Vec::new()
         };
         Ok(AdmissionBlockers { unknown, in_flight })
+    }
+
+    #[expect(
+        clippy::result_large_err,
+        reason = "Keeps the operation identity and typed refusal."
+    )]
+    pub(super) async fn reserve_queued_delivery(
+        &self,
+        operation_id: &OperationId,
+        target: &SessionRef,
+        binding: &ProviderBindingIdentity,
+    ) -> Result<Option<Arc<LiveOperation>>, ConversationOperationFailure> {
+        let kind = ProviderOperationKind::ConversationPrompt;
+        self.wait_for_reservation(operation_id).await;
+        if let Some(record) = self
+            .stored_operation(operation_id, &Some(target.clone()))
+            .await?
+        {
+            Self::existing_operation(operation_id.clone(), record, kind, Some(target))?;
+            return Ok(None);
+        }
+        self.check_operation_blockers(
+            operation_id,
+            kind,
+            binding,
+            Some(target),
+            DispatchMark::Deferred,
+        )
+        .await?;
+        let mut operations = self
+            .inner
+            .live_operations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match operations.operations.entry(operation_id.clone()) {
+            std::collections::hash_map::Entry::Occupied(entry)
+                if entry.get().is_prompt_for(target) =>
+            {
+                Ok(None)
+            }
+            std::collections::hash_map::Entry::Occupied(_) => Err(reused_id_failure(
+                operation_id.clone(),
+                Some(target.clone()),
+            )),
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                let live = Arc::new(LiveOperation::queued_prompt(target.clone()));
+                entry.insert(Arc::clone(&live));
+                Ok(Some(live))
+            }
+        }
+    }
+
+    #[expect(
+        clippy::result_large_err,
+        reason = "Keeps the operation identity and typed refusal."
+    )]
+    async fn check_operation_blockers(
+        &self,
+        operation: &OperationId,
+        kind: ProviderOperationKind,
+        binding: &ProviderBindingIdentity,
+        target: Option<&SessionRef>,
+        mark: DispatchMark,
+    ) -> Result<(), ConversationOperationFailure> {
+        if kind == ProviderOperationKind::ConversationCancel {
+            return Ok(());
+        }
+        let blocking = self
+            .admission_blockers(binding, target, mark, kind)
+            .await
+            .map_err(|()| unavailable_failure(operation.clone(), target.cloned()))?;
+        if let Some(answer) = blocking.answer() {
+            return Err(failure(
+                ConversationOperationFailureKind::Busy,
+                ConversationOperationFailureStage::Validation,
+                ProviderOperationEffect::None,
+                &answer,
+                operation.clone(),
+                target.cloned(),
+            ));
+        }
+        Ok(())
     }
 
     /// Admits one operation (design note §15.3). A known ID answers from its
@@ -169,7 +250,7 @@ impl ExternalProviderSupervisor {
         known_target: Option<&SessionRef>,
         mark: DispatchMark,
     ) -> Result<PreparedOperation, ConversationOperationFailure> {
-        let admitted_at_ms = now_ms();
+        let admitted_at_ms = self.inner.now_ms();
         let failure_target = known_target.cloned();
         // 1. A reserved ID: wait for its durable insert, then answer from it.
         self.wait_for_reservation(&operation_id).await;
@@ -180,22 +261,8 @@ impl ExternalProviderSupervisor {
             return Self::existing_operation(operation_id, record, operation_kind, known_target);
         }
         // 2. Whether an earlier outcome blocks it, from the binding's cells.
-        if operation_kind != ProviderOperationKind::ConversationCancel {
-            let blocking = self
-                .admission_blockers(&binding, known_target, mark)
-                .await
-                .map_err(|()| unavailable_failure(operation_id.clone(), failure_target.clone()))?;
-            if let Some(answer) = blocking.answer() {
-                return Err(failure(
-                    ConversationOperationFailureKind::Busy,
-                    ConversationOperationFailureStage::Validation,
-                    ProviderOperationEffect::None,
-                    &answer,
-                    operation_id,
-                    failure_target,
-                ));
-            }
-        }
+        self.check_operation_blockers(&operation_id, operation_kind, &binding, known_target, mark)
+            .await?;
         // 3. Reserve it in the live index before its durable insert.
         let live = Arc::new(LiveOperation::reserving(
             binding.endpoint.clone(),
@@ -331,7 +398,7 @@ impl ExternalProviderSupervisor {
                 .store
                 .lock()
                 .await
-                .record_target(operation_id, target, now_ms())
+                .record_target(operation_id, target, self.inner.now_ms())
                 .await
                 .map_err(|_| {
                     admission_failure(
@@ -349,7 +416,7 @@ impl ExternalProviderSupervisor {
                     .store
                     .lock()
                     .await
-                    .mark_may_have_dispatched(operation_id, now_ms())
+                    .mark_may_have_dispatched(operation_id, self.inner.now_ms())
                     .await
                     .map_err(|_| {
                         admission_failure(
@@ -419,7 +486,7 @@ impl ExternalProviderSupervisor {
 
     /// Ends a reservation that got no row of its own: a durable row already
     /// existed (`conflict`), or the insert failed.
-    fn drop_reservation(
+    pub(super) fn drop_reservation(
         &self,
         operation_id: &OperationId,
         live: &Arc<LiveOperation>,
@@ -458,7 +525,7 @@ impl ExternalProviderSupervisor {
             .store
             .lock()
             .await
-            .mark_may_have_dispatched(operation_id, now_ms())
+            .mark_may_have_dispatched(operation_id, self.inner.now_ms())
             .await
             .map_err(|_| {
                 admission_failure(
@@ -473,38 +540,6 @@ impl ExternalProviderSupervisor {
 }
 
 impl ExternalProviderSupervisor {
-    /// Undoes `begin_dispatch` when nothing was sent: the row is waiting
-    /// again, so `show` reports its line state and a restart finds it
-    /// admitted, never sent (D1 R14).
-    #[expect(
-        clippy::result_large_err,
-        reason = "The typed failure retains the full published operation payload."
-    )]
-    pub(super) async fn undo_dispatch_mark(
-        &self,
-        operation_id: &OperationId,
-        target: &SessionRef,
-    ) -> Result<(), ConversationOperationFailure> {
-        let undone = self
-            .inner
-            .store
-            .lock()
-            .await
-            .unmark_undispatched(operation_id, now_ms())
-            .await
-            .map(|_| ());
-        if undone.is_ok() {
-            self.with_live(operation_id, LiveOperation::undispatched);
-        }
-        undone.map_err(|_| {
-            admission_failure(
-                operation_id.clone(),
-                "provider dispatch marker could not be undone",
-                Some(target.clone()),
-            )
-        })
-    }
-
     /// Applies `step` to the operation's live owner, when it has one.
     fn with_live(&self, operation_id: &OperationId, step: impl FnOnce(&LiveOperation)) {
         let live = self
@@ -526,34 +561,58 @@ impl ExternalProviderSupervisor {
 mod tests;
 
 impl super::SupervisorInner {
+    pub(super) async fn release_reconciled_prompt(&self, row: &ProviderOperationRecord) {
+        if row.operation_kind != ProviderOperationKind::ConversationPrompt
+            || row.stage != collaboration_protocol::ProviderOperationStage::Terminal
+            || row.effect != ProviderOperationEffect::Unknown
+            || row.reconciliation_state
+                != collaboration_protocol::ProviderReconciliationState::NotReconcilable
+        {
+            return;
+        }
+        if let ConversationBindingIdentity::ExternalProvider { binding } = &row.binding
+            && let Ok(cell) = self.binding_uncertainty(binding).await
+            && let Some(outcomes) = cell.outcomes.get()
+        {
+            crate::binding_dispatch_permit::lock(outcomes)
+                .record_reconciled(row.operation_id.clone());
+        }
+    }
+
     /// The binding's uncertainty cell, seeded on first use from its durable
     /// Unknown rows (design note §14.1).
     pub(super) async fn binding_uncertainty(
         &self,
         binding: &ProviderBindingIdentity,
-    ) -> Result<
-        Arc<
-            tokio::sync::OnceCell<
-                std::sync::Mutex<
-                    provider_session_machines::uncertainty_cell_machine::UnknownOutcomes<
-                        OperationId,
-                        SessionRef,
-                    >,
-                >,
-            >,
-        >,
-        (),
-    > {
+    ) -> Result<Arc<crate::binding_dispatch_permit::BindingUncertainty>, ()> {
+        use crate::binding_dispatch_permit::{BindingOutcomes, UnknownRecovery};
         let store = &self.store;
         self.uncertainty
             .cell(&binding.endpoint, || async {
-                // A locally retired restore keeps its durable uncertainty without holding admission.
-                store
+                let rows = store
                     .lock()
                     .await
-                    .unknown_operations(binding)
+                    .stored_uncertain_operations(binding)
                     .await
-                    .map_err(|_| ())
+                    .map_err(|_| ())?;
+                let mut unknown = BindingOutcomes::default();
+                for row in rows {
+                    use crate::session_close_evidence::{
+                        RestoreCloseEvidence, RestoreUncertainty, classify_restore_uncertainty,
+                    };
+                    let recovery = match classify_restore_uncertainty(
+                        &row,
+                        RestoreCloseEvidence::ReopenedStore,
+                    ) {
+                        RestoreUncertainty::EarlierRestoreRetired => {
+                            UnknownRecovery::RetiredRestore
+                        }
+                        RestoreUncertainty::EarlierCloseIncomplete => UnknownRecovery::RetiredClose,
+                        RestoreUncertainty::BlocksRestore => UnknownRecovery::Blocks,
+                    };
+                    unknown.record_unknown(row.operation, row.target, recovery);
+                }
+                Ok(unknown)
             })
             .await
     }
@@ -586,12 +645,13 @@ impl super::SupervisorInner {
         let Ok(cell) = self.binding_uncertainty(&identity).await else {
             return;
         };
-        let _recorded = super::provider_operation_index::apply_uncertainty(
-            &cell,
-            provider_session_machines::uncertainty_cell_machine::UncertaintyEvent::BecameUnknown {
-                operation: operation_id.clone(),
-                target: target.or_else(|| live.target()),
-            },
+        let Some(record) = cell.outcomes.get() else {
+            return;
+        };
+        crate::binding_dispatch_permit::lock(record).record_unknown(
+            operation_id.clone(),
+            target.or_else(|| live.target()),
+            crate::binding_dispatch_permit::UnknownRecovery::Blocks,
         );
         live.uncertainty_recorded();
     }

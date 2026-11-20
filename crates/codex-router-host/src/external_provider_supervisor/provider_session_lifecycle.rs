@@ -1,17 +1,13 @@
 //! Durable provider resume and close operations.
 
 use super::provider_operation_admission::DispatchMark;
-use super::provider_operation_failure::restore_operation_failure;
 use super::{
-    Arc, ConversationOperationFailureKind, ConversationOperationFailureStage,
-    ConversationOperationSettlement, ConversationOperationSubmission, ExternalProviderSupervisor,
-    PathBuf, PreparedOperation, ProviderConversationFuture, ProviderOperationCompletion,
-    ProviderOperationEffect, ProviderOperationKind, admitted_submission, effective_settings,
-    existing_submission, failure, provider_session_record, retain_operation, runtime_failure,
+    ConversationOperationFailureKind, ConversationOperationFailureStage,
+    ConversationOperationSubmission, ExternalProviderSupervisor, PreparedOperation,
+    ProviderConversationFuture, ProviderOperationEffect, ProviderOperationKind,
+    admitted_submission, existing_submission, failure, provider_session_record, retain_operation,
 };
-use collaboration_protocol::{
-    ConversationCloseRequest, ConversationResumeRequest, ProviderHistoryAvailability,
-};
+use collaboration_protocol::{ConversationCloseRequest, ConversationResumeRequest};
 
 pub(super) fn resume(
     supervisor: &ExternalProviderSupervisor,
@@ -54,89 +50,24 @@ pub(super) fn resume(
             PreparedOperation::Existing(operation) => Ok(existing_submission(operation)),
             PreparedOperation::Admitted { snapshot, live } => {
                 let operation_id = request.operation_id.clone();
-                let working_directory = request.working_directory;
-                let requested_policy = request.requested_policy;
-                let created_by = request.requested_by;
-                let approver = request.approver;
-                let completion_target = target.clone();
-                let completion_inner = Arc::clone(&backend.inner);
+                let record = Box::new(provider_session_record(
+                    target,
+                    request.working_directory,
+                    request.requested_policy,
+                    request.requested_by,
+                    request.approver,
+                    collaboration_runtime::ProviderSessionResumeInputs::default(),
+                    backend.inner.now_ms(),
+                ));
+                let completion_backend = backend.clone();
                 backend.spawn_operation(operation_id.clone(), live, async move {
-                    let cwd = PathBuf::from(String::from(working_directory.clone()));
-                    // One mode operation at a time per session: the record read and the mode
-                    // the restore puts back wait for any explicit change still recording,
-                    // and a change waits for the restore (review F3).
-                    let _mode_turn = runtime
-                        .session_setup()
-                        .mode_order()
-                        .enter(&provider_session_id)
-                        .await;
-                    // The setup its create had, rebuilt from its record (D1 R18; Decision 3).
-                    let setup = match crate::provider_session_setup::recorded_restore_setup(
-                        &completion_inner.store,
-                        runtime.session_setup(),
-                        &completion_target,
-                        &cwd,
+                    super::provider_owner_operations::restore(
+                        &completion_backend,
+                        operation_id,
+                        record,
+                        provider_session_machines::session_lifecycle_machine::RestoreVia::Resume,
                     )
                     .await
-                    {
-                        Ok(setup) => setup,
-                        Err(_) => {
-                            return ProviderOperationCompletion::Failure(failure(
-                                ConversationOperationFailureKind::Unavailable,
-                                ConversationOperationFailureStage::Dispatch,
-                                ProviderOperationEffect::None,
-                                "the session's record could not be read",
-                                operation_id,
-                                Some(completion_target),
-                            ));
-                        }
-                    };
-                    match runtime
-                        .resume_session_with_setup(provider_session_id.clone(), cwd, setup)
-                        .await
-                    {
-                        Ok(()) => {
-                            let mut observed = effective_settings(requested_policy.clone());
-                            completion_inner
-                                .history_unavailable
-                                .lock()
-                                .await
-                                .insert(completion_target.clone());
-                            if let Some(catalog) = runtime.settings_catalog(&provider_session_id) {
-                                let effective = catalog.effective_settings();
-                                observed.mode = effective.mode;
-                                observed.model = effective.model;
-                                observed.effort = effective.effort;
-                                observed.fast = effective
-                                    .fast
-                                    .map(crate::provider_operation_settlement::provider_fast_state);
-                                completion_inner
-                                    .record_settings_catalog(completion_target.clone(), catalog)
-                                    .await;
-                            }
-                            ProviderOperationCompletion::Success {
-                                settlement: ConversationOperationSettlement::Resumed {
-                                    target: completion_target.clone(),
-                                    effective_settings: observed,
-                                    history: ProviderHistoryAvailability::HistoryUnavailable,
-                                },
-                                target: Some(completion_target.clone()),
-                                // A resume writes none of the resume inputs, so
-                                // the ones its create recorded stay (Decision 3).
-                                session_record: Some(Box::new(provider_session_record(
-                                    completion_target,
-                                    working_directory,
-                                    requested_policy,
-                                    created_by,
-                                    approver,
-                                    collaboration_runtime::ProviderSessionResumeInputs::default(),
-                                ))),
-                            }
-                        }
-                        Err(error) => ProviderOperationCompletion::Failure(
-                            restore_operation_failure(operation_id, completion_target, error),
-                        ),
-                    }
                 });
                 Ok(admitted_submission(snapshot))
             }
@@ -183,35 +114,15 @@ pub(super) fn close(
             PreparedOperation::Admitted { live, .. } => {
                 let operation_id = request.operation_id.clone();
                 let snapshot = backend.begin_dispatch(&operation_id, &target).await?;
-                // The close's admission on the session's cell ends every
-                // waiting message not sent before the interrupt, so none
-                // starts as the running turn ends. A Router-side close (the
-                // agent offers no session/close) ends NotLoaded like any
-                // close, and the session can be loaded again.
-                let completion_target = target.clone();
-                // The runtime interrupts a running turn, waits for idle, then
-                // closes, or only releases the session when the agent can't.
+                let completion_backend = backend.clone();
                 backend.spawn_operation(operation_id.clone(), live, async move {
-                    let closed = if agent_closes {
-                        runtime.close_session(provider_session_id).await
-                    } else {
-                        runtime.release_session(provider_session_id).await
-                    };
-                    match closed {
-                        Ok(()) => ProviderOperationCompletion::Success {
-                            settlement: ConversationOperationSettlement::Closed {
-                                target: completion_target.clone(),
-                                router_closed: !agent_closes,
-                            },
-                            target: Some(completion_target),
-                            session_record: None,
-                        },
-                        Err(error) => ProviderOperationCompletion::Failure(runtime_failure(
-                            operation_id,
-                            Some(completion_target),
-                            error,
-                        )),
-                    }
+                    super::provider_owner_operations::close(
+                        &completion_backend,
+                        operation_id,
+                        target,
+                        agent_closes,
+                    )
+                    .await
                 });
                 Ok(admitted_submission(snapshot))
             }

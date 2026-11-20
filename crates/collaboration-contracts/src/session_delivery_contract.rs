@@ -137,12 +137,21 @@ pub trait AttemptEvidenceSink: Send + Sync {
         &self,
         evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, ()>;
+
+    /// An owned writer for evidence offered after a queue receipt returns.
+    fn retain_queued_dispatch(&self) -> Option<Arc<dyn AttemptEvidenceSink>> {
+        None
+    }
 }
 
 /// Direct and transient messages have no durable attempt record to update.
 pub struct UnstoredAttemptEvidenceSink;
 
 impl AttemptEvidenceSink for UnstoredAttemptEvidenceSink {
+    fn retain_queued_dispatch(&self) -> Option<Arc<dyn AttemptEvidenceSink>> {
+        Some(Arc::new(Self))
+    }
+
     fn record(
         &self,
         _: RouteEffectEvidence<SessionRef, CodexGeneration>,

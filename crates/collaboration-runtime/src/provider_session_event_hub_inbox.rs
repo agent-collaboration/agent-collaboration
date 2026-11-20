@@ -2,7 +2,9 @@
 
 use super::{HubEvent, ProviderSessionEventHub, SessionHistory};
 use message_board::SessionRef;
-use session_event_model::{SessionEvent, SessionSettings, SessionState, SkillView};
+use session_event_model::{
+    CapabilityReport, SessionEvent, SessionSettings, SessionState, SkillView,
+};
 use std::{
     collections::VecDeque,
     num::NonZeroUsize,
@@ -27,6 +29,10 @@ pub enum HubHistoryAvailability {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum HubPublicationFact {
     Event(SessionEvent),
+    PreviousTurnEnded {
+        turn_id: String,
+        outcome: session_event_model::TurnOutcome,
+    },
     Skills(SkillView),
     ReplayBoundary,
     HistoryUnavailable,
@@ -35,6 +41,8 @@ pub enum HubPublicationFact {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HubPublicationBaseline {
     pub state: SessionState,
+    pub turn_running: bool,
+    pub capabilities: Option<CapabilityReport>,
     pub settings: Option<SessionSettings>,
     pub skills: SkillView,
     pub history: HubHistoryAvailability,
@@ -317,6 +325,9 @@ impl SessionHistory {
         for fact in facts {
             match fact {
                 HubPublicationFact::Event(event) => self.commit_owner_event(event)?,
+                HubPublicationFact::PreviousTurnEnded { turn_id, outcome } => {
+                    self.retain_owner_event(SessionEvent::TurnEnded { turn_id, outcome })?;
+                }
                 HubPublicationFact::Skills(skills) => {
                     self.skill_view.send_replace(skills);
                 }
@@ -340,6 +351,9 @@ impl SessionHistory {
                     .map_err(|_| HubPublicationRefusal::Projection)?;
                 self.advance_owner_sequence()?;
             }
+            HubPublicationFact::PreviousTurnEnded { .. } => {
+                self.advance_owner_sequence()?;
+            }
             HubPublicationFact::ReplayBoundary | HubPublicationFact::HistoryUnavailable => {
                 self.reset_owner_history(true)?;
             }
@@ -359,6 +373,10 @@ impl SessionHistory {
     fn commit_owner_event(&mut self, event: SessionEvent) -> Result<(), HubPublicationRefusal> {
         self.project(&event)
             .map_err(|_| HubPublicationRefusal::Projection)?;
+        self.retain_owner_event(event)
+    }
+
+    fn retain_owner_event(&mut self, event: SessionEvent) -> Result<(), HubPublicationRefusal> {
         let sequence = self.advance_owner_sequence()?;
         let item = HubEvent { sequence, event };
         match &item.event {
@@ -410,10 +428,14 @@ impl SessionHistory {
         displaced: bool,
     ) -> Result<(), HubPublicationRefusal> {
         let replace_history = displaced || baseline.history == HubHistoryAvailability::Unavailable;
-        if !replace_history && self.next_sequence.checked_add(2).is_none() {
+        if !replace_history && self.next_sequence.checked_add(3).is_none() {
             return Err(HubPublicationRefusal::Projection);
         }
         self.reset_owner_history(replace_history)?;
+        self.turn_running = baseline.turn_running;
+        if let Some(capabilities) = baseline.capabilities {
+            self.commit_owner_event(SessionEvent::CapabilitiesChanged { capabilities })?;
+        }
         if let Some(settings) = baseline.settings {
             self.commit_owner_event(SessionEvent::SettingsChanged { settings })?;
         }

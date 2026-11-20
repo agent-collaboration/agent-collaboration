@@ -1,11 +1,15 @@
 //! Host composition for the extracted ACP client.
 
-use provider_session_machines::{SessionGeneration, session_lifecycle_machine::RestoreVia};
+#[cfg(test)]
+use provider_session_machines::session_lifecycle_machine::RestoreVia;
+#[cfg(test)]
+use std::path::PathBuf;
+use std::sync::Arc;
 #[cfg(test)]
 use std::time::Duration;
-use std::{path::PathBuf, sync::Arc};
 
 use acp_client_runtime::AgentSessionClient;
+#[cfg(test)]
 pub(crate) use acp_client_runtime::ProviderPromptDispatchObservation;
 #[cfg(test)]
 use collaboration_protocol::{CodexGeneration, SessionRef};
@@ -15,11 +19,11 @@ use collaboration_runtime::ServiceInteractionBroker;
 use message_board::SessionEndpointRef;
 use tokio_util::sync::CancellationToken;
 
-use crate::acp_interaction_port::{HostInteractionPort, NoopSessionEventSink};
-use crate::provider_session_event_sink::HubSessionEventSink;
 #[cfg(test)]
 use crate::{ProviderSessionActivity, ProviderSteeringOutcome};
-use acp_client_runtime::GenerationPublication;
+use crate::{
+    acp_interaction_port::HostInteractionPort, session_owner_ingress::SessionOwnerIngress,
+};
 #[cfg(test)]
 use acp_client_runtime::{
     acp_operation_error_for_test as acp_operation_error,
@@ -27,8 +31,8 @@ use acp_client_runtime::{
 };
 
 pub use acp_client_runtime::{
-    ExternalProviderAdmission, ExternalProviderApprovalRefusalReason,
-    ExternalProviderCreatedSession, ExternalProviderLaunch, ExternalProviderRuntimeError,
+    ExternalProviderAdmission, ExternalProviderApprovalRefusalReason, ExternalProviderLaunch,
+    ExternalProviderRuntimeError,
 };
 #[cfg(test)]
 pub use acp_client_runtime::{
@@ -36,6 +40,7 @@ pub use acp_client_runtime::{
     ExternalProviderPermissionOutcome, ExternalProviderToolCall, ExternalProviderToolOutcome,
 };
 
+#[cfg(test)]
 use crate::external_provider_approval_context::ExternalProviderApprovalContext;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -45,6 +50,7 @@ pub struct ExternalProviderPromptOutcome {
     pub permission_refusal_reason: Option<ExternalProviderApprovalRefusalReason>,
 }
 
+#[cfg(test)]
 fn host_prompt_outcome(
     outcome: acp_client_runtime::ExternalProviderPromptOutcome,
 ) -> Result<ExternalProviderPromptOutcome, ExternalProviderRuntimeError> {
@@ -88,20 +94,17 @@ mod initialization_authentication_tests;
 pub struct ExternalProviderRuntime {
     client: AgentSessionClient<HostInteractionPort>,
     interaction_port: Arc<HostInteractionPort>,
-    event_sink: Option<Arc<HubSessionEventSink>>,
+    owner_ingress: Arc<SessionOwnerIngress>,
+    owner_door: std::sync::OnceLock<Arc<crate::session_owner_door::SessionOwnerDoor>>,
+    #[cfg(test)]
+    pub(crate) preparation_fixture:
+        Arc<crate::session_owner_preparation_fixture::PreparationFixture>,
+    #[cfg(test)]
+    fixture: tokio::sync::OnceCell<owner_fixture::RuntimeFixture>,
+    #[cfg(test)]
+    fixture_hub: Option<(Arc<ProviderSessionEventHub>, SessionEndpointRef)>,
     /// The binding's work roots and each session's requested mode (D1 R18).
     session_setup: crate::provider_session_setup::BindingSessionSetup,
-    /// Test-only: holds the next create, load or resume after the client's success,
-    /// before its activation is published.
-    #[cfg(test)]
-    activation_pause: std::sync::Mutex<
-        Option<(
-            tokio::sync::oneshot::Sender<()>,
-            tokio::sync::oneshot::Receiver<()>,
-        )>,
-    >,
-    #[cfg(test)]
-    restore_input_waiting: tokio::sync::Notify,
 }
 
 impl std::fmt::Debug for ExternalProviderRuntime {
@@ -114,27 +117,77 @@ impl std::fmt::Debug for ExternalProviderRuntime {
 }
 
 impl ExternalProviderRuntime {
+    pub(crate) fn owner_clock(&self) -> Arc<dyn router_clock::RuntimeClock> {
+        self.client.runtime_clock()
+    }
+
+    pub(crate) fn can_reuse_setting_confirmation(
+        &self,
+        kind: provider_session_machines::ProviderSettingKind,
+    ) -> bool {
+        self.client.can_reuse_setting_confirmation(kind)
+    }
+
+    pub(crate) async fn prepare_owner_prompt(
+        &self,
+        provider_id: &str,
+        input: acp_client_runtime::ProviderTurnInput,
+    ) -> Result<acp_client_runtime::ProviderPromptContent, ExternalProviderRuntimeError> {
+        let capabilities = self.capability_report(provider_id).await;
+        self.client.prepare_owner_prompt(input, &capabilities)
+    }
+
+    pub fn session_owner_door(
+        &self,
+        store: Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>,
+        hub: Arc<collaboration_runtime::ProviderSessionEventHub>,
+    ) -> Arc<crate::session_owner_door::SessionOwnerDoor> {
+        self.owner_door
+            .get_or_init(|| {
+                let door = Arc::new(crate::session_owner_door::SessionOwnerDoor::new(
+                    self.client.owner_wire(),
+                    self.client.owner_approval_bindings(),
+                    self.client.runtime_clock(),
+                    store,
+                    hub,
+                    self.retirement(),
+                    #[cfg(test)]
+                    self.preparation_fixture.clone(),
+                ));
+                self.owner_ingress.attach(&door);
+                door
+            })
+            .clone()
+    }
+
     pub async fn initialize(
         launch: ExternalProviderLaunch,
         behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         let interaction_port = Arc::new(HostInteractionPort::default());
+        let owner_ingress = Arc::new(SessionOwnerIngress::default());
+        interaction_port
+            .install_event_sink(owner_ingress.clone())
+            .await;
         let client = AgentSessionClient::initialize(
             launch,
             Arc::clone(&interaction_port),
-            Arc::new(NoopSessionEventSink),
+            owner_ingress.clone(),
             behavior,
         )
         .await?;
         Ok(Self {
             client,
             interaction_port,
-            event_sink: None,
+            owner_ingress,
+            owner_door: std::sync::OnceLock::new(),
+            #[cfg(test)]
+            preparation_fixture: Arc::default(),
+            #[cfg(test)]
+            fixture: tokio::sync::OnceCell::new(),
+            #[cfg(test)]
+            fixture_hub: None,
             session_setup: crate::provider_session_setup::BindingSessionSetup::default(),
-            #[cfg(test)]
-            activation_pause: std::sync::Mutex::new(None),
-            #[cfg(test)]
-            restore_input_waiting: tokio::sync::Notify::new(),
         })
     }
 
@@ -146,13 +199,17 @@ impl ExternalProviderRuntime {
         behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         let interaction_port = Arc::new(HostInteractionPort::default());
+        let owner_ingress = Arc::new(SessionOwnerIngress::default());
+        interaction_port
+            .install_event_sink(owner_ingress.clone())
+            .await;
         let client = AgentSessionClient::initialize_with_mcp_http(
             launch,
             model_picker,
             server_name,
             server_url,
             Arc::clone(&interaction_port),
-            Arc::new(NoopSessionEventSink),
+            owner_ingress.clone(),
             behavior,
             Arc::new(router_clock::SystemRuntimeClock::new()),
         )
@@ -160,12 +217,15 @@ impl ExternalProviderRuntime {
         Ok(Self {
             client,
             interaction_port,
-            event_sink: None,
+            owner_ingress,
+            owner_door: std::sync::OnceLock::new(),
+            #[cfg(test)]
+            preparation_fixture: Arc::default(),
+            #[cfg(test)]
+            fixture: tokio::sync::OnceCell::new(),
+            #[cfg(test)]
+            fixture_hub: None,
             session_setup: crate::provider_session_setup::BindingSessionSetup::default(),
-            #[cfg(test)]
-            activation_pause: std::sync::Mutex::new(None),
-            #[cfg(test)]
-            restore_input_waiting: tokio::sync::Notify::new(),
         })
     }
 
@@ -178,45 +238,61 @@ impl ExternalProviderRuntime {
         model_picker: acp_client_runtime::ProviderModelPicker,
         server_name: impl Into<String>,
         server_url: impl Into<String>,
-        hub: Arc<ProviderSessionEventHub>,
-        endpoint: SessionEndpointRef,
+        _hub: Arc<ProviderSessionEventHub>,
+        _endpoint: SessionEndpointRef,
         behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
         clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         let interaction_port = Arc::new(HostInteractionPort::default());
-        let event_sink = Arc::new(HubSessionEventSink::new(hub, endpoint));
-        let published_sink: Arc<dyn acp_client_runtime::SessionEventSink> = event_sink.clone();
+        let owner_ingress = Arc::new(SessionOwnerIngress::default());
         interaction_port
-            .install_event_sink(Arc::clone(&published_sink))
+            .install_event_sink(owner_ingress.clone())
             .await;
-        let result = AgentSessionClient::initialize_with_mcp_http(
+        let client = AgentSessionClient::initialize_with_mcp_http(
             launch,
             model_picker,
             server_name,
             server_url,
             Arc::clone(&interaction_port),
-            published_sink,
+            owner_ingress.clone(),
             behavior,
             clock,
         )
-        .await;
-        let client = match result {
-            Ok(client) => client,
-            Err(error) => {
-                let _ = event_sink.shutdown().await;
-                return Err(error);
-            }
-        };
+        .await?;
         Ok(Self {
             client,
             interaction_port,
-            event_sink: Some(event_sink),
+            owner_ingress,
+            owner_door: std::sync::OnceLock::new(),
+            #[cfg(test)]
+            preparation_fixture: Arc::default(),
+            #[cfg(test)]
+            fixture: tokio::sync::OnceCell::new(),
+            #[cfg(test)]
+            fixture_hub: Some((_hub, _endpoint)),
             session_setup: crate::provider_session_setup::BindingSessionSetup::default(),
-            #[cfg(test)]
-            activation_pause: std::sync::Mutex::new(None),
-            #[cfg(test)]
-            restore_input_waiting: tokio::sync::Notify::new(),
         })
+    }
+
+    #[cfg(feature = "test-support")]
+    pub async fn initialize_with_fixture_clock(
+        launch: ExternalProviderLaunch,
+        behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
+        hub: Arc<ProviderSessionEventHub>,
+        endpoint: SessionEndpointRef,
+        clock: Arc<dyn router_clock::RuntimeClock>,
+    ) -> Result<Self, ExternalProviderRuntimeError> {
+        Self::initialize_with_mcp_http_and_hub(
+            launch,
+            acp_client_runtime::ProviderModelPicker::Standard,
+            "fixture",
+            "http://127.0.0.1:1/mcp",
+            hub,
+            endpoint,
+            behavior,
+            clock,
+        )
+        .await
     }
 
     #[cfg(test)]
@@ -226,28 +302,45 @@ impl ExternalProviderRuntime {
         behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         let interaction_port = Arc::new(HostInteractionPort::default());
+        let owner_ingress = Arc::new(SessionOwnerIngress::default());
+        interaction_port
+            .install_event_sink(owner_ingress.clone())
+            .await;
         let client = AgentSessionClient::initialize_with_timeout(
             launch,
             initialize_timeout,
             Arc::clone(&interaction_port),
-            Arc::new(NoopSessionEventSink),
+            owner_ingress.clone(),
             behavior,
         )
         .await?;
         Ok(Self {
             client,
             interaction_port,
-            event_sink: None,
+            owner_ingress,
+            owner_door: std::sync::OnceLock::new(),
+            preparation_fixture: Arc::default(),
+            #[cfg(test)]
+            fixture: tokio::sync::OnceCell::new(),
+            #[cfg(test)]
+            fixture_hub: None,
             session_setup: crate::provider_session_setup::BindingSessionSetup::default(),
-            #[cfg(test)]
-            activation_pause: std::sync::Mutex::new(None),
-            #[cfg(test)]
-            restore_input_waiting: tokio::sync::Notify::new(),
         })
     }
 
     pub async fn install_approval_broker(&self, broker: Arc<ServiceInteractionBroker>) {
         self.interaction_port.install_broker(broker).await;
+    }
+
+    pub(crate) fn take_permission_refusal(
+        &self,
+        operation: &OperationId,
+    ) -> Option<ExternalProviderApprovalRefusalReason> {
+        self.client.take_permission_refusal(operation)
+    }
+
+    pub(crate) fn frame_limit_exceeded(&self) -> bool {
+        self.client.frame_limit_exceeded()
     }
 
     pub fn admission(&self) -> &ExternalProviderAdmission {
@@ -258,24 +351,15 @@ impl ExternalProviderRuntime {
         &self,
         provider_session_id: &str,
     ) -> acp_client_runtime::ProviderCapabilityReport {
-        self.client.capability_report(provider_session_id).await
-    }
-
-    pub(crate) fn install_catalog_refresh(
-        &self,
-        sender: tokio::sync::mpsc::UnboundedSender<String>,
-    ) {
-        if let Some(event_sink) = &self.event_sink {
-            event_sink.install_catalog_refresh(sender);
-        }
-    }
-
-    pub(crate) fn install_live_event_observer(
-        &self,
-        observer: Arc<dyn crate::provider_session_event_sink::LiveSessionEventObserver>,
-    ) {
-        if let Some(event_sink) = &self.event_sink {
-            event_sink.install_live_event_observer(observer);
+        let connection = self.client.connection_capability_report().await;
+        let observed = self
+            .owner_door
+            .get()
+            .and_then(|door| door.existing_provider_session(provider_session_id))
+            .and_then(|owner| owner.snapshots().borrow().projection.capabilities.clone());
+        match observed {
+            Some(observed) => connection.with_session_model(&observed),
+            None => connection,
         }
     }
 
@@ -287,429 +371,19 @@ impl ExternalProviderRuntime {
         self.client.set_endpoint_id(endpoint_id).await;
     }
 
-    pub async fn create_session(
-        &self,
-        cwd: PathBuf,
-    ) -> Result<String, ExternalProviderRuntimeError> {
-        self.create_session_with_observation(cwd)
-            .await
-            .map(|created| created.provider_session_id)
-    }
-
-    pub async fn create_session_with_observation(
-        &self,
-        cwd: PathBuf,
-    ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
-        self.create_session_with_settings(
-            cwd,
-            None,
-            acp_client_runtime::RequestedProviderSettings::default(),
-        )
-        .await
-    }
-
-    pub async fn create_session_with_settings(
-        &self,
-        cwd: PathBuf,
-        scratch_folder: Option<PathBuf>,
-        settings: acp_client_runtime::RequestedProviderSettings,
-    ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
-        self.create_session_with_work_roots(
-            cwd,
-            scratch_folder,
-            settings,
-            acp_client_runtime::SessionWorkRoots::default(),
-        )
-        .await
-    }
-
-    /// Creates a session that also works in the Router's work roots (D1 R18).
-    pub async fn create_session_with_work_roots(
-        &self,
-        cwd: PathBuf,
-        scratch_folder: Option<PathBuf>,
-        settings: acp_client_runtime::RequestedProviderSettings,
-        work_roots: acp_client_runtime::SessionWorkRoots,
-    ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
-        // The generation the connection admitted the session under, kept
-        // with the outcome rather than looked up later (D1 R14).
-        let (created, generation) = self
-            .client
-            .create_session_admitted(cwd, scratch_folder, settings, work_roots)
-            .await;
-        let active_session = match &created {
-            Ok(created) => Some(created.provider_session_id.as_str()),
-            Err(ExternalProviderRuntimeError::CreatedWithoutSettings {
-                provider_session_id,
-                ..
-            }) => Some(provider_session_id.as_str()),
-            Err(ExternalProviderRuntimeError::InvalidSetting {
-                provider_session_id,
-                disposition: acp_client_runtime::InvalidSettingSessionDisposition::RemainsCreated,
-                ..
-            }) => Some(provider_session_id.as_str()),
-            _ => None,
-        };
-        if let Some(session_id) = active_session {
-            #[cfg(test)]
-            self.pause_before_activation().await;
-            self.publish_active_session(session_id, generation).await?;
-        }
-        created
-    }
-
-    pub fn settings_unresolved(&self, provider_session_id: &str) -> bool {
-        self.client.settings_unresolved(provider_session_id)
-    }
-
-    pub fn setting_outcome_unknown(
-        &self,
-        provider_session_id: &str,
-        kind: provider_session_machines::ProviderSettingKind,
-    ) -> bool {
-        self.client
-            .setting_outcome_unknown(provider_session_id, kind)
-    }
-
-    pub async fn set_setting(
-        &self,
-        provider_session_id: String,
-        request: acp_client_runtime::ProviderSettingRequest,
-    ) -> Result<acp_client_runtime::EffectiveProviderSettings, ExternalProviderRuntimeError> {
-        self.client.set_setting(provider_session_id, request).await
-    }
-
-    pub(crate) async fn apply_setting(
-        &self,
-        provider_session_id: String,
-        request: acp_client_runtime::ProviderSettingRequest,
-    ) -> Result<acp_client_runtime::ProviderSettingApplication, ExternalProviderRuntimeError> {
-        self.client
-            .apply_setting(provider_session_id, request)
-            .await
-    }
-
-    pub fn accept_session_settings(
-        &self,
-        provider_session_id: String,
-    ) -> Result<acp_client_runtime::EffectiveProviderSettings, ExternalProviderRuntimeError> {
-        self.client.accept_session_settings(provider_session_id)
-    }
-
-    pub fn settings_catalog(
-        &self,
-        provider_session_id: &str,
-    ) -> Option<acp_client_runtime::ProviderSettingsCatalog> {
-        self.client.settings_catalog(provider_session_id)
-    }
-
-    /// The binding's work roots and each session's requested mode.
     pub(crate) fn session_setup(&self) -> &crate::provider_session_setup::BindingSessionSetup {
         &self.session_setup
     }
 
-    pub async fn load_session(
-        &self,
-        provider_session_id: String,
-        cwd: PathBuf,
-    ) -> Result<(), ExternalProviderRuntimeError> {
-        self.load_session_with_setup(
-            provider_session_id,
-            cwd,
-            acp_client_runtime::SessionRestoreSetup::default(),
-        )
-        .await
-        .map_err(acp_client_runtime::RestoreFailure::into_error)
-    }
-
-    /// Loads the session, rebuilding the setup its create had (D1 R18), and
-    /// keeps its mode report for show.
-    pub(crate) async fn load_session_with_setup(
-        &self,
-        provider_session_id: String,
-        cwd: PathBuf,
-        setup: acp_client_runtime::SessionRestoreSetup,
-    ) -> Result<(), acp_client_runtime::RestoreFailure> {
-        // The generation the connection admitted this load under (D1 R14).
-        let restored = self
-            .client
-            .begin_restore_session(provider_session_id.clone(), cwd, setup, RestoreVia::Load)
-            .await?
-            .finished()
-            .await?;
-        self.finish_restore(&provider_session_id, restored, RestoreVia::Load)
-            .await
-    }
-
-    pub async fn resume_session(
-        &self,
-        provider_session_id: String,
-        cwd: PathBuf,
-    ) -> Result<(), ExternalProviderRuntimeError> {
-        self.resume_session_with_setup(
-            provider_session_id,
-            cwd,
-            acp_client_runtime::SessionRestoreSetup::default(),
-        )
-        .await
-        .map_err(acp_client_runtime::RestoreFailure::into_error)
-    }
-
-    /// Resumes the session, rebuilding the setup its create had (D1 R18), and
-    /// keeps its mode report for show.
-    pub(crate) async fn resume_session_with_setup(
-        &self,
-        provider_session_id: String,
-        cwd: PathBuf,
-        setup: acp_client_runtime::SessionRestoreSetup,
-    ) -> Result<(), acp_client_runtime::RestoreFailure> {
-        let restored = self
-            .client
-            .begin_restore_session(provider_session_id.clone(), cwd, setup, RestoreVia::Resume)
-            .await?
-            .finished()
-            .await?;
-        self.finish_restore(&provider_session_id, restored, RestoreVia::Resume)
-            .await
-    }
-
-    async fn finish_restore(
-        &self,
-        provider_session_id: &str,
-        restored: acp_client_runtime::PreparedProviderRestore,
-        via: RestoreVia,
-    ) -> Result<(), acp_client_runtime::RestoreFailure> {
-        #[cfg(test)]
-        self.pause_before_activation().await;
-        let generation = restored.admission.generation;
-        if let Err(error) = self
-            .activate_restore(provider_session_id, generation, via)
-            .await
-        {
-            if let Err(retirement_error) = restored.retire().await {
-                tracing::warn!(provider_session_id, %retirement_error, "failed to retire an unsuccessful restore");
-            }
-            return Err(acp_client_runtime::RestoreFailure::attempted(error));
-        }
-        let restored = restored
-            .activate()
-            .await
-            .map_err(acp_client_runtime::RestoreFailure::attempted)?;
-        // Kept only once the run's activation was accepted (review F3).
-        self.session_setup
-            .record_restored_mode(provider_session_id, &restored.permission_mode);
-        Ok(())
-    }
-
-    pub(crate) async fn wait_for_restore_input(
-        &self,
-        provider_session_id: &str,
-    ) -> Result<(), ExternalProviderRuntimeError> {
-        let Some(generation) = self.client.loading_generation(provider_session_id) else {
-            return Ok(());
-        };
-        #[cfg(test)]
-        self.restore_input_waiting.notify_one();
-        self.client
-            .wait_for_restore_activation(provider_session_id, generation)
-            .await
-    }
-
-    #[cfg(test)]
-    pub(crate) async fn wait_for_pending_restore_input_for_test(&self) {
-        self.restore_input_waiting.notified().await;
-    }
-
-    async fn activate_restore(
-        &self,
-        provider_session_id: &str,
-        generation: SessionGeneration,
-        via: RestoreVia,
-    ) -> Result<(), ExternalProviderRuntimeError> {
-        if via == RestoreVia::Resume
-            && let Some(event_sink) = &self.event_sink
-        {
-            let invalidated = event_sink
-                .begin_history_unavailable(provider_session_id, generation)
-                .await
-                .map_err(|_| ExternalProviderRuntimeError::HistoryReplayUnavailable)?;
-            if invalidated == GenerationPublication::Ended {
-                return Err(ExternalProviderRuntimeError::SessionReleased);
-            }
-        }
-        self.publish_active_session(provider_session_id, Some(generation))
-            .await
-    }
-
-    /// Publishes the session active in `generation`. A generation closed
-    /// meanwhile publishes nothing, and the session counts as closed.
-    async fn publish_active_session(
-        &self,
-        provider_session_id: &str,
-        generation: Option<SessionGeneration>,
-    ) -> Result<(), ExternalProviderRuntimeError> {
-        if let (Some(event_sink), Some(generation)) = (&self.event_sink, generation) {
-            let capabilities = self
-                .client
-                .capability_report(provider_session_id)
-                .await
-                .to_session_model();
-            let published = event_sink
-                .publish_activation(provider_session_id, generation, capabilities)
-                .await
-                .map_err(|_| ExternalProviderRuntimeError::SinkClosed)?;
-            if published == GenerationPublication::Ended {
-                return Err(ExternalProviderRuntimeError::SessionReleased);
-            }
-        }
-        Ok(())
-    }
-
-    #[cfg(test)]
-    async fn pause_before_activation(&self) {
-        let pause = self
-            .activation_pause
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .take();
-        if let Some((reached, release)) = pause {
-            let _ = reached.send(());
-            let _ = release.await;
-        }
-    }
-
-    /// Test-only: the next create, load or resume stops after the client's success,
-    /// before its activation; returns (reached, release).
-    #[cfg(test)]
-    pub(crate) fn pause_next_activation(
-        &self,
-    ) -> (
-        tokio::sync::oneshot::Receiver<()>,
-        tokio::sync::oneshot::Sender<()>,
-    ) {
-        let (reached_sender, reached) = tokio::sync::oneshot::channel();
-        let (release, release_receiver) = tokio::sync::oneshot::channel();
-        *self
-            .activation_pause
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) =
-            Some((reached_sender, release_receiver));
-        (reached, release)
-    }
-
-    pub async fn close_session(
-        &self,
-        provider_session_id: String,
-    ) -> Result<(), ExternalProviderRuntimeError> {
-        // The connection publishes Closed for the run it closed (D1 R14).
-        self.client.close_session(provider_session_id).await
-    }
-
-    /// Closes a session on an agent that offers no session/close: the turn is
-    /// interrupted and the session released by the Router alone (D1 R14).
-    pub async fn release_session(
-        &self,
-        provider_session_id: String,
-    ) -> Result<(), ExternalProviderRuntimeError> {
-        self.client.release_session(provider_session_id).await
-    }
-
-    pub async fn steer_session(
-        &self,
-        provider_session_id: String,
-        prompt: String,
-    ) -> Result<crate::ProviderSteeringOutcome, ExternalProviderRuntimeError> {
-        self.steer_session_with_input(
-            provider_session_id,
-            session_event_model::InputId::generate(),
-            prompt,
-        )
-        .await
-    }
-
-    pub async fn steer_session_with_input(
-        &self,
-        provider_session_id: String,
-        input_id: session_event_model::InputId,
-        prompt: String,
-    ) -> Result<crate::ProviderSteeringOutcome, ExternalProviderRuntimeError> {
-        self.client
-            .steer_contents_with_input(
-                provider_session_id,
-                input_id,
-                session_event_model::ProviderSubmission::plain(text_contents(prompt)?),
-            )
-            .await
-    }
-
-    pub async fn steer_session_contents_with_input(
-        &self,
-        provider_session_id: String,
-        input_id: session_event_model::InputId,
-        contents: session_event_model::ProviderSubmission,
-    ) -> Result<crate::ProviderSteeringOutcome, ExternalProviderRuntimeError> {
-        self.client
-            .steer_contents_with_input(provider_session_id, input_id, contents)
-            .await
-    }
-
-    pub async fn session_activity(
-        &self,
-        provider_session_id: String,
-    ) -> Result<crate::ProviderSessionActivity, ExternalProviderRuntimeError> {
-        self.client.session_activity(provider_session_id).await
-    }
-
-    pub async fn active_prompt_operation(
-        &self,
-        provider_session_id: String,
-    ) -> Result<Option<OperationId>, ExternalProviderRuntimeError> {
-        self.client
-            .active_prompt_operation(provider_session_id)
-            .await
-    }
-
-    pub async fn wait_session_idle(
-        &self,
-        provider_session_id: String,
-    ) -> Result<(), ExternalProviderRuntimeError> {
-        self.client.wait_session_idle(provider_session_id).await
-    }
-
-    pub async fn cancel_prompt_operation(
-        &self,
-        provider_session_id: String,
-        operation_id: OperationId,
-    ) -> Result<(), ExternalProviderRuntimeError> {
-        self.client
-            .cancel_prompt_operation(provider_session_id, operation_id)
-            .await
-    }
-
-    #[cfg(test)]
-    pub async fn cancel_active_prompt(
-        &self,
-        provider_session_id: String,
-    ) -> Result<(), ExternalProviderRuntimeError> {
-        self.client.cancel_active_prompt(provider_session_id).await
-    }
-
     pub async fn shutdown(&self) {
-        self.client.shutdown().await;
-        if let Some(event_sink) = &self.event_sink
-            && let Err(error) = event_sink.shutdown().await
-        {
-            tracing::error!(%error, "provider Session event consumer failed to drain");
+        if let Some(door) = self.owner_door.get() {
+            door.shutdown().await;
         }
+        self.client.shutdown().await;
     }
 
     pub fn shutdown_failed(&self) -> bool {
         self.client.shutdown_failed()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn event_sink_for_test(&self) -> Option<&HubSessionEventSink> {
-        self.event_sink.as_deref()
     }
 
     #[cfg(test)]
@@ -741,97 +415,9 @@ impl ExternalProviderRuntime {
     async fn abort_owner_for_test(&self) {
         self.client.abort_owner_for_test().await;
     }
-
-    #[cfg(test)]
-    pub async fn prompt(
-        &self,
-        provider_session_id: String,
-        prompt: String,
-    ) -> Result<ExternalProviderPromptOutcome, ExternalProviderRuntimeError> {
-        self.prompt_with_approval_context(
-            provider_session_id.clone(),
-            prompt,
-            test_approval_context(&provider_session_id, None),
-        )
-        .await
-    }
-
-    pub async fn prompt_with_approval_context(
-        &self,
-        provider_session_id: String,
-        prompt: String,
-        context: ExternalProviderApprovalContext,
-    ) -> Result<ExternalProviderPromptOutcome, ExternalProviderRuntimeError> {
-        self.prompt_with_approval_context_for_input(
-            provider_session_id,
-            session_event_model::InputId::generate(),
-            prompt,
-            context,
-        )
-        .await
-    }
-
-    pub async fn prompt_with_approval_context_for_input(
-        &self,
-        provider_session_id: String,
-        input_id: session_event_model::InputId,
-        prompt: String,
-        context: ExternalProviderApprovalContext,
-    ) -> Result<ExternalProviderPromptOutcome, ExternalProviderRuntimeError> {
-        self.submit_with_approval_dispatch_for_input(
-            provider_session_id,
-            input_id,
-            acp_client_runtime::ProviderTurnInput::Prompt(
-                session_event_model::ProviderSubmission::plain(text_contents(prompt)?),
-            ),
-            context,
-            None,
-        )
-        .await
-    }
-
-    pub(crate) async fn submit_with_approval_dispatch_for_input(
-        &self,
-        provider_session_id: String,
-        input_id: session_event_model::InputId,
-        contents: acp_client_runtime::ProviderTurnInput,
-        context: ExternalProviderApprovalContext,
-        dispatch: Option<tokio::sync::oneshot::Sender<ProviderPromptDispatchObservation>>,
-    ) -> Result<ExternalProviderPromptOutcome, ExternalProviderRuntimeError> {
-        host_prompt_outcome(
-            self.client
-                .submit_with_approval_dispatch_for_input(
-                    provider_session_id,
-                    input_id,
-                    contents,
-                    context,
-                    dispatch,
-                )
-                .await?,
-        )
-    }
-
-    #[cfg(test)]
-    async fn prompt_for_operation(
-        &self,
-        provider_session_id: String,
-        operation_id: Option<OperationId>,
-        prompt: String,
-        dispatch: Option<tokio::sync::oneshot::Sender<ProviderPromptDispatchObservation>>,
-    ) -> Result<ExternalProviderPromptOutcome, ExternalProviderRuntimeError> {
-        self.submit_with_approval_dispatch_for_input(
-            provider_session_id.clone(),
-            session_event_model::InputId::generate(),
-            acp_client_runtime::ProviderTurnInput::Prompt(
-                session_event_model::ProviderSubmission::plain(text_contents(prompt)?),
-            ),
-            test_approval_context(&provider_session_id, operation_id),
-            dispatch,
-        )
-        .await
-    }
 }
 
+#[cfg(test)]
 fn text_contents(
     prompt: String,
 ) -> Result<Vec<session_event_model::PromptContent>, ExternalProviderRuntimeError> {
@@ -852,6 +438,7 @@ fn test_approval_context(
     }))
     .expect("test provider target");
     ExternalProviderApprovalContext {
+        owner_scope: None,
         requester: target.clone().into(),
         approver: target.clone().into(),
         target,
@@ -863,9 +450,6 @@ fn test_approval_context(
         binding_retirement: CancellationToken::new(),
     }
 }
-
-#[path = "external_provider_runtime/provider_runtime_queue.rs"]
-mod provider_runtime_queue;
 
 #[cfg(test)]
 #[path = "external_provider_runtime/fixture_tests.rs"]
@@ -892,3 +476,7 @@ mod approval_dispatch_tests;
 #[cfg(test)]
 #[path = "external_provider_runtime/approval_push_fixture.rs"]
 mod approval_push_fixture;
+
+#[cfg(test)]
+#[path = "external_provider_runtime/owner_fixture.rs"]
+mod owner_fixture;

@@ -10,10 +10,11 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::{
-    AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
-    HistoryReplayFuture, InteractionFuture, InteractionPort, ProviderPersistenceTarget,
-    RefusedApprovalOffer, SessionEventSink,
+    ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch, HistoryReplayFuture,
+    InteractionFuture, InteractionPort, ProviderPersistenceTarget, RefusedApprovalOffer,
+    SessionEventSink,
 };
 use codex_router_test_support::node_taps::{
     CatalogRowExpectation, EdgeParty, MessageFamily, NodeStateSnapshot, ProtocolNode, RecordLayer,
@@ -193,6 +194,44 @@ fn permission_outcome_kind(answer: &serde_json::Value) -> String {
         Some(other) => format!("session/request_permission:{other}"),
         None => "session/request_permission:malformed".to_owned(),
     }
+}
+
+#[tokio::test]
+async fn duplicate_callback_in_a_batch_gets_one_reply_and_keeps_its_valid_sibling() {
+    let (port, capture) = run_permission_fixture("duplicate-batch").await;
+    let received: Vec<_> = capture
+        .iter()
+        .filter(|frame| frame.agent_side == AgentSide::Received)
+        .map(|captured| &captured.frame)
+        .collect();
+    let batch = received
+        .iter()
+        .find_map(|frame| frame.as_array())
+        .expect("provider received a batch reply");
+    let batch_ids: Vec<_> = batch.iter().map(|reply| &reply["id"]).collect();
+    assert_eq!(
+        batch_ids,
+        [&serde_json::json!(91), &serde_json::json!(92)],
+        "the duplicate gets no batch response slot: {batch:?}"
+    );
+    for reply in batch {
+        assert_eq!(
+            permission_outcome_kind(reply),
+            "session/request_permission:selected(allow-always)"
+        );
+        assert!(reply.get("error").is_none(), "no internal error: {reply}");
+    }
+    let reused: Vec<_> = received.iter().filter(|reply| reply["id"] == 91).collect();
+    assert_eq!(
+        reused.len(),
+        1,
+        "a flushed ID may be reused on the next request"
+    );
+    assert_eq!(
+        permission_outcome_kind(reused[0]),
+        "session/request_permission:selected(allow-always)"
+    );
+    assert_eq!(port.accepted.lock().expect("broker calls").len(), 3);
 }
 
 /// Records what the permission request caused inside the Router, at its place in the capture:

@@ -39,6 +39,13 @@ pub trait InteractionPort: Send + Sync + 'static {
 
     fn binding_retirement(context: &Self::Context) -> CancellationToken;
 
+    fn bind_owner_scope(
+        _context: &mut Self::Context,
+        _run: provider_session_machines::SessionGeneration,
+        _turn: provider_session_machines::session_turn_machine::TurnId,
+    ) {
+    }
+
     fn request_approval(
         &self,
         context: Self::Context,

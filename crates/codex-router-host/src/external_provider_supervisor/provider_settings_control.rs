@@ -98,168 +98,186 @@ pub(super) async fn apply(
         )
         .into());
     }
-    let runtime = supervisor
-        .runtime_for(&request.target.endpoint)
-        .ok_or_else(|| {
-            failure(
-                ProviderSettingsFailureKind::Unavailable,
-                &request.target,
-                "provider connection is unavailable",
-            )
-        })?;
+    use provider_session_machines::{
+        session_lifecycle_machine::SessionLifecycle,
+        session_owner::{
+            OwnerSetting, RemoteEffect, RunAttempt, SessionOwnerCommand, SessionOwnerRefusal,
+            SessionOwnerRejection, SessionOwnerReply,
+        },
+        session_setting_machine::{SettingApplication, SettingValueId},
+    };
+    let owner = supervisor.session_owner_for(&request.target).map_err(|_| {
+        failure(
+            ProviderSettingsFailureKind::Unavailable,
+            &request.target,
+            "provider connection is unavailable",
+        )
+    })?;
+    let SessionLifecycle::Live { generation } = owner.snapshots().borrow().lifecycle else {
+        return Err(failure(
+            ProviderSettingsFailureKind::NotFound,
+            &request.target,
+            "load the session before changing its settings",
+        )
+        .into());
+    };
     let kind = match request.setting {
         ProviderSettingName::Mode => provider_session_machines::ProviderSettingKind::Mode,
         ProviderSettingName::Model => provider_session_machines::ProviderSettingKind::Model,
         ProviderSettingName::Effort => provider_session_machines::ProviderSettingKind::Effort,
         ProviderSettingName::Fast => provider_session_machines::ProviderSettingKind::Fast,
     };
-    let records_mode = kind == provider_session_machines::ProviderSettingKind::Mode
-        && intent == session_event_model::SettingApplicationIntent::ExplicitChange;
-    let mode_order =
-        records_mode.then(|| std::sync::Arc::clone(runtime.session_setup().mode_order()));
-    let applying = apply_and_record(
-        supervisor.clone(),
-        runtime,
-        request.clone(),
+    if intent == session_event_model::SettingApplicationIntent::ExplicitChange
+        && !(kind == provider_session_machines::ProviderSettingKind::Mode
+            && request.value == acp_client_runtime::AUTO_PERMISSION_MODE)
+        && let Some(advertised) = owner
+            .catalog()
+            .and_then(|catalog| catalog.unavailable_selection(kind, &request.value))
+    {
+        return Err(ProviderSettingsFailure {
+            kind: ProviderSettingsFailureKind::InvalidSetting,
+            stage: Some(collaboration_protocol::ConversationOperationFailureStage::Validation),
+            target: Some(request.target),
+            message: "setting value is not offered for this session".to_owned(),
+            setting: Some(request.setting),
+            value: Some(request.value),
+            advertised,
+        }
+        .into());
+    }
+    let correlation = uuid::Uuid::now_v7();
+    let setting = OwnerSetting {
+        change: RunAttempt {
+            generation,
+            attempt: SettingApplication(correlation),
+        },
         kind,
-        intent,
-        expected_model,
-        records_mode,
-    );
-    let observed = if let Some(mode_order) = mode_order {
-        // Dropping the caller while it waits sends nothing. After taking the
-        // turn, apply and record run together even when the caller stops waiting.
-        mode_order
-            .settle_mode_change(&String::from(request.target.session_id.clone()), applying)
-            .await
-            .map_err(|_| {
-                SettingControlFailure::Provider(Box::new(failure(
-                    ProviderSettingsFailureKind::Unavailable,
-                    &request.target,
-                    "the mode change ended before it settled",
-                )))
-            })??
-    } else {
-        applying.await?
     };
-    Ok(result(request.target, record, observed))
-}
-
-/// Applies the change and, for an explicit mode change, records it, all
-/// inside the session's mode turn: the turn is taken before the command
-/// reaches the actor and held until the record is written, so the record
-/// ends at the last change the agent applied (V6b).
-async fn apply_and_record(
-    supervisor: ExternalProviderSupervisor,
-    runtime: std::sync::Arc<crate::ExternalProviderRuntime>,
-    request: ProviderSettingsSetRequest,
-    kind: provider_session_machines::ProviderSettingKind,
-    intent: session_event_model::SettingApplicationIntent,
-    expected_model: Option<String>,
-    records_mode: bool,
-) -> Result<acp_client_runtime::EffectiveProviderSettings, SettingControlFailure> {
-    let session_id = String::from(request.target.session_id.clone());
-    let observed = runtime
-        .apply_setting(
-            session_id.clone(),
-            acp_client_runtime::ProviderSettingRequest {
-                kind,
-                value: request.value.clone(),
-                intent,
-                expected_model,
-            },
-        )
-        .await
-        .map_err(|error| match error {
-            ExternalProviderRuntimeError::SettingsContextChanged => {
-                SettingControlFailure::ContextChanged(request.target.clone())
+    let input = session_event_model::InputId::generate();
+    let value = SettingValueId(request.value.clone());
+    let command = match intent {
+        session_event_model::SettingApplicationIntent::ExplicitChange => {
+            owner.expect_confirmed_mode(setting, request.value.clone());
+            SessionOwnerCommand::Set {
+                input,
+                setting,
+                value,
+                expected_model: expected_model.map(SettingValueId),
             }
-            ExternalProviderRuntimeError::SettingsUnresolved { .. } => {
-                SettingControlFailure::Unresolved(request.target.clone())
-            }
-            other => SettingControlFailure::Provider(Box::new(setting_error(&request, other))),
-        })?;
-    if let Some(catalog) = runtime.settings_catalog(&session_id) {
-        supervisor
-            .inner
-            .record_settings_catalog(request.target.clone(), catalog)
-            .await;
-    }
-    if records_mode && let Some(confirmed_mode) = observed.confirmed_requested_mode {
-        #[cfg(any(test, feature = "test-support"))]
-        hold_before_mode_record(&supervisor, &request.target, &confirmed_mode).await;
-        record_explicit_mode(&supervisor, &runtime, &request.target, &confirmed_mode).await?;
-    }
-    Ok(observed.effective_settings)
-}
-
-/// A test holds this change here, applied and not yet recorded (V6b).
-#[cfg(any(test, feature = "test-support"))]
-async fn hold_before_mode_record(
-    supervisor: &ExternalProviderSupervisor,
-    target: &SessionRef,
-    value: &str,
-) {
-    let pause = {
-        let mut pause = supervisor
-            .inner
-            .explicit_mode_record_test_pause
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        match pause.take() {
-            Some((held, held_value, pause)) if &held == target && held_value == value => {
-                Some(pause)
-            }
-            other => {
-                *pause = other;
-                None
+        }
+        session_event_model::SettingApplicationIntent::TurnContext => {
+            SessionOwnerCommand::SetInContext {
+                input,
+                setting,
+                value,
+                expected_model: expected_model.map(SettingValueId),
+                reuse_confirmed: supervisor
+                    .runtime_for(&request.target.endpoint)
+                    .is_some_and(|runtime| runtime.can_reuse_setting_confirmation(kind)),
             }
         }
     };
-    if let Some(pause) = pause {
-        let _entered = pause.entered.send(());
-        let _released = pause.release.await;
-    }
-}
-
-/// Keeps the session's record current after an explicit mode change the
-/// agent applied: a restore puts back the mode the session runs now, never
-/// the one its create asked for (V6; owner Decision 3; Lead ruling). A
-/// refused or unknown change never reaches here, so it leaves the record.
-async fn record_explicit_mode(
-    supervisor: &ExternalProviderSupervisor,
-    runtime: &crate::ExternalProviderRuntime,
-    target: &SessionRef,
-    value: &str,
-) -> Result<(), SettingControlFailure> {
-    let requested = acp_client_runtime::RequestedPermissionMode::from_request(Some(value));
-    let Some(requested_mode) = requested.requested_name() else {
-        return Ok(());
-    };
-    supervisor
-        .inner
-        .store
-        .lock()
+    let applied = owner
+        .settle(correlation, command)
         .await
-        .record_session_mode(target, requested_mode, super::now_ms())
-        .await
-        .map_err(|_| {
-            failure(
-                ProviderSettingsFailureKind::Unavailable,
-                target,
-                "the mode was applied, but the provider Session inventory is unavailable",
+        .map_err(|error| match error {
+            crate::session_owner_door::OwnerDoorError::Refused(SessionOwnerRejection::Refused(
+                SessionOwnerRefusal::SettingContextChanged,
+            )) => SettingControlFailure::ContextChanged(request.target.clone()),
+            crate::session_owner_door::OwnerDoorError::Refused(SessionOwnerRejection::Refused(
+                SessionOwnerRefusal::SettingsUnresolved,
+            )) => SettingControlFailure::Unresolved(request.target.clone()),
+            other => failure(
+                ProviderSettingsFailureKind::Busy,
+                &request.target,
+                &other.to_string(),
             )
+            .into(),
         })?;
-    runtime.session_setup().record_requested_mode(
-        &String::from(target.session_id.clone()),
-        crate::provider_session_setup::RequestedModeRecord {
-            requested_mode: Some(requested_mode.to_owned()),
-            mode_reason: None,
-        },
-    );
-    Ok(())
+    let remote = match applied.reply {
+        SessionOwnerReply::SettingKept { .. } => {
+            let observed = snapshot_settings(&owner.snapshots().borrow());
+            return Ok(result(request.target, record, observed));
+        }
+        SessionOwnerReply::SettingFinished { remote, .. } => remote,
+        SessionOwnerReply::ModelFastFinished { fast, .. } => {
+            use provider_session_machines::session_owner::ModelFastOutcome;
+            let failure = match fast {
+                ModelFastOutcome::NotOffered => Some((
+                    ProviderSettingsFailureKind::InvalidSetting,
+                    "fast is not offered for the current model",
+                )),
+                ModelFastOutcome::Refused => Some((
+                    ProviderSettingsFailureKind::ProviderRejected,
+                    "the provider refused fast off after the model change",
+                )),
+                ModelFastOutcome::Unconfirmed => Some((
+                    ProviderSettingsFailureKind::OutcomeUnknown,
+                    "the provider did not confirm fast off after the model change",
+                )),
+                ModelFastOutcome::ConfirmedOff => None,
+            };
+            if let Some((kind, message)) = failure {
+                return Err(ProviderSettingsFailure {
+                    kind,
+                    stage: Some(
+                        collaboration_protocol::ConversationOperationFailureStage::Settlement,
+                    ),
+                    target: Some(request.target),
+                    message: message.to_owned(),
+                    setting: Some(ProviderSettingName::Fast),
+                    value: Some("off".to_owned()),
+                    advertised: Vec::new(),
+                }
+                .into());
+            }
+            RemoteEffect::Applied
+        }
+        SessionOwnerReply::SettingNotSent {
+            refusal: SessionOwnerRefusal::SettingContextChanged,
+            ..
+        } => return Err(SettingControlFailure::ContextChanged(request.target)),
+        SessionOwnerReply::SettingNotSent {
+            refusal: SessionOwnerRefusal::SettingsUnresolved,
+            ..
+        } => return Err(SettingControlFailure::Unresolved(request.target)),
+        SessionOwnerReply::SettingNotSent { .. } => RemoteEffect::None,
+        _ => {
+            return Err(failure(
+                ProviderSettingsFailureKind::Unavailable,
+                &request.target,
+                "the session owner returned another result",
+            )
+            .into());
+        }
+    };
+    match remote {
+        RemoteEffect::Unknown => {
+            return Err(setting_error(
+                &request,
+                ExternalProviderRuntimeError::SettingOutcomeUnknown {
+                    provider_session_id: String::from(request.target.session_id.clone()),
+                    setting: kind,
+                    value: request.value.clone(),
+                },
+            )
+            .into());
+        }
+        RemoteEffect::None
+            if !(request.setting == ProviderSettingName::Fast && request.value == "auto") =>
+        {
+            return Err(failure(
+                ProviderSettingsFailureKind::ProviderRejected,
+                &request.target,
+                "the provider did not apply the setting",
+            )
+            .into());
+        }
+        _ => {}
+    }
+    let observed = snapshot_settings(&owner.snapshots().borrow());
+    Ok(result(request.target, record, observed))
 }
-
 #[expect(
     clippy::result_large_err,
     reason = "The typed failure retains the full published operation payload."
@@ -269,18 +287,34 @@ pub(super) async fn accept(
     request: ProviderSettingsAcceptRequest,
 ) -> Result<ProviderSettingsResult, ProviderSettingsFailure> {
     let record = authorized_session(supervisor, &request.target, &request.actor).await?;
-    let runtime = supervisor
-        .runtime_for(&request.target.endpoint)
-        .ok_or_else(|| {
+    use provider_session_machines::{
+        session_lifecycle_machine::SessionLifecycle, session_owner::SessionOwnerCommand,
+    };
+    let owner = supervisor.session_owner_for(&request.target).map_err(|_| {
+        failure(
+            ProviderSettingsFailureKind::Unavailable,
+            &request.target,
+            "provider connection is unavailable",
+        )
+    })?;
+    let SessionLifecycle::Live { generation } = owner.snapshots().borrow().lifecycle else {
+        return Err(failure(
+            ProviderSettingsFailureKind::NotFound,
+            &request.target,
+            "the session is not loaded",
+        ));
+    };
+    owner
+        .admit(SessionOwnerCommand::AcceptSettings { generation })
+        .await
+        .map_err(|error| {
             failure(
-                ProviderSettingsFailureKind::Unavailable,
+                ProviderSettingsFailureKind::OutcomeUnknown,
                 &request.target,
-                "provider connection is unavailable",
+                &error.to_string(),
             )
         })?;
-    let observed = runtime
-        .accept_session_settings(String::from(request.target.session_id.clone()))
-        .map_err(|error| plain_error(&request.target, error))?;
+    let observed = snapshot_settings(&owner.snapshots().borrow());
     Ok(result(request.target, record, observed))
 }
 
@@ -497,3 +531,30 @@ impl ExternalProviderSupervisor {
 #[cfg(test)]
 #[path = "provider_settings_control_test.rs"]
 mod tests;
+
+pub(crate) fn snapshot_settings(
+    snapshot: &provider_session_machines::session_owner::SessionSnapshot,
+) -> acp_client_runtime::EffectiveProviderSettings {
+    use provider_session_machines::{ProviderSettingKind, session_owner::ObservedSetting};
+    let current = |kind| {
+        snapshot
+            .settings
+            .get(&kind)
+            .and_then(|evidence| match &evidence.value {
+                ObservedSetting::Confirmed(value) => Some(value.0.clone()),
+                _ => None,
+            })
+    };
+    acp_client_runtime::EffectiveProviderSettings {
+        mode: current(ProviderSettingKind::Mode),
+        model: current(ProviderSettingKind::Model),
+        effort: current(ProviderSettingKind::Effort),
+        fast: current(ProviderSettingKind::Fast).map(|value| {
+            if matches!(value.as_str(), "false" | "off") {
+                acp_client_runtime::FastObserved::Off
+            } else {
+                acp_client_runtime::FastObserved::On
+            }
+        }),
+    }
+}

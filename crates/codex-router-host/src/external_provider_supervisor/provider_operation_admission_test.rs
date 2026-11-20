@@ -168,11 +168,11 @@ fn a_blocked_admission_names_each_blocking_state_and_its_step() {
         answers,
         [
             Some(format!(
-                "an earlier send's outcome is unknown; reconcile {u} first"
+                "an earlier prompt's outcome is unknown; check the session, then run operation reconcile for {u}"
             )),
             Some(format!("an earlier send is still in flight; wait for {f}")),
             Some(format!(
-                "an earlier send's outcome is unknown; reconcile {u} first; \
+                "an earlier prompt's outcome is unknown; check the session, then run operation reconcile for {u}; \
                  an earlier send is still in flight; wait for {f}"
             )),
             None,

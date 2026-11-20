@@ -179,7 +179,7 @@ impl WakeDeliverySender {
             store: Arc::clone(&store),
             delivery_id: delivery_id.clone(),
             attempt_id: claim.attempt_id.clone(),
-            latest: Mutex::new(None),
+            latest: Arc::new(Mutex::new(None)),
         };
         let request = collaboration_contracts::layer_zero::DeliveryRequest {
             payload: prepared_push,
@@ -314,14 +314,19 @@ fn prepared_wake_push(
     })
 }
 
+#[derive(Clone)]
 struct WakeEvidenceSink {
     store: Arc<Mutex<AutomationStore>>,
     delivery_id: DeliveryId,
     attempt_id: agent_automation::AttemptId,
-    latest: Mutex<Option<RouteEffectEvidence<SessionRef, CodexGeneration>>>,
+    latest: Arc<Mutex<Option<RouteEffectEvidence<SessionRef, CodexGeneration>>>>,
 }
 
 impl AttemptEvidenceSink for WakeEvidenceSink {
+    fn retain_queued_dispatch(&self) -> Option<Arc<dyn AttemptEvidenceSink>> {
+        Some(Arc::new(self.clone()))
+    }
+
     fn record(
         &self,
         evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,

@@ -129,7 +129,36 @@ impl Mailbox {
             OwnerEffect::PrepareRoute(run) => self
                 .arrivals
                 .push(OwnerEvent::Prepare(RestorePreparation::RouteReady(run))),
+            OwnerEffect::SettingQueued { input, setting } => {
+                self.arrivals
+                    .push(OwnerEvent::Command(SessionOwnerCommand::CancelSetting {
+                        input,
+                        setting,
+                    }))
+            }
             OwnerEffect::Store(request) => self.observe_store(request),
+            OwnerEffect::DrainCancel(authorization) => {
+                self.arrivals
+                    .push(OwnerEvent::Dispatch(DispatchResult::CancelDrainFinished(
+                        authorization,
+                    )))
+            }
+            OwnerEffect::TakeCancel {
+                authorization,
+                expired,
+            } => {
+                self.arrivals
+                    .push(OwnerEvent::Dispatch(DispatchResult::CancelTaken {
+                        authorization,
+                        drain: if expired {
+                            CancelDrainReport::Expired {
+                                pending: Vec::new(),
+                            }
+                        } else {
+                            CancelDrainReport::Drained
+                        },
+                    }));
+            }
             OwnerEffect::Authorize {
                 authorization,
                 work,
@@ -143,7 +172,11 @@ impl Mailbox {
                         self.arrivals
                             .push(OwnerEvent::Dispatch(DispatchResult::PromptFinished {
                                 authorization,
-                                outcome: WireOutcome::Confirmed(()),
+                                outcome: WireOutcome::Confirmed(PromptCompletion {
+                                    stop_reason: session_event_model::StopReason::EndTurn,
+                                    local_cause: None,
+                                    response: String::new(),
+                                }),
                             }))
                     }
                     AuthorizedWork::Steer(_) => {
@@ -172,6 +205,12 @@ impl Mailbox {
                 self.arrivals
                     .push(OwnerEvent::Publication(PublicationResult::Applied(id)));
             }
+            OwnerEffect::RecordDeliveryEvidence(placement) => {
+                self.arrivals.push(OwnerEvent::DeliveryEvidence {
+                    placement,
+                    outcome: EffectOutcome::Applied,
+                });
+            }
             OwnerEffect::Wire(_)
             | OwnerEffect::CallbackMembership(_)
             | OwnerEffect::Reply(_)
@@ -181,6 +220,12 @@ impl Mailbox {
             | OwnerEffect::CreateSettled { .. }
             | OwnerEffect::RetireRoute(_)
             | OwnerEffect::CancelNotSent { .. }
+            | OwnerEffect::CancelSent { .. }
+            | OwnerEffect::IdleSteerUsesPrompt(_)
+            | OwnerEffect::InputQueued(_)
+            | OwnerEffect::PromptTaken(_)
+            | OwnerEffect::SteerSubmitted(_)
+            | OwnerEffect::ProviderStartedTurn(_)
             | OwnerEffect::ReopenRoute(_)
             | OwnerEffect::ForwardTool { .. }
             | OwnerEffect::CheckRetainedTool { .. } => {}
@@ -209,6 +254,12 @@ impl Mailbox {
                     input: input.clone(),
                     outcome,
                 },
+                SessionStoreRequest::ReconcileLateCancelledPrompt(input) => {
+                    SessionStoreResult::LateCancelledPromptReconciled {
+                        input: input.clone(),
+                        outcome,
+                    }
+                }
                 SessionStoreRequest::MarkSteerDispatch(input) => {
                     SessionStoreResult::SteerDispatch {
                         input: input.clone(),

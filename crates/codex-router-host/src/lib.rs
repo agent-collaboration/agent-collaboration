@@ -2,6 +2,9 @@
 
 mod acp_interaction_port;
 mod app_server_endpoint_guard;
+mod binding_dispatch_permit;
+#[cfg(any(test, feature = "test-support"))]
+mod binding_store_fixture;
 mod live_session_ownership_check;
 pub use live_session_ownership_check::{LiveSessionOwnership, LiveSessionOwnershipCheck};
 mod app_server_shutdown;
@@ -21,23 +24,27 @@ mod explicit_app_server_restart;
 mod explicit_router_restart;
 mod external_provider_runtime;
 mod provider_acp_delivery_route;
-mod provider_acp_message_fifo;
-#[cfg(feature = "test-support")]
-pub use provider_acp_message_fifo::QUEUE_RETRY_DELAY;
 mod provider_acp_route_claim;
 mod provider_queue_operation_registry;
 mod provider_session_command_port;
-mod provider_session_mode_order;
 mod provider_session_setup;
 mod provider_work_roots;
 pub mod session_close_evidence;
+pub mod session_owner_calls;
+mod session_owner_delivery_evidence;
+pub mod session_owner_door;
+pub mod session_owner_execution;
+mod session_owner_ingress;
+#[cfg(test)]
+mod session_owner_preparation_fixture;
+pub mod session_owner_publication;
 pub mod session_owner_registry;
+pub mod session_owner_storage;
 pub mod session_store_lane;
 pub use provider_queue_operation_registry::{ProviderQueueCancellationError, ProviderQueuedInput};
 pub use provider_session_command_port::HostSessionCommandPort;
 mod provider_cache_warm;
 mod provider_model_catalog;
-mod provider_session_event_sink;
 pub use provider_acp_delivery_route::{
     ProviderAcpDeliveryRoute, ProviderCancelActiveTurnError, ProviderPromptContentsError,
     ProviderQueueAdmissionError, ProviderSteerContentsError,

@@ -1,4 +1,8 @@
 import { AcpExchange } from "./acp-exchange.ts";
+import { requireArgument } from "./acp-stdio.ts";
+import { fileAppears, startReleaseBarrier } from "./release-barrier.ts";
+const receipt = requireArgument(2);
+startReleaseBarrier(receipt);
 const agent = new AcpExchange();
 await agent.initialize("idle-update-fixture", { _meta: { steering: { supported: true } } });
 await agent.newSession("fixture-session", {
@@ -40,13 +44,12 @@ agent.update({
   status: "pending",
 });
 agent.endTurn(prompt);
-const steer = await agent.read("_session/steering");
+await fileAppears(`${receipt}.release-late`);
 agent.update({
   sessionUpdate: "tool_call_update",
   toolCallId: "late-tool",
   title: "Check passed",
   status: "completed",
 });
-agent.respond(steer, { outcome: "promptRequired" });
 await agent.drain();
 agent.close();

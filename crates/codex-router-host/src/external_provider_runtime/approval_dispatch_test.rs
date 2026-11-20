@@ -279,6 +279,7 @@ async fn external_approval_timeout_is_recorded_in_history() -> TestResult {
     let target = session_ref(&service_id, "cursor-local", "provider-session")?;
     let approver = session_ref(&service_id, "cursor-local", "approver-session")?;
     let context = ExternalProviderApprovalContext {
+        owner_scope: None,
         requester: target.clone().into(),
         approver: approver.into(),
         target,
@@ -345,6 +346,7 @@ async fn self_approver_offer_records_actionable_refusal() -> TestResult {
     port.install_broker(Arc::clone(&broker)).await;
     let target = session_ref(&service_id, "cursor-local", "self-approver")?;
     let context = ExternalProviderApprovalContext {
+        owner_scope: None,
         requester: target.clone().into(),
         approver: target.clone().into(),
         target,
@@ -400,6 +402,7 @@ async fn question_after_turn_cancel_is_recorded_as_cancelled() -> TestResult {
     let target = session_ref(&service_id, "cursor-local", "provider-session")?;
     let approver = session_ref(&service_id, "cursor-local", "approver-session")?;
     let context = ExternalProviderApprovalContext {
+        owner_scope: None,
         requester: target.clone().into(),
         approver: approver.into(),
         target,
@@ -461,6 +464,7 @@ async fn permission_decision_survives_late_agent_withdrawal_and_peer_turn_progre
         "session-a".to_owned(),
         "Run a command requiring permission.".to_owned(),
         ExternalProviderApprovalContext {
+            owner_scope: None,
             requester: (requester_and_approver.clone()).into(),
             approver: (requester_and_approver.clone()).into(),
             target: target_a,
@@ -476,6 +480,7 @@ async fn permission_decision_survives_late_agent_withdrawal_and_peer_turn_progre
         "session-b".to_owned(),
         "Reply while session A is waiting for permission.".to_owned(),
         ExternalProviderApprovalContext {
+            owner_scope: None,
             requester: (requester_and_approver.clone()).into(),
             approver: (requester_and_approver.clone()).into(),
             target: requester_and_approver.clone(),
@@ -541,6 +546,7 @@ async fn expired_approval_broker_refusal_carries_typed_operation_reason() -> Tes
             "session-a".to_owned(),
             "Run a command requiring permission.".to_owned(),
             ExternalProviderApprovalContext {
+                owner_scope: None,
                 requester: session_ref(&service_id, "codex-local", "requester")?.into(),
                 approver: session_ref(&service_id, "codex-local", "approver")?.into(),
                 target: session_ref(&service_id, "cursor-local", "session-a")?,
@@ -593,11 +599,12 @@ async fn peer_cancellation_and_binding_retirement_settle_permission_history_once
         runtime.create_session(root.path().to_owned()).await?;
         let requester = session_ref(&service_id, "codex-local", "approver")?;
         let target = session_ref(&service_id, "cursor-local", "session-a")?;
-        let retirement = CancellationToken::new();
+        let retirement = runtime.retirement();
         let mut prompt = Box::pin(runtime.prompt_with_approval_context(
             "session-a".to_owned(),
             "Run a command requiring permission.".to_owned(),
             ExternalProviderApprovalContext {
+                owner_scope: None,
                 requester: (requester.clone()).into(),
                 approver: (requester).into(),
                 target,
@@ -661,6 +668,7 @@ async fn permission_wait_does_not_block_steering_reply_dispatch() -> TestResult 
         "session-a".to_owned(),
         "Run a command requiring permission.".to_owned(),
         ExternalProviderApprovalContext {
+            owner_scope: None,
             requester: (requester.clone()).into(),
             approver: (requester.clone()).into(),
             target,
@@ -731,6 +739,7 @@ async fn permission_wait_observes_cancellation_during_provider_cancel() -> TestR
         "session-a".to_owned(),
         "Run a command requiring permission.".to_owned(),
         ExternalProviderApprovalContext {
+            owner_scope: None,
             requester: (requester.clone()).into(),
             approver: (requester).into(),
             target,
@@ -791,6 +800,7 @@ async fn permission_arriving_after_router_cancel_is_answered_cancelled() -> Test
                 "session-a".to_owned(),
                 "Wait for cancellation.".to_owned(),
                 ExternalProviderApprovalContext {
+                    owner_scope: None,
                     requester: (approver.clone()).into(),
                     approver: approver.into(),
                     target: session_ref(&service_id, "cursor-local", "session-a")?,

@@ -114,7 +114,13 @@ async fn refused_before_enqueue(failure: TransportRefusal, running: bool) {
             .expect("completion capacity")
             .send(OwnerEvent::Dispatch(DispatchResult::PromptFinished {
                 authorization,
-                outcome: WireOutcome::Confirmed(()),
+                outcome: WireOutcome::Confirmed(
+                    provider_session_machines::session_owner::PromptCompletion {
+                        stop_reason: session_event_model::StopReason::EndTurn,
+                        local_cause: None,
+                        response: String::new(),
+                    },
+                ),
             }));
     } else {
         session

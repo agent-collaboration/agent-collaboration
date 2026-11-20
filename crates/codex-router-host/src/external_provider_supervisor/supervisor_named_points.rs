@@ -2,37 +2,75 @@
 //! with test support: the supervisor holds an operation at the point, and
 //! the test releases it. The Host's approved test-support surface.
 
-use super::{AdmissionTestPause, ExternalProviderSupervisor};
+use super::ExternalProviderSupervisor;
+use crate::binding_store_fixture::BindingFixtureWait;
 
 impl ExternalProviderSupervisor {
-    /// Pauses `operation_id`'s settlement before its terminal write: its
-    /// outcome is known, nothing is stored yet, and a prompt's turn is still
-    /// held. The first receiver fires there, and sending on the returned
-    /// sender lets it go on.
+    pub fn with_fixture_hub(
+        bindings: Vec<super::ExternalProviderBinding>,
+        store: std::sync::Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>,
+        hub: std::sync::Arc<collaboration_runtime::ProviderSessionEventHub>,
+    ) -> Result<Self, &'static str> {
+        Self::new_with_hub(bindings, store, Some(hub), None)
+    }
+
+    /// Opens a fixture session through the registered owner. The test decides
+    /// which saved setup rows and prior operations are present.
+    pub async fn open_provider_fixture(
+        &self,
+        endpoint: &collaboration_protocol::EndpointRef,
+        cwd: std::path::PathBuf,
+    ) -> Result<String, crate::ExternalProviderRuntimeError> {
+        let door = self
+            .owner_door(endpoint)
+            .ok_or(crate::ExternalProviderRuntimeError::LocalNotFound)?;
+        let roots = crate::provider_work_roots::ProviderWorkRoots::default();
+        let created = door
+            .create(
+                endpoint.clone(),
+                collaboration_protocol::OperationId::generate(),
+                acp_client_runtime::owner_session_open::OwnerSessionOpenSetup {
+                    cwd,
+                    scratch_folder: None,
+                    work_roots: Default::default(),
+                },
+                acp_client_runtime::RequestedProviderSettings::default(),
+                roots,
+            )
+            .await?;
+        Ok(created.created.provider_session_id)
+    }
+
+    /// Pauses the accepted terminal write at its place in the store lane.
     pub fn pause_terminal_write_of(
         &self,
+        target: &collaboration_protocol::SessionRef,
         operation_id: &collaboration_protocol::OperationId,
     ) -> (
         tokio::sync::oneshot::Receiver<()>,
         tokio::sync::oneshot::Sender<()>,
     ) {
-        let (entered, entered_receiver) = tokio::sync::oneshot::channel();
-        let (release_sender, release) = tokio::sync::oneshot::channel();
-        *self
-            .inner
-            .terminal_write_test_pause
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some((
-            operation_id.clone(),
-            AdmissionTestPause { entered, release },
-        ));
-        (entered_receiver, release_sender)
+        self.inner
+            .uncertainty
+            .slot(&target.endpoint)
+            .fixture
+            .pause_terminal_write(operation_id.clone())
     }
 
-    /// Pauses the explicit change of `target`'s mode to `value` after the
-    /// agent applied it and before its record is written (Lead V6b): the
-    /// session's turn for mode changes is still held. The first receiver
-    /// fires there, and sending on the returned sender lets it go on.
+    /// Reads the owner after it has offered the second input's dispatch mark.
+    pub async fn wait_for_dispatch_mark_fixture(
+        &self,
+        target: &collaboration_protocol::SessionRef,
+        operation: &collaboration_protocol::OperationId,
+    ) -> Result<(), crate::ExternalProviderRuntimeError> {
+        self.owner_door(&target.endpoint)
+            .ok_or(crate::ExternalProviderRuntimeError::LocalNotFound)?
+            .wait_for_accepted_mark_fixture(target, operation)
+            .await
+            .map_err(|error| crate::ExternalProviderRuntimeError::Operation(error.to_string()))
+    }
+
+    /// Pauses a confirmed explicit mode write in the store lane (T5).
     pub fn pause_explicit_mode_record_of(
         &self,
         target: &collaboration_protocol::SessionRef,
@@ -41,29 +79,44 @@ impl ExternalProviderSupervisor {
         tokio::sync::oneshot::Receiver<()>,
         tokio::sync::oneshot::Sender<()>,
     ) {
-        let (entered, entered_receiver) = tokio::sync::oneshot::channel();
-        let (release_sender, release) = tokio::sync::oneshot::channel();
-        *self
-            .inner
-            .explicit_mode_record_test_pause
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some((
-            target.clone(),
-            value.to_owned(),
-            AdmissionTestPause { entered, release },
-        ));
-        (entered_receiver, release_sender)
+        self.inner
+            .uncertainty
+            .slot(&target.endpoint)
+            .fixture
+            .pause_mode_write(target.clone(), value.to_owned())
     }
 
-    /// The next mode operation on `target`'s binding that has to wait for its
-    /// session's turn (another holds it; Lead V6b, review F3) fires the
-    /// returned receiver as it starts waiting. None when the binding is
-    /// unknown.
     pub fn notice_next_explicit_mode_wait(
         &self,
         target: &collaboration_protocol::SessionRef,
     ) -> Option<tokio::sync::oneshot::Receiver<()>> {
-        self.runtime_for(&target.endpoint)
-            .map(|runtime| runtime.session_setup().mode_order().notice_next_wait())
+        self.inner.bindings.get(&target.endpoint)?;
+        Some(
+            self.inner
+                .uncertainty
+                .slot(&target.endpoint)
+                .fixture
+                .notice_wait(target.clone(), BindingFixtureWait::ExplicitSetting),
+        )
+    }
+
+    pub async fn wait_for_session_retirement_fixture(
+        &self,
+        target: &collaboration_protocol::SessionRef,
+    ) -> Result<(), crate::ExternalProviderRuntimeError> {
+        let owner = self
+            .session_owner_for(target)
+            .map_err(|error| crate::ExternalProviderRuntimeError::Operation(error.to_string()))?;
+        owner
+            .snapshots()
+            .wait_for(|snapshot| {
+                matches!(
+            snapshot.lifecycle,
+            provider_session_machines::session_lifecycle_machine::SessionLifecycle::NotLoaded { .. }
+        )
+            })
+            .await
+            .map_err(|_| crate::ExternalProviderRuntimeError::TransportFailure)?;
+        Ok(())
     }
 }

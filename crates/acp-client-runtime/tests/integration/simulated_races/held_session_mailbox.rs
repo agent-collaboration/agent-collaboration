@@ -6,7 +6,8 @@
 
 use super::scripted_line_agent::ScriptedLineAgent;
 use super::{DiscardingSink, NoInteraction};
-use acp_client_runtime::{AgentSessionClient, ProviderSettingRequest, ProviderTurnInput};
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
+use acp_client_runtime::{ProviderSettingRequest, ProviderTurnInput};
 use provider_session_machines::ProviderSettingKind;
 use std::sync::Arc;
 
@@ -77,7 +78,7 @@ fn a_session_held_in_a_setting_change_never_holds_up_another_sessions_prompt() {
             .map(|_| {
                 let client = Arc::clone(&client);
                 let held = held.clone();
-                tokio::spawn(async move { client.session_activity(held).await })
+                tokio::spawn(async move { client.session_activity(held) })
             })
             .collect::<Vec<_>>();
 

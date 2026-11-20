@@ -234,7 +234,10 @@ async fn refused_fast_off_is_reported_and_dispatches_one_prompt() -> TestResult 
 async fn accepting_a_refused_fast_stops_keeping_it_off() -> TestResult {
     let fixture = AcpWireFixture::start_reactive(&["refuse-fast-once"]).await;
     failed_setting(create(&fixture, settings(FastRequest::OffIfOffered)).await)?;
-    fixture.client.accept_session_settings(SESSION.to_owned())?;
+    fixture
+        .client
+        .accept_session_settings(SESSION.to_owned())
+        .await?;
     let released = prompt(&fixture).await;
     let before_model = setting_requests(&fixture).len();
     set(&fixture, ProviderSettingKind::Model, "fixture-a").await?;
@@ -253,10 +256,16 @@ async fn lost_fast_off_answer_is_unknown_and_cannot_be_accepted() -> TestResult 
         AcpWireFixture::start_reactive(&["malformed-fast-reply", "refuse-second-fast"]).await;
     let failed = failed_setting(create(&fixture, settings(FastRequest::OffIfOffered)).await)?;
     let held = prompt(&fixture).await;
-    let accepted = fixture.client.accept_session_settings(SESSION.to_owned());
+    let accepted = fixture
+        .client
+        .accept_session_settings(SESSION.to_owned())
+        .await;
     let refused_repair = set(&fixture, ProviderSettingKind::Fast, "off").await;
     let held_after_refusal = prompt(&fixture).await;
-    let accepted_after_refusal = fixture.client.accept_session_settings(SESSION.to_owned());
+    let accepted_after_refusal = fixture
+        .client
+        .accept_session_settings(SESSION.to_owned())
+        .await;
     let prompts_before_confirmation = prompts_seen(&fixture);
     set(&fixture, ProviderSettingKind::Fast, "off").await?;
     let released = prompt(&fixture).await;
@@ -498,7 +507,10 @@ async fn model_ok_then_fast_reply_lost_is_unknown_and_needs_a_confirmed_off() ->
         .settings_catalog(SESSION)
         .and_then(|catalog| catalog.effective_settings().model);
     let held = prompt(&fixture).await;
-    let accepted = fixture.client.accept_session_settings(SESSION.to_owned());
+    let accepted = fixture
+        .client
+        .accept_session_settings(SESSION.to_owned())
+        .await;
     set(&fixture, ProviderSettingKind::Fast, "off").await?;
     let released = prompt(&fixture).await;
     fixture.client.shutdown().await;
@@ -562,7 +574,10 @@ async fn fast_auto_after_a_refused_fast_change_sends_nothing() -> TestResult {
     let before = setting_requests(&fixture).len();
     let model = set(&fixture, ProviderSettingKind::Model, "fixture-a").await;
     let after = setting_requests(&fixture);
-    let accepted = fixture.client.accept_session_settings(SESSION.to_owned());
+    let accepted = fixture
+        .client
+        .accept_session_settings(SESSION.to_owned())
+        .await;
     let released = prompt(&fixture).await;
     fixture.client.shutdown().await;
     allowed_before_accept?;
@@ -584,7 +599,10 @@ async fn fast_auto_keeps_an_unknown_fast_hold() -> TestResult {
     let before = setting_requests(&fixture).len();
     let model = set(&fixture, ProviderSettingKind::Model, "fixture-a").await;
     let after = setting_requests(&fixture);
-    let accepted = fixture.client.accept_session_settings(SESSION.to_owned());
+    let accepted = fixture
+        .client
+        .accept_session_settings(SESSION.to_owned())
+        .await;
     set(&fixture, ProviderSettingKind::Fast, "off").await?;
     let released = prompt(&fixture).await;
     fixture.client.shutdown().await;

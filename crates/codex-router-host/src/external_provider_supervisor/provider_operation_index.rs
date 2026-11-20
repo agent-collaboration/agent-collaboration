@@ -7,6 +7,7 @@
 //! unknown, and the live operations say which sends are still in flight.
 //! Every lock here is short and never held across an await.
 
+use crate::binding_dispatch_permit::{BindingOutcomes, BindingUncertainty};
 use collaboration_protocol::{
     ConversationOperationFailure, ConversationOperationSettlement, EndpointRef, OperationId,
     ProviderOperationKind, SessionRef,
@@ -14,10 +15,7 @@ use collaboration_protocol::{
 use provider_session_machines::operation_record_machine::{
     AttemptEnding, DispatchAttempt, OperationRecord, OperationRecordEvent, OperationRecordMachine,
 };
-use provider_session_machines::uncertainty_cell_machine::{
-    UncertaintyCellMachine, UncertaintyEvent, UncertaintyRefusal, UnknownOutcomes, seeded,
-};
-use state_machine_core::{StateMachine, TransitionError};
+use state_machine_core::StateMachine;
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, MutexGuard, PoisonError};
@@ -74,6 +72,20 @@ impl LiveOperation {
             Some(kind),
             OperationRecord::Reserving,
         )
+    }
+
+    pub(super) fn queued_prompt(target: SessionRef) -> Self {
+        Self::new(
+            Some(target.endpoint.clone()),
+            Some(target),
+            Some(ProviderOperationKind::ConversationPrompt),
+            OperationRecord::Admitted { queued: true },
+        )
+    }
+
+    pub(super) fn is_prompt_for(&self, target: &SessionRef) -> bool {
+        self.kind == Some(ProviderOperationKind::ConversationPrompt)
+            && self.target().as_ref() == Some(target)
     }
 
     fn new(
@@ -154,6 +166,7 @@ impl LiveOperation {
     }
 
     /// Its dispatch marker was undone: nothing left under that attempt.
+    #[cfg(test)]
     pub(super) fn undispatched(&self) {
         if let OperationRecord::MayHaveDispatched { attempt } = self.record() {
             self.advance(OperationRecordEvent::Undispatched { attempt });
@@ -231,10 +244,6 @@ impl LiveOperations {
     }
 }
 
-/// One binding's uncertainty cell, seeded once from the durable rows before
-/// its first use.
-type BindingUncertainty = tokio::sync::OnceCell<StdMutex<UnknownOutcomes<OperationId, SessionRef>>>;
-
 /// Every binding's uncertainty cell (design note §14.1).
 #[derive(Default)]
 pub(super) struct UncertaintyCells {
@@ -242,6 +251,13 @@ pub(super) struct UncertaintyCells {
 }
 
 impl UncertaintyCells {
+    pub(super) fn slot(&self, binding: &EndpointRef) -> Arc<BindingUncertainty> {
+        lock(&self.cells)
+            .entry(binding.clone())
+            .or_default()
+            .clone()
+    }
+
     /// The binding's cell, seeded on first use with `seed`'s rows.
     pub(super) async fn cell<F, Fut, E>(
         &self,
@@ -250,42 +266,13 @@ impl UncertaintyCells {
     ) -> Result<Arc<BindingUncertainty>, E>
     where
         F: FnOnce() -> Fut,
-        Fut: std::future::Future<Output = Result<Vec<(OperationId, Option<SessionRef>)>, E>>,
+        Fut: std::future::Future<Output = Result<BindingOutcomes, E>>,
     {
-        let cell = Arc::clone(
-            lock(&self.cells)
-                .entry(binding.clone())
-                .or_insert_with(|| Arc::new(BindingUncertainty::new())),
-        );
-        cell.get_or_try_init(|| async {
-            let rows = seed().await?;
-            Ok::<_, E>(StdMutex::new(seeded(
-                rows.iter()
-                    .map(|(operation, target)| (operation, target.as_ref())),
-            )))
-        })
-        .await?;
+        let cell = self.slot(binding);
+        cell.outcomes
+            .get_or_try_init(|| async { seed().await.map(StdMutex::new) })
+            .await?;
         Ok(cell)
-    }
-}
-
-/// Applies one event to a seeded binding cell under its lock.
-pub(super) fn apply_uncertainty(
-    cell: &BindingUncertainty,
-    event: UncertaintyEvent<OperationId, SessionRef>,
-) -> Result<(), UncertaintyRefusal<OperationId>> {
-    let Some(outcomes) = cell.get() else {
-        return Ok(());
-    };
-    let mut outcomes = lock(outcomes);
-    match UncertaintyCellMachine::<OperationId, SessionRef>::transition(&outcomes, event) {
-        Ok((next, _effects)) => {
-            *outcomes = next;
-            Ok(())
-        }
-        Err(TransitionError::Domain(refusal)) => Err(refusal),
-        // A reconcile of an operation the cell never held changes nothing.
-        Err(TransitionError::NotAllowed { .. } | TransitionError::Stale) => Ok(()),
     }
 }
 

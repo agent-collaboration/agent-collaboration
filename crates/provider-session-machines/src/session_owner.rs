@@ -11,7 +11,7 @@ use crate::session_setting_machine::{SettingApplication, SettingValueId};
 use crate::session_turn_machine::{SessionTurn, TurnId};
 use crate::tool_ownership::{ToolObservation, ToolOwnership};
 use crate::{ProviderSettingKind, SessionGeneration};
-use session_event_model::InputId;
+use session_event_model::{InputId, LocalCause, StopReason, TurnOutcome};
 use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -39,6 +39,18 @@ pub enum PromptAdmission {
     Direct,
     Queue,
     Auto { steering_supported: bool },
+    DeliveryAuto { steering_supported: bool },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DeliveryInput {
+    Prompt {
+        admission: PromptAdmission,
+        selected: Vec<session_event_model::SelectedSkill>,
+    },
+    Steer {
+        supported: bool,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -64,9 +76,28 @@ pub enum SessionOwnerCommand {
         input: OwnerInput,
         admission: PromptAdmission,
     },
+    PromptWithSkills {
+        input: OwnerInput,
+        admission: PromptAdmission,
+        selected: Vec<session_event_model::SelectedSkill>,
+    },
     Steer {
         input: OwnerInput,
         supported: bool,
+    },
+    SteerExisting {
+        input: OwnerInput,
+        supported: bool,
+    },
+    PlaceDelivery {
+        input: OwnerInput,
+        delivery: DeliveryInput,
+    },
+    QueueColdDelivery {
+        input: OwnerInput,
+        attempt: LoadAttempt,
+        selected: Vec<session_event_model::SelectedSkill>,
+        record_evidence: bool,
     },
     CancelTurn {
         generation: SessionGeneration,
@@ -84,6 +115,14 @@ pub enum SessionOwnerCommand {
         input: InputId,
         setting: OwnerSetting,
         value: SettingValueId,
+        expected_model: Option<SettingValueId>,
+    },
+    SetInContext {
+        input: InputId,
+        setting: OwnerSetting,
+        value: SettingValueId,
+        expected_model: Option<SettingValueId>,
+        reuse_confirmed: bool,
     },
     AcceptSettings {
         generation: SessionGeneration,
@@ -96,6 +135,21 @@ pub enum WireOutcome<Reply> {
     Confirmed(Reply),
     Refused,
     Unknown,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PromptCompletion {
+    pub stop_reason: StopReason,
+    pub local_cause: Option<LocalCause>,
+    pub response: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LastLiveTurn {
+    pub turn: TurnId,
+    pub input: InputId,
+    pub outcome: TurnOutcome,
+    pub observed_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -122,6 +176,7 @@ pub enum RestoreModeOutcome {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SettingObservation {
     Applied(SettingValueId),
+    AppliedWithReadback(Box<SettingReadback>),
     Refused { current: Option<SettingValueId> },
     Unknown,
 }
@@ -175,6 +230,14 @@ pub enum SessionStoreResult {
         outcome: EffectOutcome,
     },
     SteerDispatch {
+        input: OwnerInput,
+        outcome: EffectOutcome,
+    },
+    DispatchBlockedByUnknown {
+        input: OwnerInput,
+        operation: uuid::Uuid,
+    },
+    LateCancelledPromptReconciled {
         input: OwnerInput,
         outcome: EffectOutcome,
     },
@@ -282,6 +345,7 @@ pub enum SessionStoreRequest {
     MarkDispatch(OwnerInput),
     UndoDispatch(OwnerInput),
     MarkSteerDispatch(OwnerInput),
+    ReconcileLateCancelledPrompt(OwnerInput),
     RecordConfirmedSetting {
         setting: OwnerSetting,
         value: SettingValueId,
@@ -301,11 +365,18 @@ pub enum SessionPublication {
     TurnStarted {
         generation: SessionGeneration,
         turn: TurnId,
+        input: InputId,
     },
     TurnEnded {
         generation: SessionGeneration,
         turn: TurnId,
+        outcome: TurnOutcome,
         idle: bool,
+    },
+    PreviousTurnEnded {
+        generation: SessionGeneration,
+        turn: TurnId,
+        outcome: TurnOutcome,
     },
     SettingObserved {
         setting: OwnerSetting,
@@ -393,10 +464,40 @@ pub enum SessionOwnerReply {
         input: OwnerInput,
         remote: RemoteEffect,
     },
+    PromptCompleted {
+        input: OwnerInput,
+        completion: PromptCompletion,
+    },
+    PromptFailed {
+        input: OwnerInput,
+        remote: RemoteEffect,
+        failure: ProviderWireFailure,
+    },
+    PromptCancelUnconfirmed {
+        input: OwnerInput,
+    },
+    SteerStarted {
+        input: OwnerInput,
+        turn: TurnId,
+    },
+    SteerInvalidReply {
+        input: OwnerInput,
+    },
     SettingFinished {
         setting: OwnerSetting,
         remote: RemoteEffect,
         saved: bool,
+    },
+    SettingKept {
+        setting: OwnerSetting,
+    },
+    ModelFastFinished {
+        setting: OwnerSetting,
+        fast: ModelFastOutcome,
+    },
+    SettingNotSent {
+        setting: OwnerSetting,
+        refusal: SessionOwnerRefusal,
     },
     InputUnsent {
         input: OwnerInput,
@@ -428,8 +529,12 @@ pub enum SessionOwnerRefusal {
     Cell(state_machine_core::TransitionError<SessionCellRefusal>),
     GenerationChanged,
     SettingsUnresolved,
+    SettingContextChanged,
     InputAlreadyAdmitted,
     EffectInProgress,
+    QueueFull,
+    CannotSteer,
+    SkillSelectionChanged,
 }
 
 impl SessionOwnerRefusal {
@@ -445,9 +550,9 @@ impl SessionOwnerRefusal {
 }
 
 #[derive(Debug)]
-pub struct SessionOwnerCommit {
-    pub next: SessionOwnerState,
-    pub effects: OwnerOutbox,
+struct SessionOwnerCommit {
+    next: SessionOwnerState,
+    effects: OwnerOutbox,
 }
 
 #[derive(Debug)]
@@ -457,13 +562,14 @@ pub enum SessionOwnerRejection {
     IgnoredLate,
 }
 
-pub type SessionOwnerDecision = Result<SessionOwnerCommit, SessionOwnerRejection>;
+type SessionOwnerDecision = Result<SessionOwnerCommit, SessionOwnerRejection>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::session_owner) enum PendingRestore {
     Setup {
         run: RunAttempt<LoadAttempt>,
         via: RestoreVia,
+        after_queue_evidence: Option<uuid::Uuid>,
     },
     Wire {
         run: RunAttempt<LoadAttempt>,
@@ -475,6 +581,7 @@ pub(in crate::session_owner) enum PendingRestore {
     },
     FastOff {
         run: RunAttempt<LoadAttempt>,
+        setting: OwnerSetting,
         via: RestoreVia,
         mode_confirmed: bool,
     },
@@ -489,10 +596,11 @@ pub(in crate::session_owner) enum PendingRestore {
 pub(in crate::session_owner) struct PendingPrompt {
     input: OwnerInput,
     wait: InputWait,
+    choose_steer_if_a_turn_starts: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SessionOwnerState {
+struct SessionOwnerState {
     pub(in crate::session_owner) cell: SessionCell,
     pub(in crate::session_owner) restore: Option<PendingRestore>,
     pub(in crate::session_owner) prompts: BTreeMap<u64, PendingPrompt>,
@@ -524,6 +632,41 @@ impl SessionOwnerState {
     #[must_use]
     pub(in crate::session_owner) const fn turn(&self) -> SessionTurn {
         self.cell.turn
+    }
+}
+
+/// The reducer's task owns this machine. Consumers use committed effects and
+/// snapshots without borrowing the reducer's state.
+pub struct SessionOwnerMachine {
+    state: SessionOwnerState,
+}
+
+impl SessionOwnerMachine {
+    #[must_use]
+    pub fn new(address: OwnerAddress) -> Self {
+        Self {
+            state: SessionOwnerState::new(address),
+        }
+    }
+
+    pub fn handle(
+        &mut self,
+        event: OwnerMailboxEvent,
+        observed_at_ms: i64,
+    ) -> Result<OwnerOutbox, SessionOwnerRejection> {
+        let commit = self.state.decide_at(event, observed_at_ms)?;
+        self.state = commit.next;
+        Ok(commit.effects)
+    }
+
+    #[must_use]
+    pub fn snapshot(&self) -> SessionSnapshot {
+        self.state.snapshot()
+    }
+
+    #[must_use]
+    pub fn has_pending_deadline(&self, deadline: &OwnerDeadline) -> bool {
+        self.state.has_pending_deadline(deadline)
     }
 }
 

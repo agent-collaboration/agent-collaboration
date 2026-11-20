@@ -1,10 +1,6 @@
 //! A restore failure carries whether the request could have reached ACP.
 
 use crate::ExternalProviderRuntimeError;
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RestorePhase {
@@ -45,28 +41,5 @@ impl RestoreFailure {
     #[must_use]
     pub fn into_error(self) -> ExternalProviderRuntimeError {
         *self.error
-    }
-
-    pub(crate) fn replacing_error(mut self, error: ExternalProviderRuntimeError) -> Self {
-        *self.error = error;
-        self
-    }
-}
-
-/// Shared with the caller in case a closing connection drops its reply.
-#[derive(Clone, Default)]
-pub(crate) struct RestoreDispatch(Arc<AtomicBool>);
-
-impl RestoreDispatch {
-    pub(crate) fn begin_attempt(&self) {
-        self.0.store(true, Ordering::Release);
-    }
-
-    pub(crate) fn failure(&self, error: ExternalProviderRuntimeError) -> RestoreFailure {
-        if self.0.load(Ordering::Acquire) {
-            RestoreFailure::attempted(error)
-        } else {
-            RestoreFailure::preflight(error)
-        }
     }
 }

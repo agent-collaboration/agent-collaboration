@@ -53,6 +53,7 @@ fn event_notification(
             })
         }
         SessionEvent::TurnEnded { turn_id, outcome } => {
+            let still_running = active_turn.as_ref().is_some_and(|active| active != turn_id);
             if active_turn.as_deref() == Some(turn_id) {
                 *active_turn = None;
             }
@@ -93,6 +94,11 @@ fn event_notification(
                         .into(),
                     },
                 ),
+            };
+            let state = if still_running {
+                ProfileState::Running
+            } else {
+                state
             };
             supports_state.then(|| state_frame(session, state, Some(turn)))
         }

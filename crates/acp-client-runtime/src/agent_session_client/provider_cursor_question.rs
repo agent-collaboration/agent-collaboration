@@ -15,7 +15,7 @@ use session_event_model::{
 use tokio_util::sync::CancellationToken;
 
 use super::ActiveApprovalContext;
-use crate::{InteractionPort, provider_connection_activity::ProviderConnectionActivity};
+use crate::{InteractionPort, owner_callback_routing::OwnerCallbackRouting};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,14 +42,14 @@ struct CursorChoice {
 }
 
 pub(super) struct ProviderCursorQuestionHandler<P: InteractionPort> {
-    tool_registry: Arc<ProviderConnectionActivity>,
+    tool_registry: Arc<OwnerCallbackRouting>,
     approval_contexts: Arc<Mutex<HashMap<String, ActiveApprovalContext<P>>>>,
     interaction_port: Arc<P>,
 }
 
 impl<P: InteractionPort> ProviderCursorQuestionHandler<P> {
     pub(super) fn new(
-        tool_registry: Arc<ProviderConnectionActivity>,
+        tool_registry: Arc<OwnerCallbackRouting>,
         approval_contexts: Arc<Mutex<HashMap<String, ActiveApprovalContext<P>>>>,
         interaction_port: Arc<P>,
     ) -> Self {
@@ -169,9 +169,10 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderCursorQuestionHan
                 return Ok(Handled::Yes);
             }
         };
-        let Some(crate::provider_connection_activity::ToolCallOwner {
+        let Some(crate::owner_callback_routing::ToolCallOwner {
             session_id,
-            generation,
+            run,
+            turn,
         }) = self.tool_registry.resolve_session(&cursor.tool_call_id)
         else {
             tracing::warn!("unresolved Cursor question request");
@@ -181,7 +182,11 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderCursorQuestionHan
         let context = self.approval_contexts.lock().ok().and_then(|contexts| {
             contexts
                 .get(&session_id)
-                .filter(|context| context.generation == generation)
+                .filter(|context| {
+                    context.incarnation == run.incarnation
+                        && context.generation == run.generation
+                        && context.turn == Some(turn)
+                })
                 .cloned()
         });
         let Some(context) = context else {
@@ -209,7 +214,9 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderCursorQuestionHan
             .collect::<Vec<_>>();
         let port = Arc::clone(&self.interaction_port);
         let request_cancellation = responder.cancellation();
-        let response_guard = context.responses.track();
+        let response_guard = context
+            .responses
+            .track("cursor/ask_question", responder.id());
         connection.spawn(async move {
             let agent_cancellation = CancellationToken::new();
             let answer = port.request_question(

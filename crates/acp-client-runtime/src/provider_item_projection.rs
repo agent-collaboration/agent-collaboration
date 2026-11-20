@@ -46,13 +46,6 @@ impl ProviderItemProjection {
         self.apply_provider_update(crate::ProviderUpdate::SessionAdmitted, Vec::new())
     }
 
-    pub(crate) fn validates(&self, submission: &session_event_model::ProviderSubmission) -> bool {
-        submission
-            .selected
-            .iter()
-            .all(|selection| self.skill_view.contains_selection(selection))
-    }
-
     pub(crate) fn compact_confirmed(&self) -> bool {
         !self.invalid_compaction
             && self.compaction_hints.iter().any(|(id, hint)| {
@@ -344,10 +337,6 @@ impl ProviderItemProjection {
         self.active_text = None;
         self.tool_order.clear();
         self.plan_item = None;
-    }
-
-    pub(crate) fn has_tool_item(&self, tool_id: &str) -> bool {
-        self.tool_items.contains_key(tool_id)
     }
 
     pub(crate) fn finish_text(&mut self) -> Result<(), ItemProjectionError> {

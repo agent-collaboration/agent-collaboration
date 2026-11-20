@@ -239,7 +239,12 @@ async function serveSendRace(receiptPath: string, names: readonly string[]): Pro
 const scenario = requireArgument(2);
 if (scenario === "send-race") await serveSendRace(requireArgument(3), process.argv.slice(4));
 else {
-  const agent = new AcpExchange();
+  const startedReceipt = scenario === "started" ? requireArgument(3) : undefined;
+  if (startedReceipt !== undefined) startReleaseBarrier(startedReceipt);
+  const agent = new AcpExchange(
+    undefined,
+    startedReceipt === undefined ? {} : { wireCapture: startedReceipt },
+  );
   const name =
     scenario === "injected"
       ? "input-fixture"
@@ -251,7 +256,12 @@ else {
     _meta: { steering: { supported: true } },
   });
   await agent.newSession();
-  const prompt = scenario === "injected" ? await agent.read("session/prompt") : undefined;
+  const prompt = await agent.read("session/prompt");
+  if (startedReceipt !== undefined)
+    agent.update({
+      sessionUpdate: "agent_message_chunk",
+      content: { type: "text", text: "old response" },
+    });
   const steer = await agent.read("_session/steering");
   if (scenario === "required")
     assert.equal(field(steer, "params", "_meta", "steering", "idleBehavior"), "promptRequired");
@@ -263,8 +273,25 @@ else {
           ? "startedNewTurn"
           : "promptRequired",
   });
-  if (prompt !== undefined) agent.endTurn(prompt);
-  else if (scenario === "required") agent.endTurn(await agent.read("session/prompt"));
+  if (startedReceipt !== undefined) {
+    await fileAppears(`${startedReceipt}.release-old`);
+    agent.update({
+      sessionUpdate: "agent_message_chunk",
+      content: { type: "text", text: "new response" },
+    });
+    agent.endTurn(prompt, "max_tokens");
+    await fileAppears(`${startedReceipt}.release-idle`);
+    agent.send({
+      jsonrpc: "2.0",
+      method: "_session/state",
+      params: { sessionId: "fixture-session", state: "idle" },
+    });
+    agent.update({
+      sessionUpdate: "fixture_idle_witness",
+      content: { type: "text", text: "after idle" },
+    });
+  } else agent.endTurn(prompt);
+  if (scenario === "required") agent.endTurn(await agent.read("session/prompt"));
   await agent.drain();
   agent.close();
 }

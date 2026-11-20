@@ -2,10 +2,11 @@
 
 use std::{path::PathBuf, sync::Arc};
 
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::{
-    AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
-    HistoryReplayFuture, InteractionFuture, InteractionPort, ProviderPersistenceTarget,
-    RefusedApprovalOffer, SessionEventSink,
+    ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch, HistoryReplayFuture,
+    InteractionFuture, InteractionPort, ProviderPersistenceTarget, RefusedApprovalOffer,
+    SessionEventSink,
 };
 use session_event_model::{ApprovalRequest, ProviderAuthStatus, SessionEvent};
 use tokio_util::sync::CancellationToken;
@@ -80,7 +81,7 @@ impl SessionEventSink for NoopEventSink {
     }
 }
 
-struct CaptureEventSink(tokio::sync::mpsc::UnboundedSender<SessionEvent>);
+struct CaptureEventSink(tokio::sync::mpsc::UnboundedSender<(String, SessionEvent)>);
 impl SessionEventSink for CaptureEventSink {
     fn publish_skill_view(
         &self,
@@ -93,8 +94,26 @@ impl SessionEventSink for CaptureEventSink {
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
-    fn publish(&self, _session_id: &str, event: SessionEvent) -> Result<(), EventSinkClosed> {
-        self.0.send(event).map_err(|_| EventSinkClosed)
+    fn publish(&self, session_id: &str, event: SessionEvent) -> Result<(), EventSinkClosed> {
+        self.0
+            .send((session_id.to_owned(), event))
+            .map_err(|_| EventSinkClosed)
+    }
+
+    fn publish_connection_auth(
+        &self,
+        session: &str,
+        auth_status: ProviderAuthStatus,
+    ) -> Result<(), EventSinkClosed> {
+        self.publish(
+            session,
+            SessionEvent::CapabilitiesChanged {
+                capabilities: session_event_model::CapabilityReport {
+                    auth_status,
+                    ..Default::default()
+                },
+            },
+        )
     }
 }
 
@@ -142,7 +161,7 @@ async fn later_auth_change_publishes_capabilities_and_logged_out_status() {
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
             executable: PathBuf::from("node"),
-            arguments: vec![AUTH_FIXTURE.to_owned()],
+            arguments: vec![AUTH_FIXTURE.to_owned(), "two-sessions".to_owned()],
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,
         },
@@ -156,13 +175,21 @@ async fn later_auth_change_publishes_capabilities_and_logged_out_status() {
         .create_session(root.path().to_path_buf())
         .await
         .expect("session opens");
+    let second_session = client
+        .create_session(root.path().to_path_buf())
+        .await
+        .expect("second session opens");
     let receive_auth_change = async {
-        loop {
-            let event = events.recv().await.expect("event sink remains open");
-            if let SessionEvent::CapabilitiesChanged { capabilities } = event {
-                break capabilities;
+        let mut sessions = std::collections::BTreeSet::new();
+        while sessions.len() < 2 {
+            let (session, event) = events.recv().await.expect("event sink remains open");
+            if let SessionEvent::CapabilitiesChanged { capabilities } = event
+                && capabilities.auth_status == ProviderAuthStatus::LoggedOut
+            {
+                sessions.insert(session);
             }
         }
+        sessions
     };
     let (prompt_result, capabilities) = tokio::join!(
         client.submit_with_approval_dispatch_for_input(
@@ -179,10 +206,17 @@ async fn later_auth_change_publishes_capabilities_and_logged_out_status() {
         ),
         tokio::time::timeout(std::time::Duration::from_secs(2), receive_auth_change),
     );
-    let capabilities = capabilities.expect("auth notification was handled");
-    assert_eq!(capabilities.auth_status, ProviderAuthStatus::LoggedOut);
+    let observed = capabilities.expect("both sessions observe the auth notification");
+    assert_eq!(
+        observed,
+        [session_id.clone(), second_session.clone()]
+            .into_iter()
+            .collect()
+    );
     prompt_result.expect("prompt ends");
     let report = client.capability_report(&session_id).await;
+    let second_report = client.capability_report(&second_session).await;
     client.shutdown().await;
     assert_eq!(report.auth_status, ProviderAuthStatus::LoggedOut);
+    assert_eq!(second_report.auth_status, ProviderAuthStatus::LoggedOut);
 }

@@ -1,37 +1,15 @@
 //! Connection-level answer for agent requests that no implemented handler owns.
 
 use agent_client_protocol::{Agent, ConnectionTo, Dispatch, Error, HandleDispatchFrom, Handled};
-use std::{collections::HashSet, sync::Arc};
-use tokio::sync::RwLock;
-
-#[derive(Clone, Default)]
-pub(super) struct ProviderKnownSessions(Arc<RwLock<HashSet<String>>>);
-
-impl ProviderKnownSessions {
-    pub(super) async fn track(&self, session_id: String) {
-        self.0.write().await.insert(session_id);
-    }
-
-    pub(super) async fn forget(&self, session_id: &str) {
-        self.0.write().await.remove(session_id);
-    }
-
-    pub(super) async fn snapshot(&self) -> Vec<String> {
-        self.0.read().await.iter().cloned().collect()
-    }
-
-    async fn contains(&self, session_id: &str) -> bool {
-        self.0.read().await.contains(session_id)
-    }
-}
+use std::sync::Arc;
 
 pub(super) struct ProviderRequestSessionGuard {
-    known_sessions: ProviderKnownSessions,
+    wire: Arc<crate::owner_wire::OwnerAcpWire>,
 }
 
 impl ProviderRequestSessionGuard {
-    pub(super) fn new(known_sessions: ProviderKnownSessions) -> Self {
-        Self { known_sessions }
+    pub(super) fn new(wire: Arc<crate::owner_wire::OwnerAcpWire>) -> Self {
+        Self { wire }
     }
 }
 
@@ -47,7 +25,7 @@ impl HandleDispatchFrom<Agent> for ProviderRequestSessionGuard {
                 .get("sessionId")
                 .and_then(serde_json::Value::as_str);
             if let Some(session_id) = session_id
-                && !self.known_sessions.contains(session_id).await
+                && self.wire.route_for_session(session_id).is_none()
             {
                 responder.respond_with_error(Error::method_not_found())?;
                 return Ok(Handled::Yes);

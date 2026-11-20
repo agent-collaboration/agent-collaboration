@@ -47,10 +47,12 @@ if (scenario.startsWith("models-")) {
       error: { code: -32601, message: "scripted discovery failure" },
     });
   await agent.newSession();
+} else if (scenario === "steer-idle-prompt") {
+  await agent.newSession();
+  agent.endTurn(await agent.read("session/prompt"));
 } else {
   await agent.newSession();
-  // Injected steering needs a running turn: the prompt arrives first.
-  const prompt = scenario === "steer-injected" ? await agent.read("session/prompt") : undefined;
+  const prompt = await agent.read("session/prompt");
   const steer = await agent.read("_session/steering");
   // promptRequired carries Claude's reason, as the Claude extras pin defines it. `failed` is not a
   // Claude outcome and `sideways` is outside every contract: the test injects both.
@@ -64,7 +66,10 @@ if (scenario.startsWith("models-")) {
   if (result === undefined) throw new Error("unknown typed extension scenario");
   agent.respond(steer, result);
   // The turn stays open until the test cancels it, so nothing ends it between the reply and the tap.
-  if (prompt !== undefined) {
+  if (scenario === "steer-prompt-required") {
+    agent.endTurn(prompt);
+    agent.endTurn(await agent.read("session/prompt"));
+  } else {
     await agent.read("session/cancel");
     agent.endTurn(prompt, "cancelled");
   }

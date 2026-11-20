@@ -37,6 +37,16 @@ pub enum CallbackResolution {
 enum Membership {
     Provisional(TurnId),
     Eligible(TurnId),
+    ProviderStarted(TurnId),
+}
+
+impl Membership {
+    const fn eligible(self) -> Option<TurnId> {
+        match self {
+            Self::Eligible(turn) | Self::ProviderStarted(turn) => Some(turn),
+            Self::Provisional(_) => None,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -69,10 +79,35 @@ impl CallbackRouter {
     }
 
     pub(crate) fn current_turn(&self, run: TransportRun) -> Option<TurnId> {
+        self.routes.get(&run)?.turn?.eligible()
+    }
+
+    pub(crate) fn provider_started_turn(&self, run: TransportRun) -> Option<TurnId> {
         match self.routes.get(&run)?.turn? {
-            Membership::Eligible(turn) => Some(turn),
-            Membership::Provisional(_) => None,
+            Membership::ProviderStarted(turn) => Some(turn),
+            _ => None,
         }
+    }
+
+    pub(crate) fn allows_explicit_tool_request(
+        &self,
+        session: &str,
+        run: TransportRun,
+        tool: &str,
+    ) -> bool {
+        let Some(turn) = self.current_turn(run) else {
+            return false;
+        };
+        self.claims
+            .get(tool)
+            .and_then(|claims| claims.get(session))
+            .is_none_or(|claim| {
+                claim.run == run
+                    && matches!(claim.ownership,
+                        ToolOwnership::Owned { turn: expected, .. }
+                        if expected.is_none_or(|expected| expected == turn)
+                    )
+            })
     }
 
     pub(crate) fn begin_turn(&mut self, run: TransportRun, turn: TurnId) {
@@ -94,6 +129,15 @@ impl CallbackRouter {
         }
     }
 
+    pub(crate) fn observe_eligible_turn(&mut self, run: TransportRun, turn: TurnId) {
+        if let Some(route) = self.routes.get_mut(&run)
+            && route.live
+            && route.turn.is_none()
+        {
+            route.turn = Some(Membership::ProviderStarted(turn));
+        }
+    }
+
     pub(crate) fn revoke_new_turn(&mut self, run: TransportRun, turn: TurnId) {
         if let Some(route) = self.routes.get_mut(&run)
             && route.turn == Some(Membership::Provisional(turn))
@@ -106,7 +150,7 @@ impl CallbackRouter {
         let Some(route) = self.routes.get_mut(&run) else {
             return;
         };
-        if route.turn != Some(Membership::Eligible(turn)) {
+        if route.turn.and_then(Membership::eligible) != Some(turn) {
             return;
         }
         route.turn = None;
@@ -150,10 +194,12 @@ impl CallbackRouter {
             (false, _) => ToolSessionPhase::Loading {
                 generation: run.generation,
             },
-            (true, Some(Membership::Eligible(turn))) => ToolSessionPhase::LiveRunning {
-                generation: run.generation,
-                turn,
-            },
+            (true, Some(Membership::Eligible(turn) | Membership::ProviderStarted(turn))) => {
+                ToolSessionPhase::LiveRunning {
+                    generation: run.generation,
+                    turn,
+                }
+            }
             (true, _) => ToolSessionPhase::LiveIdle {
                 generation: run.generation,
             },
@@ -195,10 +241,7 @@ impl CallbackRouter {
             let mut turns = self
                 .routes
                 .iter()
-                .filter_map(|(&run, route)| match route.turn {
-                    Some(Membership::Eligible(turn)) => Some((run, turn)),
-                    _ => None,
-                });
+                .filter_map(|(&run, route)| Some((run, route.turn?.eligible()?)));
             let sole_eligible = match (turns.next(), turns.next()) {
                 (Some(candidate), None) => Some(candidate),
                 _ => None,

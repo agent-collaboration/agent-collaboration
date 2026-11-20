@@ -36,31 +36,67 @@ async fn initialization_authentication_precedes_models_and_is_once_per_connectio
         }
     };
 
+    let endpoint = endpoint("cursor-local")?;
+    let store = Arc::new(Mutex::new(
+        ProviderOperationStore::open(&root.path().join("provider-operations.sqlite")).await?,
+    ));
+    let backend = ExternalProviderSupervisor::new(
+        vec![ExternalProviderBinding {
+            identity: binding(endpoint.clone(), "cursor")?,
+            runtime,
+        }],
+        store.clone(),
+    )?;
     // Act: two sessions share this one initialized connection.
-    let first = runtime.create_session(root.path().to_path_buf()).await;
+    let first = backend
+        .open_provider_fixture(&endpoint, root.path().to_owned())
+        .await;
     let second = if first.is_ok() {
-        Some(runtime.create_session(root.path().to_path_buf()).await)
-    } else {
-        None
-    };
-    let setting = if let Ok(session_id) = &first {
         Some(
-            runtime
-                .set_setting(
-                    session_id.clone(),
-                    acp_client_runtime::ProviderSettingRequest {
-                        kind: provider_session_machines::ProviderSettingKind::Effort,
-                        value: "high".to_owned(),
-                        intent: session_event_model::SettingApplicationIntent::ExplicitChange,
-                        expected_model: None,
-                    },
-                )
+            backend
+                .open_provider_fixture(&endpoint, root.path().to_owned())
                 .await,
         )
     } else {
         None
     };
-    runtime.shutdown().await;
+    let setting = if let Ok(session_id) = &first {
+        let target = SessionRef {
+            endpoint: endpoint.clone(),
+            session_id: SessionId::try_from(session_id.clone())?,
+        };
+        let actor = target.clone().into();
+        store
+            .lock()
+            .await
+            .record_session(&collaboration_runtime::ProviderSessionRecord {
+                target: target.clone(),
+                working_directory: ProviderWorkingDirectory::try_from(
+                    root.path().display().to_string(),
+                )?,
+                requested_policy: ProviderRequestedPolicy {
+                    access: RouterAccess::WriteRestricted,
+                },
+                created_by: target.clone().into(),
+                approver: target.clone().into(),
+                updated_at_ms: 0,
+                resume: Default::default(),
+            })
+            .await?;
+        Some(
+            backend
+                .settings_set(ProviderSettingsSetRequest {
+                    target,
+                    actor,
+                    setting: ProviderSettingName::Effort,
+                    value: "high".to_owned(),
+                })
+                .await,
+        )
+    } else {
+        None
+    };
+    backend.shutdown().await?;
     let process_id = rustix::process::Pid::from_raw(
         std::fs::read_to_string(receipt.with_extension("log.pid"))?.parse()?,
     )
@@ -80,7 +116,9 @@ async fn initialization_authentication_precedes_models_and_is_once_per_connectio
         second.ok_or("first session failed")??,
         "authenticated-session-2"
     );
-    let effective_setting = setting.ok_or("first session failed")??;
-    ensure_eq!(effective_setting.effort.as_deref(), Some("high"));
+    let result = setting
+        .ok_or("first session failed")?
+        .map_err(|error| format!("provider setting failed: {error:?}"))?;
+    ensure_eq!(result.effective_settings.effort.as_deref(), Some("high"));
     Ok(())
 }

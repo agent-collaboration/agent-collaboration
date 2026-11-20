@@ -9,7 +9,7 @@ pub mod operation_record_machine;
 pub mod provider_setting_kind;
 pub mod queue_line_machine;
 pub mod queued_entry_machine;
-pub mod session_cell_machine;
+mod session_cell_machine;
 pub mod session_generation;
 pub mod session_lifecycle_answers;
 pub mod session_lifecycle_machine;

@@ -24,8 +24,13 @@ impl ProviderOperationStore {
         let unknown = encode_enum(ProviderOperationEffect::Unknown)?;
         let candidates = sqlx::query!(
             "SELECT operation_id,operation_kind,stage,binding_json,target_service_id,target_endpoint_id,target_session_id
-             FROM provider_operations WHERE effect=? ORDER BY operation_id",
+             FROM provider_operations WHERE effect=?
+                AND NOT (operation_kind=? AND stage=? AND reconciliation_state=?)
+             ORDER BY operation_id",
             unknown,
+            encode_enum(ProviderOperationKind::ConversationPrompt)?,
+            encode_enum(ProviderOperationStage::Terminal)?,
+            encode_enum(collaboration_protocol::ProviderReconciliationState::NotReconcilable)?,
         )
         .fetch_all(&mut self.connection)
         .await?;

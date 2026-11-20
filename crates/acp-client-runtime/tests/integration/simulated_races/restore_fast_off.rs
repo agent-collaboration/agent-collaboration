@@ -1,8 +1,7 @@
 use super::actor_exit_handoff::RunCheckingSink;
 use super::{NoInteraction, ScriptedLineAgent};
-use acp_client_runtime::{
-    AgentSessionClient, ExternalProviderRuntimeError, ProviderSettingRequest, ProviderTurnInput,
-};
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
+use acp_client_runtime::{ExternalProviderRuntimeError, ProviderSettingRequest, ProviderTurnInput};
 use provider_session_machines::ProviderSettingKind;
 use router_clock::{ClockInstant, ManualClock};
 use session_event_model::{InputId, PromptContent, ProviderSubmission, SettingApplicationIntent};
@@ -65,8 +64,10 @@ async fn a_silent_restore_fast_off_uses_the_injected_clock_before_input() {
         .advance(offset)
         .expect("separate restore and setting deadlines");
     agent.release_load_answers();
-    load.await.expect("restore is admitted");
-    agent.fast_off_requests_received(2).await;
+    tokio::select! {
+        () = agent.fast_off_requests_received(2) => {},
+        result = &mut load => panic!("restore committed before fast off was sent: {result:?}"),
+    }
     let setting_wait = Duration::from_secs(30);
     assert!(
         clock.has_not_due_check_now(ClockInstant::ZERO.after(offset + setting_wait)),
@@ -88,6 +89,7 @@ async fn a_silent_restore_fast_off_uses_the_injected_clock_before_input() {
     clock
         .advance(setting_wait)
         .expect("expire the fast-off wait");
+    load.await.expect("restore commits with Fast unconfirmed");
 
     // Silence settles the wait and refuses input under the existing settings rule.
     let failure = input.await.expect_err("unconfirmed fast off holds input");

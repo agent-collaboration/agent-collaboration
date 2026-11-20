@@ -74,7 +74,7 @@ fn absolute_record_path(path: &Path) -> collaboration_protocol::ProviderWorkingD
         .expect("working directory")
 }
 
-fn mock_binding() -> ProviderBindingIdentity {
+pub(crate) fn mock_binding() -> ProviderBindingIdentity {
     let uuid = || UuidIdentity::try_from(Uuid::now_v7().to_string()).expect("UUID");
     ProviderBindingIdentity {
         endpoint: EndpointRef {
@@ -104,6 +104,158 @@ fn mock_binding() -> ProviderBindingIdentity {
 
 fn owner() -> OwnerIncarnation {
     OwnerIncarnation(Uuid::now_v7())
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_refused_first_queue_mark_cannot_settle_an_existing_operation() {
+    use collaboration_protocol::{ConversationBindingIdentity, ProviderOperationKind};
+
+    let fixture = StoreFixture::new().await;
+    let original = fixture.record_session("original").await;
+    let queued = fixture.record_session("queued").await;
+    let admission = ProviderOperationAdmission {
+        operation_id: OperationId::generate(),
+        operation_kind: ProviderOperationKind::ConversationPrompt,
+        binding: ConversationBindingIdentity::ExternalProvider {
+            binding: fixture.binding.clone(),
+        },
+        admitted_at_ms: 0,
+    };
+    let original_record = fixture
+        .store
+        .lock()
+        .await
+        .admit_queued_prompt_at_dispatch(admission.clone(), &original, 0)
+        .await
+        .expect("original operation written");
+    let operation = admission.operation_id.clone();
+    let owner = owner();
+    let (lane, runner) =
+        SessionStoreLane::new(owner, queued, fixture.store.clone(), fixture.clock.clone());
+    lane.defer_queued_admission(owner, admission)
+        .expect("held in memory");
+    let mark = lane
+        .offer(
+            owner,
+            SessionStoreWrite::MarkDispatch(MarkedInput {
+                operation: operation.clone(),
+                input: InputId::generate(),
+            }),
+        )
+        .expect("first mark accepted");
+    let terminal = lane
+        .offer(
+            owner,
+            SessionStoreWrite::Terminal {
+                operation: operation.clone(),
+                effect: ProviderOperationEffect::None,
+                reconciliation: ProviderReconciliationState::Confirmed,
+                stop_reason: None,
+                recovery: UnknownRecovery::Blocks,
+            },
+        )
+        .expect("known unsent cleanup accepted behind the mark");
+    let stop = CancellationToken::new();
+    let task = tokio::spawn(runner.run(stop.clone()));
+    assert!(matches!(
+        mark.settlement().await,
+        Err(SessionStoreWaitError::Store(
+            ProviderOperationStoreError::TransitionConflict
+        ))
+    ));
+    assert!(matches!(
+        terminal.settlement().await,
+        Ok(SessionStoreSettlement::MarkNeverWritten)
+    ));
+    assert_eq!(
+        fixture
+            .store
+            .lock()
+            .await
+            .inspect(&operation)
+            .await
+            .expect("row inspection"),
+        Some(original_record)
+    );
+    stop.cancel();
+    task.await.expect("lane stopped");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn unknown_terminal_offer_blocks_the_next_owner_even_after_its_write_fails() {
+    let fixture = StoreFixture::new().await;
+    let a = fixture.record_session("a").await;
+    let b = fixture.record_session("b").await;
+    let (old, successor, b_owner) = (owner(), owner(), owner());
+    let permit = Arc::new(BindingUncertainty::default());
+    assert!(permit.outcomes.set(Mutex::new(Default::default())).is_ok());
+    let binding = Arc::new(std::sync::OnceLock::from(permit));
+    let (a_lane, a_runner) = SessionStoreLane::with_binding(
+        old,
+        a,
+        fixture.store.clone(),
+        fixture.clock.clone(),
+        binding.clone(),
+    );
+    let (b_lane, _b_runner) = SessionStoreLane::with_binding(
+        b_owner,
+        b,
+        fixture.store.clone(),
+        fixture.clock.clone(),
+        binding,
+    );
+    let mark = || MarkedInput {
+        input: InputId::new(Uuid::now_v7().to_string()).expect("fixture input"),
+        operation: OperationId::generate(),
+    };
+
+    let held = fixture.store.lock().await;
+    let terminal = a_lane
+        .offer(
+            old,
+            SessionStoreWrite::Terminal {
+                operation: OperationId::generate(),
+                effect: ProviderOperationEffect::Unknown,
+                reconciliation: ProviderReconciliationState::Unresolved,
+                stop_reason: None,
+                recovery: UnknownRecovery::Blocks,
+            },
+        )
+        .expect("accept terminal while persistence is held");
+    let handover = a_lane
+        .handover(old, successor, Vec::new())
+        .expect("handover");
+    assert!(matches!(
+        a_lane.offer(successor, SessionStoreWrite::MarkDispatch(mark())),
+        Err(SessionStoreOfferError::EarlierOutcomeUnknown { .. })
+    ));
+    assert!(a_lane.accepted_marks(successor).is_empty());
+    assert!(
+        b_lane
+            .offer(b_owner, SessionStoreWrite::MarkDispatch(mark()))
+            .is_ok()
+    );
+
+    drop(held);
+    let stop = CancellationToken::new();
+    let run = tokio::spawn(a_runner.run(stop.clone()));
+    assert!(matches!(
+        terminal.settlement().await,
+        Err(SessionStoreWaitError::Store(
+            ProviderOperationStoreError::NotFound
+        ))
+    ));
+    handover
+        .barrier
+        .settlement()
+        .await
+        .expect("handover drained");
+    assert!(matches!(
+        a_lane.offer(successor, SessionStoreWrite::MarkDispatch(mark())),
+        Err(SessionStoreOfferError::EarlierOutcomeUnknown { .. })
+    ));
+    stop.cancel();
+    run.await.expect("lane stopped");
 }
 
 #[tokio::test(flavor = "current_thread")]

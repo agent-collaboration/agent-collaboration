@@ -96,6 +96,7 @@ fn close_and_load_fixture(close_marker: &Path, load_marker: &Path) -> ExternalPr
 struct CloseSessionAtDispatch {
     supervisor: Arc<ExternalProviderSupervisor>,
     target: SessionRef,
+    close_operation: OperationId,
     evidence: tokio::sync::Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>,
 }
 
@@ -111,9 +112,9 @@ impl AttemptEvidenceSink for CloseSessionAtDispatch {
         );
         let supervisor = Arc::clone(&self.supervisor);
         let target = self.target.clone();
+        let operation_id = self.close_operation.clone();
         Box::pin(async move {
             if should_close {
-                let operation_id = OperationId::generate();
                 supervisor
                     .close(ConversationCloseRequest {
                         operation_id: operation_id.clone(),
@@ -149,7 +150,7 @@ impl AttemptEvidenceSink for CloseSessionAtDispatch {
 }
 
 #[tokio::test]
-async fn loaded_only_rechecks_after_reclaim_when_conversation_close_unloads_session() {
+async fn loaded_only_close_after_placement_retires_dispatch_without_loading() {
     let root = tempfile::tempdir().expect("provider root");
     let close_marker = root.path().join("close-marker.txt");
     let load_marker = root.path().join("load-marker.txt");
@@ -161,13 +162,6 @@ async fn loaded_only_rechecks_after_reclaim_when_conversation_close_unloads_sess
     )
     .await
     .expect("fixture provider");
-    assert_eq!(
-        runtime
-            .create_session(root.path().to_owned())
-            .await
-            .expect("session/new"),
-        "fixture-session"
-    );
     let store = Arc::new(tokio::sync::Mutex::new(
         ProviderOperationStore::open(&root.path().join("operations.sqlite"))
             .await
@@ -202,6 +196,11 @@ async fn loaded_only_rechecks_after_reclaim_when_conversation_close_unloads_sess
         )
         .expect("supervisor"),
     );
+    let created = supervisor
+        .open_provider_fixture(&target.endpoint, root.path().to_owned())
+        .await
+        .expect("session/new");
+    assert_eq!(created, String::from(target.session_id.clone()));
     let route = ProviderAcpDeliveryRoute::new(
         target.endpoint.service_id.clone(),
         std::iter::once(target.endpoint.clone()).collect(),
@@ -215,9 +214,11 @@ async fn loaded_only_rechecks_after_reclaim_when_conversation_close_unloads_sess
         route.presence(&target).await.expect("loaded presence"),
         RoutePresence::Running
     );
+    let close_operation = OperationId::generate();
     let sink = CloseSessionAtDispatch {
         supervisor: Arc::clone(&supervisor),
         target: target.clone(),
+        close_operation: close_operation.clone(),
         evidence: tokio::sync::Mutex::new(Vec::new()),
     };
     let mut request = request(target, "held notification");
@@ -228,12 +229,31 @@ async fn loaded_only_rechecks_after_reclaim_when_conversation_close_unloads_sess
         .await
         .expect("loaded-only delivery receipt");
 
+    assert!(
+        matches!(
+            receipt.receipt().outcome.clone(),
+            DeliveryOutcome::NotSubmitted {
+                retryable: false,
+                ref reason,
+            } if reason == "not sent: session closed"
+        ),
+        "{receipt:?}"
+    );
+    let closed = supervisor
+        .wait(ConversationOperationWaitRequest {
+            operation_id: close_operation,
+            timeout_seconds: PositiveSeconds::try_from(5).expect("retained close wait budget"),
+        })
+        .await
+        .expect("the owned close settles independently of the borrowed evidence writer");
     assert!(matches!(
-        receipt.receipt().outcome.clone(),
-        DeliveryOutcome::NotSubmitted {
-            retryable: true,
-            ref reason,
-        } if reason == NOT_LOADED_REASON
+        closed.output,
+        ConversationOperationWaitOutput::Available {
+            settlement: ConversationOperationSettlement::Closed {
+                router_closed: false,
+                ..
+            }
+        }
     ));
     assert!(
         close_marker.exists(),
@@ -355,25 +375,16 @@ async fn loaded_only_preserves_live_elsewhere_reason_after_can_load_claim() {
     supervisor.shutdown().await.expect("supervisor shutdown");
 }
 
-struct RemoveSessionRecordAtDispatch {
+struct RemoveSessionRecordAtOwnershipCheck {
     database_path: PathBuf,
     target: SessionRef,
 }
 
-impl AttemptEvidenceSink for RemoveSessionRecordAtDispatch {
-    fn record(
-        &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
-    ) -> DeliveryFuture<'_, ()> {
-        let should_remove = matches!(
-            &evidence,
-            RouteEffectEvidence::ProviderAcp(provider)
-                if provider.submission == SubmissionEffect::Dispatching
-        );
+impl LiveSessionOwnershipCheck for RemoveSessionRecordAtOwnershipCheck {
+    fn check<'a>(&'a self, target: &'a SessionRef) -> DeliveryFuture<'a, LiveSessionOwnership> {
         let database_path = self.database_path.display().to_string();
-        let target = self.target.clone();
         Box::pin(async move {
-            if should_remove {
+            if &self.target == target {
                 let mut connection = sqlx::SqliteConnection::connect(&database_path)
                     .await
                     .map_err(|_| DeliveryContractError::ClientOperation)?;
@@ -387,7 +398,7 @@ impl AttemptEvidenceSink for RemoveSessionRecordAtDispatch {
                 .await
                 .map_err(|_| DeliveryContractError::ClientOperation)?;
             }
-            Ok(())
+            Ok(LiveSessionOwnership::NotLive)
         })
     }
 }
@@ -421,15 +432,15 @@ async fn loaded_only_reports_non_retryable_missing_record_after_can_load_claim()
         available_directory(&target, &binding),
         Arc::clone(&supervisor),
         Arc::clone(&store),
-        Arc::new(NoLivePeer),
+        Arc::new(RemoveSessionRecordAtOwnershipCheck {
+            database_path: root.path().join("operations.sqlite"),
+            target: target.clone(),
+        }),
         std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let mut request = request(target.clone(), "held batch");
     request.payload.load_policy = LoadPolicy::LoadedOnly;
-    let sink = RemoveSessionRecordAtDispatch {
-        database_path: root.path().join("operations.sqlite"),
-        target: target.clone(),
-    };
+    let sink = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()));
 
     let receipt = route
         .deliver(request, &sink)
@@ -470,13 +481,6 @@ async fn loaded_only_queue_refuses_not_loaded_session_before_enqueue() {
     )
     .await
     .expect("fixture provider");
-    assert_eq!(
-        runtime
-            .create_session(root.path().to_owned())
-            .await
-            .expect("session/new"),
-        "fixture-session"
-    );
     let store = store_with_session_record(root.path(), &target).await;
     let supervisor = Arc::new(
         ExternalProviderSupervisor::new(
@@ -488,6 +492,11 @@ async fn loaded_only_queue_refuses_not_loaded_session_before_enqueue() {
         )
         .expect("supervisor"),
     );
+    let created = supervisor
+        .open_provider_fixture(&target.endpoint, root.path().to_owned())
+        .await
+        .expect("session/new");
+    assert_eq!(created, String::from(target.session_id.clone()));
     let route = ProviderAcpDeliveryRoute::new(
         target.endpoint.service_id.clone(),
         std::iter::once(target.endpoint.clone()).collect(),

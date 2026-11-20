@@ -63,6 +63,7 @@ impl SessionDeliveryRoute for ProviderAcpDeliveryRoute {
                         });
                     };
                     let loadability = inspect_provider_session_loadability(
+                        &self.supervisor,
                         runtime.as_ref(),
                         &self.store,
                         self.ownership.as_ref(),

@@ -80,6 +80,7 @@ async fn provider_option_sets_keep_order_scope_and_selected_id() -> TestResult {
                 "session-a".to_owned(),
                 "Run command.".to_owned(),
                 ExternalProviderApprovalContext {
+                    owner_scope: None,
                     requester: (approver.clone()).into(),
                     approver: (approver.clone()).into(),
                     target: session_ref(&service_id, "cursor-local", "session-a")?,
@@ -165,6 +166,7 @@ async fn output_limit_cancels_pending_permission() -> TestResult {
         "session-a".to_owned(),
         "Produce output.".to_owned(),
         ExternalProviderApprovalContext {
+            owner_scope: None,
             requester: (requester.clone()).into(),
             approver: (requester).into(),
             target: session_ref(&service_id, "cursor-local", "session-a")?,
@@ -238,6 +240,7 @@ async fn provider_exit_cancels_pending_permission_as_provider_retired() -> TestR
         "session-a".to_owned(),
         "Run a command requiring permission.".to_owned(),
         ExternalProviderApprovalContext {
+            owner_scope: None,
             requester: (approver.clone()).into(),
             approver: approver.into(),
             target: session_ref(&service_id, "cursor-local", "session-a")?,

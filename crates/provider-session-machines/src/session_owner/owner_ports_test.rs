@@ -42,6 +42,10 @@ fn t7_router_only_close_sends_no_remote_close() {
     close_outcome(&effects, closing, CloseOutcome::RouterOnly);
     assert!(!effects.contains(&OwnerEffect::Wire(SessionWireRequest::Close(closing))));
     assert_eq!(
+        state.snapshot().projection.state,
+        session_event_model::SessionState::Closed
+    );
+    assert_eq!(
         state.snapshot().lifecycle,
         SessionLifecycle::NotLoaded {
             last: run.generation
@@ -71,13 +75,17 @@ fn t7_drain_expiry_reports_close_known_unsent_even_when_cancel_was_sent() {
         cancel.target,
         AuthorizationTarget::ExistingTurn { turn: prompt.turn }
     );
-    assert!(effects.contains(&OwnerEffect::Authorize {
-        authorization: cancel.clone(),
-        work: AuthorizedWork::Cancel(prompt.clone())
-    }));
+    assert!(effects.contains(&OwnerEffect::DrainCancel(cancel.clone())));
     apply(
         &mut state,
-        OwnerEvent::Dispatch(DispatchResult::Taken(cancel)),
+        OwnerEvent::Dispatch(DispatchResult::CancelDrainFinished(cancel.clone())),
+    );
+    apply(
+        &mut state,
+        OwnerEvent::Dispatch(DispatchResult::CancelTaken {
+            authorization: cancel,
+            drain: CancelDrainReport::Drained,
+        }),
     );
     assert!(!effects.contains(&OwnerEffect::Wire(SessionWireRequest::Close(closing))));
     let effects = deadline(&mut state, OwnerDeadline::Close(closing));
@@ -186,9 +194,13 @@ fn t2_revoke_and_take_report_distinct_dispositions() {
     );
     let finished = end_turn(&mut taken, key);
     assert!(
-        finished.contains(&OwnerEffect::Reply(SessionOwnerReply::InputFinished {
+        finished.contains(&OwnerEffect::Reply(SessionOwnerReply::PromptCompleted {
             input: prompt,
-            remote: RemoteEffect::Applied
+            completion: PromptCompletion {
+                stop_reason: session_event_model::StopReason::EndTurn,
+                local_cause: None,
+                response: String::new(),
+            },
         }))
     );
 }
@@ -243,7 +255,10 @@ fn t1_create_is_not_live_until_the_registry_adopts_the_provider_id() {
     command(&mut state, SessionOwnerCommand::Create { operation });
     assert_late(
         &state,
-        OwnerEvent::Create(CreateProgress::Adopted { operation }),
+        OwnerEvent::Create(CreateProgress::Adopted {
+            operation,
+            facts: Box::default(),
+        }),
     );
     let adoption = apply(
         &mut state,
@@ -273,7 +288,10 @@ fn t1_create_is_not_live_until_the_registry_adopts_the_provider_id() {
     );
     let admitted = apply(
         &mut state,
-        OwnerEvent::Create(CreateProgress::Adopted { operation }),
+        OwnerEvent::Create(CreateProgress::Adopted {
+            operation,
+            facts: Box::default(),
+        }),
     );
     let generation = SessionGeneration::from_number(1);
     assert!(admitted.contains(&OwnerEffect::CreateSettled {
@@ -286,7 +304,10 @@ fn t1_create_is_not_live_until_the_registry_adopts_the_provider_id() {
     );
     assert_late(
         &state,
-        OwnerEvent::Create(CreateProgress::Adopted { operation }),
+        OwnerEvent::Create(CreateProgress::Adopted {
+            operation,
+            facts: Box::default(),
+        }),
     );
 }
 
@@ -300,8 +321,15 @@ fn t4_dependent_input_receives_exact_restore_result_before_its_unsent_terminal_o
     let report = effects.iter().position(|effect| matches!(effect, OwnerEffect::RestoreSettled { operation, result }
         if *operation == prompt.operation && result.attempt == run && result.phase == RestorePhase::Attempted))
         .expect("attempt result for the dependent operation");
-    let unsent = effects.iter().position(|effect| matches!(effect, OwnerEffect::Store(SessionStoreRequest::RecordTerminal { reply, .. })
-        if **reply == SessionOwnerReply::InputFinished { input: prompt.clone(), remote: RemoteEffect::None }))
+    let unsent = effects
+        .iter()
+        .position(|effect| {
+            matches!(effect, OwnerEffect::Store(SessionStoreRequest::RecordTerminal { reply, .. })
+            if **reply == SessionOwnerReply::InputUnsent {
+                input: prompt.clone(),
+                reason: RevokeReason::RestoreDidNotActivate,
+            })
+        })
         .expect("input is known unsent");
     assert!(report < unsent);
 }
@@ -634,7 +662,7 @@ fn t4_restore_batches_replay_settings_and_idle_only_after_both_prerequisites() {
         .collect();
     assert!(matches!(batches.as_slice(), [[
         PublicationFact::ReplayBoundary(boundary),
-        PublicationFact::Replay { run: replay_run, item: replayed },
+        PublicationFact::Replay { run: replay_run, event: session_event_model::SessionEvent::ItemStarted { item: replayed } },
         PublicationFact::Capabilities { run: capability_run, .. },
         PublicationFact::Settings { run: settings_run, .. },
         PublicationFact::Live(SessionPublication::Activated { run: idle_run, .. }),

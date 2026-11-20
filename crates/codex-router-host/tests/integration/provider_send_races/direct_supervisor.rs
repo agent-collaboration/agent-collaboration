@@ -36,11 +36,6 @@ impl DirectSupervisor {
                 .expect("store"),
         ));
         let owner = human("race-owner");
-        // A loaded session needs no stored record to be prompted or queued.
-        for _session in 0..sessions {
-            let created = runtime.create_session(root.path().to_owned()).await;
-            created.expect("session/new");
-        }
         let binding = provider_binding(&target());
         let supervisor = Arc::new(
             ExternalProviderSupervisor::new(
@@ -52,6 +47,13 @@ impl DirectSupervisor {
             )
             .expect("supervisor"),
         );
+        // A loaded session needs no stored record to be prompted or queued.
+        for _session in 0..sessions {
+            supervisor
+                .open_provider_fixture(&binding.endpoint, root.path().to_owned())
+                .await
+                .expect("session/new");
+        }
         let route = ProviderAcpDeliveryRoute::new(
             target().endpoint.service_id,
             std::iter::once(target().endpoint).collect(),

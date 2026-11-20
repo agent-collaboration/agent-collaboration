@@ -322,6 +322,28 @@ mod observation_recheck;
 mod schema_bundle_retention;
 #[path = "collaboration_runtime/startup_composition.rs"]
 mod startup_composition;
+
+#[cfg(feature = "runtime-test-support")]
+impl CollaborationRuntime {
+    pub async fn runtime_test_start_with_provider_clock(
+        inputs: CollaborationRuntimeInputs,
+        providers: Vec<crate::ExternalProviderStartup>,
+        clock: std::sync::Arc<dyn router_clock::RuntimeClock>,
+    ) -> io::Result<Self> {
+        Box::pin(Self::start_with_optional_router_proxy_endpoint(
+            inputs,
+            providers,
+            std::sync::Arc::new(collaboration_mcp::FixedRouterExecutableRelation(
+                RouterExecutableRelation::Match,
+            )),
+            None,
+            None,
+            None,
+            Some(clock),
+        ))
+        .await
+    }
+}
 #[cfg(test)]
 #[path = "collaboration_runtime/startup_contract_tests.rs"]
 mod startup_contract_tests;

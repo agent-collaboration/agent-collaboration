@@ -47,6 +47,10 @@ impl LiveSessionOwnershipCheck for NoLivePeer {
 struct RecordedEvidence(tokio::sync::Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>);
 
 impl AttemptEvidenceSink for RecordedEvidence {
+    fn retain_queued_dispatch(&self) -> Option<std::sync::Arc<dyn AttemptEvidenceSink>> {
+        collaboration_contracts::UnstoredAttemptEvidenceSink.retain_queued_dispatch()
+    }
+
     fn record(
         &self,
         evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
@@ -134,10 +138,6 @@ async fn prepared_route(
     )
     .await
     .expect("fixture provider");
-    runtime
-        .create_session(PathBuf::from("/tmp"))
-        .await
-        .expect("session/new");
     let store = Arc::new(tokio::sync::Mutex::new(
         ProviderOperationStore::open(&root.join("operations.sqlite"))
             .await
@@ -169,6 +169,11 @@ async fn prepared_route(
         )
         .expect("supervisor"),
     );
+    let created = supervisor
+        .open_provider_fixture(&target.endpoint, PathBuf::from("/tmp"))
+        .await
+        .expect("session/new");
+    assert_eq!(created, String::from(target.session_id.clone()));
     let directory = EndpointDirectory::new(target.endpoint.service_id.clone());
     directory
         .publish(EndpointDescription {
@@ -204,24 +209,75 @@ async fn prepared_route(
 enum IdleSteeringScenario {
     SteerOnly,
     AutoStartsPrompt,
-    StartsNewTurn,
-    Fails,
-    DropDuringSteer,
 }
 
 fn idle_steering_fixture(scenario: IdleSteeringScenario) -> ExternalProviderLaunch {
     let mode = match scenario {
         IdleSteeringScenario::SteerOnly => "idle",
         IdleSteeringScenario::AutoStartsPrompt => "auto",
-        IdleSteeringScenario::StartsNewTurn => "started",
-        IdleSteeringScenario::Fails => "failed",
-        IdleSteeringScenario::DropDuringSteer => "drop",
     };
     provider_fixture_launch::launch("provider-steering-route-agent.ts", vec![mode.to_owned()])
 }
 
-fn no_steering_fixture() -> ExternalProviderLaunch {
-    provider_fixture_launch::launch("provider-steering-route-agent.ts", vec!["none".to_owned()])
+#[expect(
+    clippy::expect_used,
+    reason = "The wire fixture must reach a held foreground prompt."
+)]
+async fn active_steering_route(
+    root: &Path,
+    mode: &str,
+) -> (
+    ProviderAcpDeliveryRoute,
+    Arc<ExternalProviderSupervisor>,
+    SessionRef,
+) {
+    let socket = root.join("active-events.sock");
+    let wire = root.join("active-wire.jsonl");
+    let listener = tokio::net::UnixListener::bind(&socket).expect("fixture events");
+    let (route, supervisor, target, generation) = prepared_route(
+        root,
+        provider_fixture_launch::launch(
+            "provider-steering-route-agent.ts",
+            vec![
+                mode.to_owned(),
+                socket.display().to_string(),
+                wire.display().to_string(),
+            ],
+        ),
+    )
+    .await;
+    let operation = OperationId::generate();
+    supervisor
+        .prompt(ConversationPromptRequest {
+            delivery: MessageDelivery::Auto,
+            input_id: None,
+            operation_id: operation.clone(),
+            target: target.clone(),
+            generation: Some(generation),
+            requested_by: target.clone().into(),
+            approver: target.clone().into(),
+            prompt: MessageContent::Router {
+                text: MessageText::try_from("held foreground".to_owned()).expect("prompt"),
+            },
+        })
+        .await
+        .expect("foreground prompt submitted");
+    let stop = supervisor.wait(collaboration_protocol::ConversationOperationWaitRequest {
+        operation_id: operation,
+        timeout_seconds: collaboration_protocol::PositiveSeconds::try_from(30)
+            .expect("wait budget"),
+    });
+    let (mut active, _) = tokio::select! {
+        connected = listener.accept() => connected.expect("agent taking prompt"),
+        stopped = stop => panic!("foreground ended before the fixture activation notice: {stopped:?}. Wire: {}", std::fs::read_to_string(wire).unwrap_or_default()),
+    };
+    let mut notice = [0; 6];
+    active
+        .read_exact(&mut notice)
+        .await
+        .expect("active prompt witness");
+    assert_eq!(&notice, b"active");
+    (route, supervisor, target)
 }
 
 fn no_steering_prompt_fixture(event_socket: &Path) -> ExternalProviderLaunch {
@@ -297,7 +353,24 @@ async fn unadvertised_steering_is_rejected_on_any_provider_endpoint() {
     // ACP v1 initialization.mdx:100-115 treats omitted capabilities as
     // unsupported. R10 rejects steer by advertisement, not endpoint ID.
     let root = tempfile::tempdir().expect("fixture root");
-    let (route, supervisor, target, _) = prepared_route(root.path(), no_steering_fixture()).await;
+    let socket = root.path().join("negotiation-events.sock");
+    let listener = tokio::net::UnixListener::bind(&socket).expect("fixture events");
+    let (route, supervisor, target, _) =
+        prepared_route(root.path(), no_steering_prompt_fixture(&socket)).await;
+    route
+        .deliver(
+            request(target.clone(), MessageDelivery::Auto),
+            &RecordedEvidence(tokio::sync::Mutex::new(Vec::new())),
+        )
+        .await
+        .expect("foreground prompt");
+    let (mut first, _) = listener.accept().await.expect("foreground received");
+    let mut notice = [0; 5];
+    first
+        .read_exact(&mut notice)
+        .await
+        .expect("foreground held");
+    assert_eq!(&notice, b"first");
     let evidence = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()));
     let receipt = route
         .deliver(request(target, MessageDelivery::Steer), &evidence)
@@ -312,6 +385,7 @@ async fn unadvertised_steering_is_rejected_on_any_provider_endpoint() {
         "{receipt:?}"
     );
     assert!(evidence.0.lock().await.is_empty());
+    first.write_all(b"x").await.expect("release foreground");
     route.shutdown_queue().await;
     supervisor.shutdown().await.expect("shutdown");
 }
@@ -412,7 +486,7 @@ async fn running_claude_auto_and_steer_name_the_running_operation() {
 }
 
 #[tokio::test]
-async fn idle_claude_steer_is_known_not_submitted() {
+async fn idle_claude_steer_starts_a_normal_prompt() {
     let root = tempfile::tempdir().expect("fixture root");
     let (route, supervisor, target, _) = prepared_route(
         root.path(),
@@ -427,19 +501,23 @@ async fn idle_claude_steer_is_known_not_submitted() {
         .await
         .expect("idle steer");
 
-    assert!(
-        matches!(receipt.receipt().outcome.clone(), DeliveryOutcome::NotSubmitted { retryable: false, reason }
-        if reason == "no running turn")
-    );
+    assert!(matches!(
+        receipt.receipt().outcome,
+        DeliveryOutcome::Started
+    ));
+    assert!(matches!(
+        receipt.receipt().client,
+        Some(DeliveryClientReceipt::ProviderAcp { .. })
+    ));
     assert!(matches!(evidence.0.lock().await.as_slice(),
         [RouteEffectEvidence::ProviderAcp(before), RouteEffectEvidence::ProviderAcp(after)]
-        if before.submission == SubmissionEffect::Dispatching && after.submission == SubmissionEffect::NotDispatched));
+        if before.submission == SubmissionEffect::Dispatching && after.submission == SubmissionEffect::Accepted));
     route.shutdown_queue().await;
     supervisor.shutdown().await.expect("shutdown");
 }
 
 #[tokio::test]
-async fn idle_claude_auto_starts_after_prompt_required() {
+async fn idle_claude_auto_starts_one_normal_prompt() {
     let root = tempfile::tempdir().expect("fixture root");
     let (route, supervisor, target, _) = prepared_route(
         root.path(),
@@ -473,11 +551,7 @@ async fn started_new_turn_steer_outcome_is_reported_as_started() {
     // R10: an agent's startedNewTurn is a new Turn even when Router asked
     // for promptRequired idle behavior.
     let root = tempfile::tempdir().expect("fixture root");
-    let (route, supervisor, target, _) = prepared_route(
-        root.path(),
-        idle_steering_fixture(IdleSteeringScenario::StartsNewTurn),
-    )
-    .await;
+    let (route, supervisor, target) = active_steering_route(root.path(), "started").await;
     let evidence = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()));
     let receipt = route
         .deliver(request(target, MessageDelivery::Auto), &evidence)
@@ -499,11 +573,7 @@ async fn started_new_turn_steer_outcome_is_reported_as_started() {
 async fn failed_steer_outcome_is_not_submitted_without_agent_text() {
     // R10: failed is not evidence that an Input was steered or prompted.
     let root = tempfile::tempdir().expect("fixture root");
-    let (route, supervisor, target, _) = prepared_route(
-        root.path(),
-        idle_steering_fixture(IdleSteeringScenario::Fails),
-    )
-    .await;
+    let (route, supervisor, target) = active_steering_route(root.path(), "failed").await;
     let evidence = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()));
     let receipt = route
         .deliver(request(target, MessageDelivery::Auto), &evidence)
@@ -524,11 +594,7 @@ async fn failed_steer_outcome_is_not_submitted_without_agent_text() {
 #[tokio::test]
 async fn dropped_steering_reply_remains_unknown() {
     let root = tempfile::tempdir().expect("fixture root");
-    let (route, supervisor, target, _) = prepared_route(
-        root.path(),
-        idle_steering_fixture(IdleSteeringScenario::DropDuringSteer),
-    )
-    .await;
+    let (route, supervisor, target) = active_steering_route(root.path(), "drop").await;
     let evidence = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()));
 
     let sent = request(target, MessageDelivery::Steer);

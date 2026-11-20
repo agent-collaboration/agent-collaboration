@@ -7,6 +7,35 @@ use super::{
     INITIALIZE_TIMEOUT, InteractionPort, McpServer, McpServerHttp, SessionEventSink,
 };
 
+pub(super) fn provider_protocol_admission(
+    response: agent_client_protocol::schema::v1::InitializeResponse,
+) -> Result<
+    (
+        super::ExternalProviderAdmission,
+        crate::ProviderCapabilityReport,
+    ),
+    ExternalProviderRuntimeError,
+> {
+    use agent_client_protocol::schema::ProtocolVersion;
+    if response.protocol_version != ProtocolVersion::V1 {
+        return Err(ExternalProviderRuntimeError::UnsupportedProtocol {
+            actual: crate::AcpProtocolVersion::from_sdk(response.protocol_version),
+        });
+    }
+    let report = crate::ProviderCapabilityReport::from_initialize(&response);
+    let admission = super::ExternalProviderAdmission {
+        runtime_name: response.agent_info.as_ref().map(|info| info.name.clone()),
+        runtime_version: response
+            .agent_info
+            .as_ref()
+            .map(|info| info.version.clone()),
+        supports_load: response.agent_capabilities.load_session,
+        supports_mcp_http: response.agent_capabilities.mcp_capabilities.http,
+        supports_steering: report.supports_steering,
+    };
+    Ok((admission, report))
+}
+
 impl<P: InteractionPort> AgentSessionClient<P> {
     /// Native model-setting proof uses the production transport and picker
     /// negotiation without injecting an unrelated collaboration MCP server.

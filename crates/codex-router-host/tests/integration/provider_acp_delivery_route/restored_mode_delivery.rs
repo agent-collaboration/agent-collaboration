@@ -37,20 +37,10 @@ async fn an_already_loaded_session_accepts_delivery_despite_a_mode_difference() 
     )
     .await
     .expect("fixture provider");
-    let provider_id = runtime
-        .create_session(root.path().to_owned())
-        .await
-        .expect("fixture session");
-    runtime
-        .close_session(provider_id.clone())
-        .await
-        .expect("closed before restore");
     let mut target = target();
     target.endpoint.endpoint_id =
         collaboration_protocol::EndpointId::try_from("claude-local".to_owned())
             .expect("Claude endpoint");
-    target.session_id =
-        collaboration_protocol::SessionId::try_from(provider_id).expect("fixture ID");
     let mut binding = provider_binding(&target);
     binding.runtime.provider = collaboration_protocol::ProviderKind::ClaudeCode;
     let store = Arc::new(tokio::sync::Mutex::new(
@@ -58,6 +48,22 @@ async fn an_already_loaded_session_accepts_delivery_despite_a_mode_difference() 
             .await
             .expect("store"),
     ));
+    let supervisor = Arc::new(
+        ExternalProviderSupervisor::new(
+            vec![ExternalProviderBinding {
+                identity: binding.clone(),
+                runtime,
+            }],
+            Arc::clone(&store),
+        )
+        .expect("supervisor"),
+    );
+    let provider_id = supervisor
+        .open_provider_fixture(&target.endpoint, root.path().to_owned())
+        .await
+        .expect("fixture session");
+    target.session_id =
+        collaboration_protocol::SessionId::try_from(provider_id).expect("fixture ID");
     let working_directory =
         ProviderWorkingDirectory::try_from(root.path().display().to_string()).expect("cwd");
     let policy = ProviderRequestedPolicy {
@@ -80,16 +86,25 @@ async fn an_already_loaded_session_accepts_delivery_despite_a_mode_difference() 
         })
         .await
         .expect("recorded mode");
-    let supervisor = Arc::new(
-        ExternalProviderSupervisor::new(
-            vec![ExternalProviderBinding {
-                identity: binding.clone(),
-                runtime,
-            }],
-            Arc::clone(&store),
-        )
-        .expect("supervisor"),
-    );
+    let close = OperationId::generate();
+    supervisor
+        .close(collaboration_protocol::ConversationCloseRequest {
+            operation_id: close.clone(),
+            target: target.clone(),
+            generation: Some(binding.generation.clone()),
+            requested_by: target.clone().into(),
+            approver: target.clone().into(),
+        })
+        .await
+        .expect("close admitted");
+    supervisor
+        .wait(collaboration_protocol::ConversationOperationWaitRequest {
+            operation_id: close,
+            timeout_seconds: collaboration_protocol::PositiveSeconds::try_from(2)
+                .expect("wait budget"),
+        })
+        .await
+        .expect("closed before restore");
     let operation_id = OperationId::generate();
     supervisor
         .load(collaboration_protocol::ConversationLoadRequest {

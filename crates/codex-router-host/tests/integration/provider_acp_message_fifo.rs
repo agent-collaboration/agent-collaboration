@@ -1,5 +1,6 @@
 //! Queue draining and inspectable provider queue operation behavior.
 
+use agent_automation::{RouteEffectEvidence, SubmissionEffect};
 use codex_router_host::{
     ExternalProviderBinding, ExternalProviderRuntime, ExternalProviderSupervisor,
     ProviderAcpDeliveryRoute,
@@ -34,10 +35,6 @@ async fn typed_queue_keeps_blocks_and_input_identity_through_fifo() {
     )
     .await
     .expect("fixture provider");
-    runtime
-        .create_session(PathBuf::from("/tmp"))
-        .await
-        .expect("session/new");
     let store = Arc::new(tokio::sync::Mutex::new(
         ProviderOperationStore::open(&root.path().join("operations.sqlite"))
             .await
@@ -69,6 +66,11 @@ async fn typed_queue_keeps_blocks_and_input_identity_through_fifo() {
         )
         .expect("supervisor"),
     );
+    let created = supervisor
+        .open_provider_fixture(&target.endpoint, PathBuf::from("/tmp"))
+        .await
+        .expect("session/new");
+    assert_eq!(created, String::from(target.session_id.clone()));
     let route = ProviderAcpDeliveryRoute::new(
         target.endpoint.service_id.clone(),
         std::iter::once(target.endpoint.clone()).collect(),
@@ -189,10 +191,6 @@ async fn cursor_queue_drains_after_control_prompt_settles() {
     )
     .await
     .expect("fixture provider");
-    runtime
-        .create_session(PathBuf::from("/tmp"))
-        .await
-        .expect("session/new");
     let store = Arc::new(tokio::sync::Mutex::new(
         ProviderOperationStore::open(&root.path().join("operations.sqlite"))
             .await
@@ -224,6 +222,11 @@ async fn cursor_queue_drains_after_control_prompt_settles() {
         )
         .expect("supervisor"),
     );
+    let created = supervisor
+        .open_provider_fixture(&target.endpoint, PathBuf::from("/tmp"))
+        .await
+        .expect("session/new");
+    assert_eq!(created, String::from(target.session_id.clone()));
     let route = ProviderAcpDeliveryRoute::new(
         target.endpoint.service_id.clone(),
         std::iter::once(target.endpoint.clone()).collect(),
@@ -376,7 +379,7 @@ async fn cursor_queue_drains_after_control_prompt_settles() {
     .expect("submitted operation uses provider operation record");
     assert_eq!(submitted_snapshot.queue_state, None);
     assert_eq!(
-        route.queue_cancel(&target, &queued_input_id),
+        route.queue_cancel(&target, &queued_input_id).await,
         Err(codex_router_host::ProviderQueueCancellationError::NotQueued)
     );
     assert_eq!(
@@ -425,17 +428,28 @@ async fn permanent_queued_load_failure_is_inspectable_and_does_not_stop_fifo() {
     let load_marker = root.path().join("load-marker.txt");
     let target = target();
     let binding = provider_binding(&target);
-    let runtime = ExternalProviderRuntime::initialize(
-        refusing_load_fixture(&load_marker),
-        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
-    )
-    .await
-    .expect("fixture provider");
+    let clock = Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
     let store = Arc::new(tokio::sync::Mutex::new(
         ProviderOperationStore::open(&root.path().join("operations.sqlite"))
             .await
             .expect("store"),
     ));
+    let endpoint =
+        serde_json::from_value(serde_json::to_value(&target.endpoint).expect("endpoint JSON"))
+            .expect("board endpoint");
+    let mut launch = refusing_load_fixture(&load_marker);
+    launch.arguments.push("hold-first-refusal".to_owned());
+    let runtime = ExternalProviderRuntime::initialize_with_fixture_clock(
+        launch,
+        Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        Arc::new(collaboration_runtime::ProviderSessionEventHub::new(
+            store.clone(),
+        )),
+        endpoint,
+        clock.clone(),
+    )
+    .await
+    .expect("fixture provider");
     store
         .lock()
         .await
@@ -445,8 +459,8 @@ async fn permanent_queued_load_failure_is_inspectable_and_does_not_stop_fifo() {
             requested_policy: ProviderRequestedPolicy {
                 access: RouterAccess::WriteRestricted,
             },
-            created_by: (target.clone()).into(),
-            approver: (target.clone()).into(),
+            created_by: target.clone().into(),
+            approver: target.clone().into(),
             updated_at_ms: 1,
             resume: Default::default(),
         })
@@ -469,7 +483,7 @@ async fn permanent_queued_load_failure_is_inspectable_and_does_not_stop_fifo() {
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
-        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
+        clock,
     );
     let evidence = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()));
     let mut first_request = request(target.clone(), "first load failure");
@@ -482,73 +496,82 @@ async fn permanent_queued_load_failure_is_inspectable_and_does_not_stop_fifo() {
     let second_id =
         collaboration_protocol::OperationId::try_from(second_request.attempt.as_str().to_owned())
             .expect("second queue operation ID");
-    assert!(matches!(
-        route
-            .deliver(first_request, &evidence)
-            .await
-            .expect("first queue")
-            .receipt()
-            .outcome
-            .clone(),
-        DeliveryOutcome::Queued
-    ));
-    assert!(matches!(
-        route
-            .deliver(second_request, &evidence)
-            .await
-            .expect("second queue")
-            .receipt()
-            .outcome
-            .clone(),
-        DeliveryOutcome::Queued
-    ));
+    let first = route
+        .deliver(first_request, &evidence)
+        .await
+        .expect("first queue");
+    assert_eq!(first.receipt().outcome, DeliveryOutcome::Queued);
+    while !load_marker.exists() {
+        tokio::task::yield_now().await;
+    }
 
-    tokio::time::timeout(Duration::from_secs(3), async {
-        loop {
-            let first = collaboration_contracts::ProviderConversationBackend::show(
-                supervisor.as_ref(),
-                collaboration_protocol::ConversationOperationShowRequest {
-                    operation_id: first_id.clone(),
-                },
-            )
-            .await
-            .expect("first queued state");
-            let second = collaboration_contracts::ProviderConversationBackend::show(
-                supervisor.as_ref(),
-                collaboration_protocol::ConversationOperationShowRequest {
-                    operation_id: second_id.clone(),
-                },
-            )
-            .await
-            .expect("second queued state");
-            if matches!(
-                (&first.queue_state, &second.queue_state),
-                (
-                    Some(
-                        collaboration_protocol::ConversationOperationQueueState::NotSubmitted { .. }
-                    ),
-                    Some(
-                        collaboration_protocol::ConversationOperationQueueState::NotSubmitted { .. }
-                    )
-                )
-            ) {
-                break;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("both permanent item failures are recorded");
-    // One door load serves every message that joins the line while it
-    // runs; a message that arrives after it failed starts its own.
-    let loads = std::fs::read_to_string(load_marker)
-        .expect("load marker")
-        .lines()
-        .count();
-    assert!((1..=2).contains(&loads), "loads: {loads}");
+    // The second request samples A while its refusal is held. Let A settle
+    // before the prepared second request is admitted to an owner.
+    let (sampled, submit_second) = route.pause_next_queue_plan_for_fixture();
+    let second = route.deliver(second_request, &evidence);
+    tokio::pin!(second);
+    let planned = tokio::select! {
+        sampled = sampled => sampled.expect("the second request sampled A"),
+        result = &mut second => panic!("the second request completed before the plan gate: {result:?}"),
+    };
+    assert_eq!(planned.generation.number(), 1);
+    assert_eq!(
+        evidence.0.lock().await.len(),
+        1,
+        "the proposed second plan recorded no intake"
+    );
+    node_test_fixture::release_fixture(&load_marker, ".release-first")
+        .expect("release A's refusal");
+    wait_for_permanent_queue_failure(&supervisor, first_id).await;
+    submit_second
+        .send(())
+        .expect("offer the stale plan to the owner");
+
+    let second = second.await.expect("second queue replans");
+    assert_eq!(
+        second.receipt().outcome,
+        DeliveryOutcome::Queued,
+        "the stale plan gets one pre-admission re-plan"
+    );
+    wait_for_permanent_queue_failure(&supervisor, second_id).await;
+    assert!(matches!(evidence.0.lock().await.as_slice(),
+        [RouteEffectEvidence::ProviderAcp(first), RouteEffectEvidence::ProviderAcp(second)]
+            if first.submission == SubmissionEffect::RouterQueued && second.submission == SubmissionEffect::RouterQueued));
+    let loads = std::fs::read_to_string(load_marker).expect("load marker");
+    assert_eq!(
+        loads.lines().collect::<Vec<_>>(),
+        ["session/load", "session/load"]
+    );
 
     route.shutdown_queue().await;
     supervisor.shutdown().await.expect("supervisor shutdown");
+}
+
+#[expect(
+    clippy::expect_used,
+    reason = "An accepted queue item must remain inspectable in the fixture."
+)]
+async fn wait_for_permanent_queue_failure(
+    supervisor: &ExternalProviderSupervisor,
+    operation_id: collaboration_protocol::OperationId,
+) {
+    loop {
+        let snapshot = collaboration_contracts::ProviderConversationBackend::show(
+            supervisor,
+            collaboration_protocol::ConversationOperationShowRequest {
+                operation_id: operation_id.clone(),
+            },
+        )
+        .await
+        .expect("queued operation remains inspectable");
+        if matches!(
+            snapshot.queue_state,
+            Some(collaboration_protocol::ConversationOperationQueueState::NotSubmitted { .. })
+        ) {
+            return;
+        }
+        tokio::task::yield_now().await;
+    }
 }
 
 #[tokio::test]
@@ -564,10 +587,6 @@ async fn failed_queued_prompt_advances_to_the_next_accepted_item() {
     )
     .await
     .expect("fixture provider");
-    runtime
-        .create_session(PathBuf::from("/tmp"))
-        .await
-        .expect("session/new");
     let store = Arc::new(tokio::sync::Mutex::new(
         ProviderOperationStore::open(&root.path().join("operations.sqlite"))
             .await
@@ -599,6 +618,11 @@ async fn failed_queued_prompt_advances_to_the_next_accepted_item() {
         )
         .expect("supervisor"),
     );
+    let created = supervisor
+        .open_provider_fixture(&target.endpoint, PathBuf::from("/tmp"))
+        .await
+        .expect("session/new");
+    assert_eq!(created, String::from(target.session_id.clone()));
     let active_prompt = collaboration_contracts::ProviderConversationBackend::prompt(
         supervisor.as_ref(),
         collaboration_protocol::ConversationPromptRequest {
@@ -768,10 +792,6 @@ async fn provider_retirement_marks_queued_items_not_submitted() {
     )
     .await
     .expect("fixture provider");
-    runtime
-        .create_session(PathBuf::from("/tmp"))
-        .await
-        .expect("session/new");
     let store = Arc::new(tokio::sync::Mutex::new(
         ProviderOperationStore::open(&root.path().join("operations.sqlite"))
             .await
@@ -803,6 +823,11 @@ async fn provider_retirement_marks_queued_items_not_submitted() {
         )
         .expect("supervisor"),
     );
+    let created = supervisor
+        .open_provider_fixture(&target.endpoint, PathBuf::from("/tmp"))
+        .await
+        .expect("session/new");
+    assert_eq!(created, String::from(target.session_id.clone()));
     let route = ProviderAcpDeliveryRoute::new(
         target.endpoint.service_id.clone(),
         std::iter::once(target.endpoint.clone()).collect(),

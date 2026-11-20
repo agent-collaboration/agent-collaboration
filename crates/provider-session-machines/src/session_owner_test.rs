@@ -198,7 +198,8 @@ fn authorization(effects: &[OwnerEffect]) -> DispatchAuthorization {
     effects
         .iter()
         .find_map(|effect| match effect {
-            OwnerEffect::Authorize { authorization, .. } => Some(authorization.clone()),
+            OwnerEffect::Authorize { authorization, .. }
+            | OwnerEffect::DrainCancel(authorization) => Some(authorization.clone()),
             _ => None,
         })
         .expect("authorization")
@@ -227,9 +228,188 @@ fn end_turn(
         state,
         OwnerEvent::Dispatch(DispatchResult::PromptFinished {
             authorization,
-            outcome: WireOutcome::Confirmed(()),
+            outcome: WireOutcome::Confirmed(PromptCompletion {
+                stop_reason: session_event_model::StopReason::EndTurn,
+                local_cause: None,
+                response: String::new(),
+            }),
         }),
     )
+}
+
+#[test]
+fn unknown_prompt_offers_terminal_then_retires_the_line_known_unsent() {
+    let mut state = fresh();
+    let run = restore_live(&mut state, 10);
+    let foreground = input(run.generation, 11);
+    let authorization = send_prompt(&mut state, &foreground);
+    let queued = [input(run.generation, 12), input(run.generation, 13)];
+    for pending in &queued {
+        command(
+            &mut state,
+            SessionOwnerCommand::Prompt {
+                input: pending.clone(),
+                admission: PromptAdmission::Queue,
+            },
+        );
+    }
+
+    let effects = apply_pending(
+        &mut state,
+        OwnerEvent::Dispatch(DispatchResult::PromptFinished {
+            authorization,
+            outcome: WireOutcome::Unknown,
+        }),
+    );
+
+    let replies: Vec<_> = effects
+        .iter()
+        .filter_map(|effect| match effect {
+            OwnerEffect::Store(SessionStoreRequest::RecordTerminal { reply, .. }) => {
+                Some(reply.as_ref().clone())
+            }
+            _ => None,
+        })
+        .collect();
+    let blocking_operation = foreground.operation;
+    let mut expected = vec![SessionOwnerReply::InputFinished {
+        input: foreground,
+        remote: RemoteEffect::Unknown,
+    }];
+    expected.extend(queued.map(|input| SessionOwnerReply::InputUnsent {
+        input,
+        reason: RevokeReason::EarlierOutcomeUnknown {
+            operation: blocking_operation,
+        },
+    }));
+    assert_eq!(
+        replies, expected,
+        "terminal offers must preserve the uncertainty order"
+    );
+    assert!(state.snapshot().queue.is_empty());
+    assert!(!effects.iter().any(|effect| matches!(
+        effect,
+        OwnerEffect::Store(SessionStoreRequest::MarkDispatch(_)) | OwnerEffect::Authorize { .. }
+    )));
+}
+
+#[test]
+fn selected_skill_disappearing_while_queued_or_marking_is_never_sent() {
+    use session_event_model::{
+        ProviderSkill, ProviderSkillScope, SelectedSkill, SkillInvocationName, SkillView,
+    };
+
+    for marking in [false, true] {
+        let mut state = fresh();
+        let run = restore_live(&mut state, 1);
+        let skill = SkillInvocationName::new("review").expect("skill identity");
+        apply(
+            &mut state,
+            OwnerEvent::SkillView {
+                run: run.generation,
+                view: SkillView::Available {
+                    skills: vec![ProviderSkill {
+                        invocation_name: skill.clone(),
+                        description: "Review".to_owned(),
+                        scope: ProviderSkillScope::Repo,
+                    }],
+                    errors: Vec::new(),
+                },
+            },
+        );
+        let foreground = (!marking).then(|| send_prompt(&mut state, &input(run.generation, 2)));
+        let queued = input(run.generation, 3);
+        let admitted = command(
+            &mut state,
+            SessionOwnerCommand::PromptWithSkills {
+                input: queued.clone(),
+                admission: if marking {
+                    PromptAdmission::Direct
+                } else {
+                    PromptAdmission::Queue
+                },
+                selected: vec![SelectedSkill {
+                    invocation_name: skill,
+                }],
+            },
+        );
+        assert_eq!(
+            admitted.contains(&OwnerEffect::Store(SessionStoreRequest::MarkDispatch(
+                queued.clone()
+            ))),
+            marking
+        );
+        apply(
+            &mut state,
+            OwnerEvent::SkillView {
+                run: run.generation,
+                view: SkillView::Available {
+                    skills: Vec::new(),
+                    errors: Vec::new(),
+                },
+            },
+        );
+        let mut after_removal = if let Some(foreground) = foreground {
+            end_turn(&mut state, foreground)
+        } else {
+            apply(&mut state, mark_prompt(&queued))
+        };
+        assert!(!after_removal.iter().any(|effect| matches!(
+            effect,
+            OwnerEffect::Authorize { .. }
+                | OwnerEffect::Store(SessionStoreRequest::MarkDispatch(_))
+        )));
+        if marking {
+            assert!(after_removal.contains(&OwnerEffect::Store(
+                SessionStoreRequest::UndoDispatch(queued.clone())
+            )));
+            after_removal.extend(apply(
+                &mut state,
+                OwnerEvent::Store(SessionStoreResult::UndoDispatch {
+                    input: queued.clone(),
+                    outcome: EffectOutcome::Applied,
+                }),
+            ));
+        }
+        assert!(
+            after_removal.contains(&OwnerEffect::Reply(SessionOwnerReply::InputUnsent {
+                input: queued,
+                reason: RevokeReason::SkillSelectionChanged,
+            }))
+        );
+    }
+}
+
+#[test]
+fn connection_loss_leaves_settled_turn_evidence_and_finishes_only_the_running_turn() {
+    let mut settled = fresh();
+    let settled_run = restore_live(&mut settled, 10);
+    let first = input(settled_run.generation, 11);
+    let authorization = send_prompt(&mut settled, &first);
+    end_turn(&mut settled, authorization);
+    let ended = settled.snapshot().last_live_turn.expect("known terminal");
+
+    let mut running = fresh();
+    let running_run = restore_live(&mut running, 20);
+    let second = input(running_run.generation, 21);
+    send_prompt(&mut running, &second);
+
+    let settled_effects = apply(&mut settled, OwnerEvent::ConnectionLost);
+    let running_effects = apply(&mut running, OwnerEvent::ConnectionLost);
+
+    assert_eq!(settled.snapshot().last_live_turn, Some(ended));
+    assert!(!settled_effects.iter().any(|effect| matches!(
+        effect,
+        OwnerEffect::Reply(SessionOwnerReply::InputFinished { .. })
+    )));
+    assert!(
+        running_effects.contains(&OwnerEffect::Reply(SessionOwnerReply::InputFinished {
+            input: second,
+            remote: RemoteEffect::Unknown,
+        }))
+    );
+    assert_late(&running, OwnerEvent::ConnectionLost);
+    assert_late(&settled, OwnerEvent::ConnectionLost);
 }
 
 fn publication_for(generation: SessionGeneration, effects: &[OwnerEffect]) -> Option<BatchId> {
@@ -266,6 +446,7 @@ fn setting_command(setting: OwnerSetting, number: u64) -> SessionOwnerCommand {
         input: input(setting.change.generation, number).input,
         setting,
         value: SettingValueId("off".to_owned()),
+        expected_model: None,
     }
 }
 

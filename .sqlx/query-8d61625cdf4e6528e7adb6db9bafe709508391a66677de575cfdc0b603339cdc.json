@@ -1,0 +1,98 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT operation_id,operation_kind,stage,binding_json,target_service_id,target_endpoint_id,target_session_id\n             FROM provider_operations WHERE effect=?\n                AND NOT (operation_kind=? AND stage=? AND reconciliation_state=?)\n             ORDER BY operation_id",
+  "describe": {
+    "columns": [
+      {
+        "name": "operation_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "provider_operations",
+            "name": "operation_id"
+          }
+        }
+      },
+      {
+        "name": "operation_kind",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "provider_operations",
+            "name": "operation_kind"
+          }
+        }
+      },
+      {
+        "name": "stage",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "provider_operations",
+            "name": "stage"
+          }
+        }
+      },
+      {
+        "name": "binding_json",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "provider_operations",
+            "name": "binding_json"
+          }
+        }
+      },
+      {
+        "name": "target_service_id",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "provider_operations",
+            "name": "target_service_id"
+          }
+        }
+      },
+      {
+        "name": "target_endpoint_id",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "provider_operations",
+            "name": "target_endpoint_id"
+          }
+        }
+      },
+      {
+        "name": "target_session_id",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "provider_operations",
+            "name": "target_session_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "8d61625cdf4e6528e7adb6db9bafe709508391a66677de575cfdc0b603339cdc"
+}

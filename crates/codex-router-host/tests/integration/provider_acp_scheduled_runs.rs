@@ -228,10 +228,6 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
     )
     .await
     .expect("runtime");
-    runtime
-        .create_session(PathBuf::from("/tmp"))
-        .await
-        .expect("session/new");
     let store = Arc::new(tokio::sync::Mutex::new(
         ProviderOperationStore::open(&root.path().join("operations.sqlite"))
             .await
@@ -263,6 +259,11 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
         )
         .expect("supervisor"),
     );
+    let created = supervisor
+        .open_provider_fixture(&target.endpoint, PathBuf::from("/tmp"))
+        .await
+        .expect("session/new");
+    assert_eq!(created, String::from(target.session_id.clone()));
     let directory = EndpointDirectory::new(service_id.clone());
     directory
         .publish(EndpointDescription {

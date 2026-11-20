@@ -3,7 +3,7 @@ use crate::{
     ExternalProviderRuntime, ExternalProviderRuntimeError, ExternalProviderSupervisor,
     LiveSessionOwnership, LiveSessionOwnershipCheck, ProviderSessionActivity,
 };
-use acp_client_runtime::{RestoreFailure, RestorePhase};
+use acp_client_runtime::{RestoreFailure, RestorePhase, acp_transport::TransportRun};
 use collaboration_contracts::LoadPolicy;
 use collaboration_protocol::{DeliveryCorrelationId, SessionRef};
 use collaboration_runtime::ProviderOperationStore;
@@ -106,36 +106,59 @@ pub(crate) async fn ensure_provider_session_loaded(
     let Some(runtime) = supervisor.runtime_for(&target.endpoint) else {
         return unavailable("provider runtime is unavailable");
     };
-    let provider_session_id = String::from(target.session_id.clone());
-    // One mode operation at a time per session: the record read and the mode
-    // the restore puts back wait for any explicit change still recording,
-    // and a change waits for the restore (review F3).
-    let _mode_turn = runtime
-        .session_setup()
-        .mode_order()
-        .enter(&provider_session_id)
-        .await;
-    let (working_directory, setup) = match inspect_provider_session_loadability(
-        runtime.as_ref(),
-        store,
-        ownership,
-        target,
-    )
-    .await
-    {
+    use provider_session_machines::{
+        session_lifecycle_machine::SessionLifecycle,
+        session_owner::{RunAttempt, SessionOwnerReply},
+    };
+    if let Some(snapshot) = supervisor.owner_session_snapshot(target) {
+        match snapshot.lifecycle {
+            SessionLifecycle::Live { .. } => {
+                return if load_policy == LoadPolicy::LoadedOnly {
+                    ProviderSessionLoadOutcome::AlreadyLoaded
+                } else {
+                    ProviderSessionLoadOutcome::Ready
+                };
+            }
+            SessionLifecycle::Loading {
+                generation,
+                attempt,
+                ..
+            } => {
+                if load_policy == LoadPolicy::LoadedOnly {
+                    return ProviderSessionLoadOutcome::NotLoaded;
+                }
+                let Ok(owner) = supervisor.session_owner_for(target) else {
+                    return unavailable("provider session owner is unavailable");
+                };
+                return match owner
+                    .join_restore(
+                        uuid::Uuid::now_v7(),
+                        RunAttempt {
+                            generation,
+                            attempt,
+                        },
+                    )
+                    .await
+                {
+                    Ok(result) => owner_restore_outcome(result),
+                    Err(error) => unavailable(error.to_string()),
+                };
+            }
+            SessionLifecycle::NotLoaded { .. } | SessionLifecycle::Closing { .. } => {}
+        }
+    }
+    match checked_loadability(supervisor, &runtime, store, ownership, target).await {
         ProviderSessionLoadability::AlreadyLoaded => {
-            return match load_policy {
-                LoadPolicy::MayLoad => ProviderSessionLoadOutcome::Ready,
-                LoadPolicy::LoadedOnly => ProviderSessionLoadOutcome::AlreadyLoaded,
+            return if load_policy == LoadPolicy::LoadedOnly {
+                ProviderSessionLoadOutcome::AlreadyLoaded
+            } else {
+                ProviderSessionLoadOutcome::Ready
             };
         }
         ProviderSessionLoadability::Loadable { .. } if load_policy == LoadPolicy::LoadedOnly => {
             return ProviderSessionLoadOutcome::NotLoaded;
         }
-        ProviderSessionLoadability::Loadable {
-            working_directory,
-            setup,
-        } => (working_directory, setup),
+        ProviderSessionLoadability::Loadable { .. } => {}
         ProviderSessionLoadability::UnsupportedLoad => {
             return ProviderSessionLoadOutcome::UnsupportedLoad;
         }
@@ -145,19 +168,153 @@ pub(crate) async fn ensure_provider_session_loaded(
         ProviderSessionLoadability::LiveElsewhere => {
             return ProviderSessionLoadOutcome::LiveElsewhere;
         }
-        ProviderSessionLoadability::Unavailable { reason } => {
-            return unavailable(reason);
-        }
+        ProviderSessionLoadability::Unavailable { reason } => return unavailable(reason),
+    }
+    let Ok(owner) = supervisor.session_owner_for(target) else {
+        return unavailable("provider session owner is unavailable");
     };
-    match runtime
-        .load_session_with_setup(provider_session_id, working_directory, setup)
-        .await
-    {
-        Ok(()) => ProviderSessionLoadOutcome::Ready,
-        Err(error) => load_error_outcome(&error),
+    match owner.restore_for_delivery(uuid::Uuid::now_v7()).await {
+        Ok(settled) => match settled.reply {
+            SessionOwnerReply::RestoreFinished(result) => owner_restore_outcome(result),
+            _ => unavailable("provider session owner returned another result"),
+        },
+        Err(error) => unavailable(error.to_string()),
     }
 }
 
+async fn checked_loadability(
+    supervisor: &ExternalProviderSupervisor,
+    runtime: &ExternalProviderRuntime,
+    store: &Arc<Mutex<ProviderOperationStore>>,
+    ownership: &dyn LiveSessionOwnershipCheck,
+    target: &SessionRef,
+) -> ProviderSessionLoadability {
+    let clock = runtime.owner_clock();
+    router_clock::timeout(
+        clock.as_ref(),
+        std::time::Duration::from_secs(10),
+        inspect_provider_session_loadability(supervisor, runtime, store, ownership, target),
+    )
+    .await
+    .unwrap_or_else(|_| ProviderSessionLoadability::Unavailable {
+        reason: "the Router could not read the session setup in time".to_owned(),
+    })
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum SessionQueuePlan {
+    OnRun(TransportRun),
+    Restore {
+        run: TransportRun,
+        attempt: provider_session_machines::session_lifecycle_machine::LoadAttempt,
+    },
+}
+
+impl SessionQueuePlan {
+    pub(crate) fn run(self) -> TransportRun {
+        match self {
+            Self::OnRun(run) | Self::Restore { run, .. } => run,
+        }
+    }
+}
+
+pub(crate) async fn session_queue_plan(
+    supervisor: &ExternalProviderSupervisor,
+    store: &Arc<Mutex<ProviderOperationStore>>,
+    ownership: &dyn LiveSessionOwnershipCheck,
+    target: &SessionRef,
+    policy: LoadPolicy,
+) -> Result<SessionQueuePlan, ProviderSessionLoadOutcome> {
+    use provider_session_machines::session_lifecycle_machine::{LoadAttempt, SessionLifecycle};
+    if let Some(snapshot) = supervisor.owner_session_snapshot(target)
+        && let Some(run) = queue_run(&snapshot, policy)
+    {
+        return Ok(SessionQueuePlan::OnRun(run));
+    }
+    if policy == LoadPolicy::LoadedOnly {
+        return Err(ProviderSessionLoadOutcome::NotLoaded);
+    }
+    let runtime = supervisor
+        .runtime_for(&target.endpoint)
+        .ok_or_else(|| unavailable("provider runtime is unavailable"))?;
+    match checked_loadability(supervisor, &runtime, store, ownership, target).await {
+        ProviderSessionLoadability::Loadable { .. } | ProviderSessionLoadability::AlreadyLoaded => {
+        }
+        ProviderSessionLoadability::UnsupportedLoad => {
+            return Err(ProviderSessionLoadOutcome::UnsupportedLoad);
+        }
+        ProviderSessionLoadability::MissingRecord => {
+            return Err(ProviderSessionLoadOutcome::MissingRecord);
+        }
+        ProviderSessionLoadability::LiveElsewhere => {
+            return Err(ProviderSessionLoadOutcome::LiveElsewhere);
+        }
+        ProviderSessionLoadability::Unavailable { reason } => return Err(unavailable(reason)),
+    }
+    let owner = supervisor
+        .session_owner_for(target)
+        .map_err(|error| unavailable(error.to_string()))?;
+    let before = owner.snapshots().borrow().clone();
+    if let Some(run) = queue_run(&before, policy) {
+        return Ok(SessionQueuePlan::OnRun(run));
+    }
+    let SessionLifecycle::NotLoaded { last } = before.lifecycle else {
+        return Err(ProviderSessionLoadOutcome::NotLoaded);
+    };
+    let generation = last
+        .number()
+        .checked_add(1)
+        .map(provider_session_machines::SessionGeneration::from_number)
+        .ok_or_else(|| unavailable("the session has no remaining generation"))?;
+    Ok(SessionQueuePlan::Restore {
+        run: TransportRun {
+            incarnation: before.owner.incarnation,
+            generation,
+        },
+        attempt: LoadAttempt(uuid::Uuid::now_v7()),
+    })
+}
+
+fn queue_run(
+    snapshot: &provider_session_machines::session_owner::SessionSnapshot,
+    policy: LoadPolicy,
+) -> Option<TransportRun> {
+    use provider_session_machines::session_lifecycle_machine::SessionLifecycle;
+    let generation = match snapshot.lifecycle {
+        SessionLifecycle::Live { generation } => generation,
+        SessionLifecycle::Loading { generation, .. } if policy == LoadPolicy::MayLoad => generation,
+        _ => return None,
+    };
+    Some(TransportRun {
+        incarnation: snapshot.owner.incarnation,
+        generation,
+    })
+}
+
+fn owner_restore_outcome(
+    result: provider_session_machines::session_owner::RestoreResult,
+) -> ProviderSessionLoadOutcome {
+    use provider_session_machines::session_owner::{
+        RestoreDisposition, RestoreFailure as OwnerFailure, RestorePhase as OwnerPhase,
+    };
+    let phase = match result.phase {
+        OwnerPhase::Preflight => RestorePhase::Preflight,
+        OwnerPhase::Attempted => RestorePhase::Attempted,
+    };
+    match result.disposition {
+        RestoreDisposition::Restored { .. } => ProviderSessionLoadOutcome::Ready,
+        RestoreDisposition::Retired {
+            failure: OwnerFailure::Closed,
+            ..
+        } => ProviderSessionLoadOutcome::ClosedWhileLoading { phase },
+        RestoreDisposition::Retired { failure, .. }
+            if let Some(coded) = failure.coded_evidence() =>
+        {
+            load_error_outcome(&RestoreFailure::attempted(coded.into()))
+        }
+        RestoreDisposition::Retired { failure, .. } => load_failure(phase, failure.next_step()),
+    }
+}
 /// What a failed load means for the work that asked for it.
 fn load_error_outcome(failure: &RestoreFailure) -> ProviderSessionLoadOutcome {
     let phase = failure.phase;
@@ -291,15 +448,13 @@ pub(crate) fn load_error_reason(error: &RestoreFailure) -> String {
         ProviderSessionLoadOutcome::LiveElsewhere => "session is live elsewhere".to_owned(),
         ProviderSessionLoadOutcome::Unavailable { reason, .. } => reason,
         ProviderSessionLoadOutcome::Rejected { reason, .. } => reason.safe_detail(),
-        ProviderSessionLoadOutcome::ClosedWhileLoading { .. } => {
-            crate::provider_acp_message_fifo::SESSION_CLOSED.to_owned()
-        }
+        ProviderSessionLoadOutcome::ClosedWhileLoading { .. } => "session closed".to_owned(),
     }
 }
 
 pub(crate) fn closed_restore_reason(phase: RestorePhase) -> &'static str {
     match phase {
-        RestorePhase::Preflight => crate::provider_acp_message_fifo::SESSION_CLOSED,
+        RestorePhase::Preflight => "session closed",
         RestorePhase::Attempted => {
             "the session closed during restore, so retry this session when ready"
         }
@@ -307,18 +462,18 @@ pub(crate) fn closed_restore_reason(phase: RestorePhase) -> &'static str {
 }
 
 pub(crate) async fn inspect_provider_session_loadability(
+    supervisor: &ExternalProviderSupervisor,
     runtime: &ExternalProviderRuntime,
     store: &Arc<Mutex<ProviderOperationStore>>,
     ownership: &dyn LiveSessionOwnershipCheck,
     target: &SessionRef,
 ) -> ProviderSessionLoadability {
     let provider_session_id = String::from(target.session_id.clone());
-    match runtime.session_activity(provider_session_id.clone()).await {
-        Ok(ProviderSessionActivity::Idle | ProviderSessionActivity::Running) => {
+    match supervisor.owner_session_activity(target) {
+        ProviderSessionActivity::Idle | ProviderSessionActivity::Running => {
             return ProviderSessionLoadability::AlreadyLoaded;
         }
-        Ok(ProviderSessionActivity::NotLoaded) => {}
-        Err(error) => return unavailable_loadability(error.to_string()),
+        ProviderSessionActivity::NotLoaded => {}
     }
     if !runtime
         .capability_report(&provider_session_id)
@@ -327,11 +482,6 @@ pub(crate) async fn inspect_provider_session_loadability(
     {
         return ProviderSessionLoadability::UnsupportedLoad;
     }
-    let record = match store.lock().await.session_record(target).await {
-        Ok(Some(record)) => record,
-        Ok(None) => return ProviderSessionLoadability::MissingRecord,
-        Err(error) => return unavailable_loadability(error.to_string()),
-    };
     match ownership.check(target).await {
         Ok(LiveSessionOwnership::NotLive) => {}
         Ok(LiveSessionOwnership::LiveWritable | LiveSessionOwnership::LiveUnsupported) => {
@@ -339,6 +489,11 @@ pub(crate) async fn inspect_provider_session_loadability(
         }
         Err(error) => return unavailable_loadability(error.to_string()),
     }
+    let record = match store.lock().await.session_record(target).await {
+        Ok(Some(record)) => record,
+        Ok(None) => return ProviderSessionLoadability::MissingRecord,
+        Err(error) => return unavailable_loadability(error.to_string()),
+    };
     let working_directory = PathBuf::from(String::from(record.working_directory));
     let setup = runtime
         .session_setup()

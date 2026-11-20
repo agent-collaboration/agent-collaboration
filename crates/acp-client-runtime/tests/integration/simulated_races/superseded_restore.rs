@@ -8,9 +8,14 @@
 
 use super::NoInteraction;
 use super::scripted_line_agent::{ModeReply, ScriptedLineAgent};
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::{
-    AgentSessionClient, ExternalProviderRuntimeError, ProviderBehavior, ProviderTurnInput,
-    RestoreFailure, RestoredSessionAdmission, SessionRestoreSetup,
+    ExternalProviderRuntimeError, ProviderBehavior, ProviderTurnInput, SessionRestoreSetup,
+};
+use provider_session_machines::{
+    ProviderSettingKind,
+    session_lifecycle_machine::RestoreVia,
+    session_owner::{ObservationCause, ObservedSetting, RestoreDisposition, RestoreResult},
 };
 use router_clock::{ClockInstant, ManualClock, RuntimeClock};
 use std::path::PathBuf;
@@ -75,18 +80,18 @@ async fn load_in_mode(
     client: &AgentSessionClient<NoInteraction>,
     session: &str,
     recorded: &str,
-) -> Result<RestoredSessionAdmission, ExternalProviderRuntimeError> {
+) -> Result<RestoreResult, ExternalProviderRuntimeError> {
     client
-        .load_session_with_setup(
+        .restore(
             session.to_owned(),
             PathBuf::from("/scenario"),
             SessionRestoreSetup {
                 requested_mode: Some(recorded.to_owned()),
                 ..SessionRestoreSetup::default()
             },
+            RestoreVia::Load,
         )
         .await
-        .map_err(RestoreFailure::into_error)
 }
 
 /// A load of `session` recorded in `mode`, run as its own task.
@@ -103,10 +108,9 @@ fn spawn_load(
     };
     tokio::spawn(async move {
         client
-            .load_session_with_setup(session, PathBuf::from("/scenario"), setup)
+            .restore(session, PathBuf::from("/scenario"), setup, RestoreVia::Load)
             .await
             .map(|_admitted| ())
-            .map_err(RestoreFailure::into_error)
     })
 }
 
@@ -259,7 +263,7 @@ async fn assert_restore_accepts_input_after_set(reply: ModeReply, actual: Option
         )
         .await;
 
-    assert_eq!(loaded.permission_mode.actual.as_deref(), actual);
+    assert_eq!(observed_mode(&loaded), actual);
     assert!(prompt.is_ok(), "{prompt:?}");
     assert_eq!(agent.mode_sets(), ["default"]);
     assert_eq!(
@@ -285,22 +289,28 @@ async fn a_silent_restore_setter_allows_input_and_a_same_session_reload() {
     .await;
     agent.restore_in_mode("plan");
     agent.hold_setting_answers();
+    clock
+        .advance(Duration::from_millis(1))
+        .expect("separate restore from the previous close deadline");
     let first_restore = load_in_mode(&client, &session, "default");
     let mut first_restore = Box::pin(first_restore);
     let response_wait = Duration::from_secs(30);
+    let deadline = clock.monotonic_now().after(response_wait);
     tokio::select! {
-        () = clock.not_due_check_now(ClockInstant::ZERO.after(response_wait)) => {},
+        () = async {
+            agent.received("session/set_config_option").await;
+            clock.not_due_check_now(deadline).await;
+        } => {},
         result = &mut first_restore => panic!("the optional setter had not settled: {result:?}"),
     }
-    agent.received("session/set_config_option").await;
     clock.advance(response_wait).expect("reach the deadline");
     let first = first_restore
         .await
         .expect("a silent setter does not make load fail");
-    assert_eq!(first.permission_mode.actual, None);
+    assert_eq!(observed_mode(&first), None);
     assert_eq!(
-        first.mode_difference,
-        Some(acp_client_runtime::RestoredModeDifference::NoAnswer)
+        first.observed[&ProviderSettingKind::Mode].cause,
+        Some(ObservationCause::NoAnswer)
     );
     prompt_restored_session(&client, &session).await;
     client
@@ -314,11 +324,11 @@ async fn a_silent_restore_setter_allows_input_and_a_same_session_reload() {
         result = &mut second_restore => result.expect("the earlier setter cannot hold reload"),
         () = agent.mode_sets_received(2) => panic!("the next restore sent an overlapping setter"),
     };
-    assert!(second.generation.number() > first.generation.number());
-    assert_eq!(second.permission_mode.actual, None);
+    assert!(second.attempt.generation.number() > first.attempt.generation.number());
+    assert_eq!(observed_mode(&second), None);
     assert_eq!(
-        second.mode_difference,
-        Some(acp_client_runtime::RestoredModeDifference::EarlierWriteUnanswered)
+        second.observed[&ProviderSettingKind::Mode].cause,
+        Some(ObservationCause::NoAnswer)
     );
     prompt_restored_session(&client, &session).await;
     assert_eq!(
@@ -349,7 +359,7 @@ async fn a_silent_restore_setter_allows_input_and_a_same_session_reload() {
     let recovered = load_in_mode(&client, &session, "default")
         .await
         .expect("after the late reply");
-    assert_eq!(recovered.permission_mode.actual.as_deref(), Some("default"));
+    assert_eq!(observed_mode(&recovered), Some("default"));
     assert_eq!(agent.mode_sets(), ["default", "default"]);
     client.shutdown().await;
 }
@@ -374,7 +384,6 @@ async fn prompt_restored_session(client: &AgentSessionClient<NoInteraction>, ses
 struct RestoreObservations {
     events: std::sync::Mutex<Vec<session_event_model::SessionEvent>>,
     events_changed: tokio::sync::Notify,
-    retired_entries: std::sync::Mutex<Vec<(String, String)>>,
 }
 
 impl acp_client_runtime::SessionEventSink for RestoreObservations {
@@ -404,13 +413,70 @@ impl acp_client_runtime::SessionEventSink for RestoreObservations {
     }
 }
 
-impl acp_client_runtime::QueueEntrySink for RestoreObservations {
-    fn entry_not_sent(&self, _session: &str, operation: &str, reason: &'static str) {
-        self.retired_entries
-            .lock()
-            .expect("queued entries")
-            .push((operation.to_owned(), reason.to_owned()));
-    }
+#[tokio::test]
+async fn retired_restore_keeps_the_wire_reply_and_fences_its_replay_from_the_successor() {
+    let clock = restore_clock();
+    let observations = Arc::new(RestoreObservations::default());
+    let (client, agent, session) = closed_session_with_sink(
+        clock.clone(),
+        Arc::new(crate::test_behavior::TestProviderBehavior),
+        observations.clone(),
+    )
+    .await;
+
+    agent.hold_next_restore_answer();
+    let first = spawn_load(&client, &session, None);
+    agent.received("session/load").await;
+    let restore_wait = Duration::from_secs(30);
+    clock
+        .not_due_check_now(ClockInstant::ZERO.after(restore_wait))
+        .await;
+    agent
+        .send_replay_chunk(&session, "retired attempt replay")
+        .await;
+    let _replayed = agent.request_permission(&session).await;
+    clock
+        .advance(restore_wait)
+        .expect("expire the first attempt");
+    assert!(matches!(
+        first.await.expect("retired restore"),
+        Err(ExternalProviderRuntimeError::RestoreNoAnswer)
+    ));
+
+    agent.replay_on_next_restore("untagged replay while both attempts are open");
+    let successor = restore_without_mode(&client, &session, "session/load")
+        .await
+        .expect("the successor commits while the old reply is held");
+    assert!(matches!(
+        successor.disposition,
+        RestoreDisposition::Restored {
+            earlier_unanswered: true
+        }
+    ));
+    assert_eq!(
+        successor.replay_warning(RestoreVia::Load),
+        Some("an earlier load timed out; replayed history may include its late events")
+    );
+    agent.release_load_answers();
+    agent.held_load_answer_sent().await;
+    let _settled = agent.request_permission(&session).await;
+    prompt_restored_session(&client, &session).await;
+
+    assert!(
+        !agent
+            .methods()
+            .iter()
+            .any(|method| method == "$/cancel_request"),
+        "retiring the attempt must leave the SDK request correlated"
+    );
+    assert!(!observations.events.lock().expect("events").iter().any(|event| matches!(event,
+        session_event_model::SessionEvent::ItemStarted { item } if item.text.as_deref() == Some("retired attempt replay")
+    )), "the successor cannot publish the retired attempt's replay");
+    assert!(observations.events.lock().expect("events").iter().any(|event| matches!(event,
+        session_event_model::SessionEvent::ItemStarted { item } if item.text.as_deref() == Some("untagged replay while both attempts are open")
+    )), "the current load must buffer the untagged update during overlap");
+    assert_eq!(agent.prompt_sessions(), [session.as_str()]);
+    client.shutdown().await;
 }
 
 #[tokio::test]
@@ -424,27 +490,44 @@ async fn an_unanswered_load_retires_its_queue_and_allows_a_same_session_retry() 
             observations.clone(),
         )
         .await;
-        client.set_queue_entry_sink(observations.clone());
         let independent = client
             .create_session(PathBuf::from("/scenario"))
             .await
             .expect("independent session");
         agent.hold_next_restore_answer();
+        clock
+            .advance(Duration::from_millis(1))
+            .expect("separate restore from the previous lifecycle deadlines");
         let mut first = Box::pin(restore_without_mode(&client, &session, method));
         let delay = Duration::from_secs(30);
+        let deadline = clock.monotonic_now().after(delay);
         tokio::select! {
-            () = clock.not_due_check_now(ClockInstant::ZERO.after(delay)) => {},
+            () = async {
+                agent.received(method).await;
+                clock.not_due_check_now(deadline).await;
+            } => {},
             result = &mut first => panic!("the unanswered restore ended before the deadline: {result:?}"),
         }
-        agent.received(method).await;
         agent
             .send_replay_chunk(&session, "expired restore replay sentinel")
             .await;
         agent.announce_replay_tool(&session, "expired-tool").await;
-        let queued_id = uuid::Uuid::now_v7().to_string();
-        let queued = client
-            .queue_enqueue(&session, &queued_id)
-            .expect("input waits in A's line");
+        let queued_id = session_event_model::InputId::generate();
+        let queued_prompt = client.submit_with_approval_dispatch_for_input(
+            session.clone(),
+            queued_id.clone(),
+            ProviderTurnInput::Prompt(session_event_model::ProviderSubmission::plain(vec![
+                session_event_model::PromptContent::text("held for restore A".to_owned())
+                    .expect("input"),
+            ])),
+            (),
+            None,
+        );
+        tokio::pin!(queued_prompt);
+        let queued = tokio::select! {
+            waiting = client.wait_for_input(&session, &queued_id) => waiting.expect("input waits in A's owner"),
+            ended = &mut queued_prompt => panic!("queued input settled during A: {ended:?}"),
+        };
         prompt_restored_session(&client, &independent).await;
         assert_eq!(agent.prompt_sessions(), [independent.as_str()]);
         clock.advance(delay).expect("reach the restore deadline");
@@ -454,24 +537,24 @@ async fn an_unanswered_load_retires_its_queue_and_allows_a_same_session_retry() 
             "{failure:?}"
         );
         assert!(failure.to_string().contains("retry this session"));
-        assert_eq!(
-            observations
-                .retired_entries
-                .lock()
-                .expect("queue receipts")
-                .len(),
-            1
-        );
-        assert_eq!(
-            observations.retired_entries.lock().expect("queue receipts")[0].0,
-            queued_id
+        assert!(
+            queued_prompt
+                .await
+                .expect_err("A's input is known unsent")
+                .to_string()
+                .contains("the restore did not activate")
         );
 
         let later = restore_without_mode(&client, &session, method)
             .await
             .expect("deliberate same-ID retry succeeds while A is silent");
-        assert!(later.earlier_restore_unanswered);
-        assert!(later.generation.number() > queued.generation.number());
+        assert!(matches!(
+            later.disposition,
+            RestoreDisposition::Restored {
+                earlier_unanswered: true
+            }
+        ));
+        assert!(later.attempt.generation.number() > queued.generation.number());
         agent.hold_next_prompt();
         let retry_input = prompt_restored_session(&client, &session);
         tokio::pin!(retry_input);
@@ -523,10 +606,11 @@ async fn a_lost_session_nudges_a_new_session_without_starting_one() {
         .await;
         agent.reject_next_restore(code);
         let failure = client
-            .resume_session_with_setup(
+            .restore(
                 session.clone(),
                 PathBuf::from("/scenario"),
                 SessionRestoreSetup::default(),
+                RestoreVia::Resume,
             )
             .await
             .expect_err("the harness refused restore");
@@ -540,14 +624,20 @@ async fn a_lost_session_nudges_a_new_session_without_starting_one() {
         );
         assert!(agent.prompt_sessions().is_empty());
         let accepted = client
-            .resume_session_with_setup(
+            .restore(
                 session.clone(),
                 PathBuf::from("/scenario"),
                 SessionRestoreSetup::default(),
+                RestoreVia::Resume,
             )
             .await
             .expect("a new deliberate attempt may succeed");
-        assert!(!accepted.earlier_restore_unanswered);
+        assert!(matches!(
+            accepted.disposition,
+            RestoreDisposition::Restored {
+                earlier_unanswered: false
+            }
+        ));
         prompt_restored_session(&client, &session).await;
         assert_eq!(agent.prompt_sessions(), [session.as_str()]);
         client.shutdown().await;
@@ -558,14 +648,21 @@ async fn restore_without_mode(
     client: &AgentSessionClient<NoInteraction>,
     session: &str,
     method: &str,
-) -> Result<RestoredSessionAdmission, ExternalProviderRuntimeError> {
+) -> Result<RestoreResult, ExternalProviderRuntimeError> {
     let id = session.to_owned();
     let cwd = PathBuf::from("/scenario");
     let setup = SessionRestoreSetup::default();
-    let result = if method == "session/resume" {
-        client.resume_session_with_setup(id, cwd, setup).await
+    let via = if method == "session/resume" {
+        RestoreVia::Resume
     } else {
-        client.load_session_with_setup(id, cwd, setup).await
+        RestoreVia::Load
     };
-    result.map_err(RestoreFailure::into_error)
+    client.restore(id, cwd, setup, via).await
+}
+
+fn observed_mode(result: &RestoreResult) -> Option<&str> {
+    match &result.observed.get(&ProviderSettingKind::Mode)?.value {
+        ObservedSetting::Confirmed(value) => Some(value.0.as_str()),
+        ObservedSetting::LastConfirmed(_) | ObservedSetting::Unknown => None,
+    }
 }

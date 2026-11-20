@@ -663,18 +663,15 @@ async fn mail_and_cli_outcomes_for_each_session_state() {
     }
 }
 
-/// Oracle: D1 spec R12, "a caller that explicitly asks to steer an agent that
-/// can't steer is refused with 'steer unsupported', unchanged from main", and
-/// message send's rule mirrored for an idle session (no running turn): both
-/// explicit steers are refused, nothing reaches the agent, and no turn is
-/// interrupted.
+/// T2 uses a normal prompt when idle. An existing turn on an agent without
+/// steering refuses the explicit steer without adding any wire input.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn an_explicit_steer_without_a_turn_to_join_is_refused() {
-    // Arrange: an idle steering agent, and a held turn on one that can't steer.
-    let steering = ComposedHost::start(claude_steering(), "claude-local").await;
+async fn an_explicit_steer_starts_a_prompt_when_idle_and_refuses_an_unsupported_active_turn() {
+    let staging = tempfile::tempdir().expect("receipt folder");
+    let idle_wire = staging.path().join("idle-wire.json");
+    let steering = ComposedHost::start(cursor_reactive(&idle_wire, &[]), "cursor-local").await;
     let steering_owner = ComposedHost::human("steer-owner");
     let idle = steering.create(&steering_owner).await;
-    let staging = tempfile::tempdir().expect("receipt folder");
     let receipt = staging.path().join("wire.json");
     let non_steering = ComposedHost::start(
         cursor_reactive(&receipt, &["hold-first-prompt"]),
@@ -689,11 +686,12 @@ async fn an_explicit_steer_without_a_turn_to_join_is_refused() {
     until_recorded(&receipt, "session/prompt", 1).await;
 
     // Act
+    let idle_input = OperationId::generate();
     let to_idle = steering
         .prompt_answer(
             &idle,
             &steering_owner,
-            OperationId::generate(),
+            idle_input.clone(),
             "steer-idle",
             SHORT_WAIT,
             MessageDelivery::Steer,
@@ -730,14 +728,12 @@ async fn an_explicit_steer_without_a_turn_to_join_is_refused() {
             _ => None,
         }
     };
-    assert_eq!(
-        refusal(&to_idle),
-        Some((
-            collaboration_protocol::ConversationOperationFailureKind::InvalidRequest,
-            "no running turn to steer".to_owned()
-        )),
-        "{to_idle:?}"
+    assert!(
+        matches!(&to_idle, Ok(ConversationOperationResult::Completed { operation_id: Some(operation), .. }) if operation == &idle_input),
+        "idle steer completes as a prompt: {to_idle:?}"
     );
+    assert_eq!(recorded(&idle_wire, "session/prompt"), 1);
+    assert_eq!(recorded(&idle_wire, "_session/steering"), 0);
     assert_eq!(
         refusal(&to_non_steering),
         Some((
@@ -746,6 +742,9 @@ async fn an_explicit_steer_without_a_turn_to_join_is_refused() {
         )),
         "{to_non_steering:?}"
     );
-    assert_eq!(prompts, 1, "neither steer reached the agent");
+    assert_eq!(
+        prompts, 1,
+        "the active-turn refusal did not reach the agent"
+    );
     assert_eq!(cancels, 0, "no turn is interrupted");
 }

@@ -610,7 +610,7 @@ async fn send_right_after_an_unknown_steer_is_refused() {
     assert_eq!(
         String::from(refusal.message.clone()),
         format!(
-            "an earlier send's outcome is unknown; reconcile {} first",
+            "an earlier prompt's outcome is unknown; check the session, then run operation reconcile for {}",
             unknown.as_str()
         ),
         "the refusal names the unknown operation"
@@ -629,7 +629,7 @@ async fn send_right_after_an_unknown_steer_is_refused() {
 /// entry is still retained in live_operations ... The same three run at
 /// queued dispatch, where the entry ends not sent." A message queues behind
 /// the running turn; a later steer into that turn ends unknown; when the turn
-/// ends, the queued entry ends "not sent: an earlier outcome is unknown",
+/// ends, the queued entry names the earlier operation that needs reconciliation,
 /// and the agent receives no steer or prompt for it after the release.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn queued_entry_after_an_unknown_steer_ends_not_sent() {
@@ -709,7 +709,10 @@ async fn queued_entry_after_an_unknown_steer_ends_not_sent() {
         .unwrap_or_else(|| panic!("the entry ends not sent: {waiting_settled:?}"));
     assert_eq!(
         String::from(not_sent.message.clone()),
-        "not sent: an earlier outcome is unknown",
+        format!(
+            "an earlier prompt's outcome is unknown; check the session, then run operation reconcile for {}",
+            unknown.as_str()
+        ),
         "{not_sent:?}"
     );
     assert_eq!(not_sent.effect, ProviderOperationEffect::None);

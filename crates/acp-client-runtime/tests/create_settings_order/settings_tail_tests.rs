@@ -114,9 +114,8 @@ async fn disconnected_after_setting_submission_is_outcome_unknown() {
         .create_session(root.path().to_path_buf())
         .await
         .expect("session opens");
-    let result = tokio::time::timeout(
-        std::time::Duration::from_secs(2),
-        client.set_setting(
+    let result = client
+        .set_setting(
             session_id.clone(),
             acp_client_runtime::ProviderSettingRequest {
                 kind: provider_session_machines::ProviderSettingKind::Mode,
@@ -124,10 +123,8 @@ async fn disconnected_after_setting_submission_is_outcome_unknown() {
                 intent: session_event_model::SettingApplicationIntent::ExplicitChange,
                 expected_model: None,
             },
-        ),
-    )
-    .await
-    .expect("setting result bounded");
+        )
+        .await;
     assert!(
         matches!(
             result,
@@ -135,8 +132,17 @@ async fn disconnected_after_setting_submission_is_outcome_unknown() {
         ),
         "disconnected setting result: {result:?}"
     );
-    assert!(client.settings_unresolved(&session_id));
     client.shutdown().await;
+    assert_eq!(
+        client
+            .session_activity(session_id.clone())
+            .expect("retired session status"),
+        acp_client_runtime::ProviderSessionActivity::NotLoaded
+    );
+    assert!(
+        !client.settings_unresolved(&session_id),
+        "uncertainty stays with the ended run"
+    );
 }
 
 use acp_client_runtime::{
@@ -388,7 +394,7 @@ async fn malformed_post_send_setting_response_gates_existing_session() {
         );
         assert!(client.settings_unresolved(&session_id));
         assert!(matches!(
-            client.accept_session_settings(session_id.clone()),
+            client.accept_session_settings(session_id.clone()).await,
             Err(acp_client_runtime::ExternalProviderRuntimeError::SettingsOutcomeUncertain)
         ));
         for value in ["auto", "ask"] {

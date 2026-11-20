@@ -1,5 +1,6 @@
 //! Adopt provider IDs and replace failed session-owner incarnations.
 
+use crate::binding_dispatch_permit::BindingUncertainty;
 use crate::session_store_lane::{
     MarkedInput, SessionStoreLane, SessionStoreLaneTask, SessionStoreOfferError, StoreLaneHandover,
 };
@@ -86,6 +87,7 @@ struct RegistryEntries {
 
 pub struct SessionOwnerRegistry {
     entries: Mutex<RegistryEntries>,
+    binding: Arc<std::sync::OnceLock<Arc<BindingUncertainty>>>,
     store: Arc<AsyncMutex<ProviderOperationStore>>,
     clock: Arc<dyn RuntimeClock>,
     mailbox_capacity: NonZeroUsize,
@@ -101,11 +103,16 @@ impl SessionOwnerRegistry {
     ) -> Self {
         Self {
             entries: Mutex::default(),
+            binding: Arc::default(),
             store,
             clock,
             mailbox_capacity,
             completion_capacity,
         }
+    }
+
+    pub(crate) fn install_binding_permit(&self, binding: Arc<BindingUncertainty>) {
+        let _already_installed = self.binding.set(binding);
     }
 
     fn entries(&self) -> MutexGuard<'_, RegistryEntries> {
@@ -225,16 +232,28 @@ impl SessionOwnerRegistry {
         connection: ConnectionEpoch,
         transports: impl IntoIterator<Item = &'connection AcpTransport<Frame>>,
     ) -> Result<FailedOwnerSettlement, SessionOwnerRegistryError> {
+        self.replace_failed_with(target, failed, connection, |incarnation| {
+            transports
+                .into_iter()
+                .flat_map(|transport| transport.revoke_incarnation(incarnation))
+                .collect()
+        })
+    }
+
+    pub(crate) fn replace_failed_with(
+        &self,
+        target: &SessionRef,
+        failed: OwnerIncarnation,
+        connection: ConnectionEpoch,
+        revoke: impl FnOnce(OwnerIncarnation) -> Vec<(DispatchAuthorization, SlotEvidence)>,
+    ) -> Result<FailedOwnerSettlement, SessionOwnerRegistryError> {
         let mut entries = self.entries();
         let current = entries
             .sessions
             .get_mut(target)
             .filter(|entry| entry.owner.owner.address.incarnation == failed)
             .ok_or(SessionOwnerRegistryError::Replaced)?;
-        let slot_evidence: Vec<_> = transports
-            .into_iter()
-            .flat_map(|transport| transport.revoke_incarnation(failed))
-            .collect();
+        let slot_evidence = revoke(failed);
         let taken: BTreeSet<_> = slot_evidence
             .iter()
             .filter_map(|(key, evidence)| {
@@ -289,11 +308,12 @@ impl SessionOwnerRegistry {
         incarnation: OwnerIncarnation,
         target: SessionRef,
     ) -> (SessionStoreLane, SessionStoreLaneTask) {
-        SessionStoreLane::new(
+        SessionStoreLane::with_binding(
             incarnation,
             target,
             Arc::clone(&self.store),
             Arc::clone(&self.clock),
+            Arc::clone(&self.binding),
         )
     }
 }

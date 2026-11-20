@@ -1,21 +1,15 @@
 //! Host-owned admission and settlement for external ACP provider operations.
 
-mod provider_line_runtime;
-mod provider_queued_send;
-pub(crate) use provider_queued_send::{QueuedSend, QueuedSendStep};
 mod provider_operation_admission;
-pub(crate) use provider_line_runtime::ProviderLineRuntime;
 mod provider_operation_index;
 #[cfg(test)]
 pub(crate) use provider_operation_index::HeldResult;
 use provider_operation_index::{LiveOperation, LiveOperations, UncertaintyCells};
-mod provider_prompt_send;
-mod provider_queued_api_prompt;
-pub(crate) use provider_queued_api_prompt::{AdmittedApiPrompt, unadmitted_queued_failure};
 mod provider_operation_failure;
 mod provider_operation_finish;
+mod provider_owner_operations;
+mod provider_owner_prompt;
 mod provider_prompt_contents;
-pub(crate) use provider_prompt_contents::dispatch_refusal_reason;
 pub use provider_prompt_contents::{PromptBusyPolicy, ProviderPromptContentsRequest};
 mod provider_conversation_backend;
 mod provider_full_access_guard;
@@ -23,6 +17,8 @@ mod provider_session_inspection;
 mod provider_session_lifecycle;
 mod provider_session_scratch;
 mod provider_settings_control;
+#[cfg(test)]
+pub(crate) use provider_settings_control::snapshot_settings;
 #[cfg(any(test, feature = "test-support"))]
 mod supervisor_named_points;
 #[cfg(test)]
@@ -61,12 +57,12 @@ use collaboration_runtime::ProviderOperationRecord;
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_service::conversation_operation_snapshot as snapshot_from_record;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     path::PathBuf,
     sync::{Arc, Mutex as StdMutex, atomic::Ordering},
     time::Duration,
 };
-use tokio::sync::{Mutex, mpsc};
+use tokio::sync::Mutex;
 
 const MAX_RETAINED_SETTLEMENTS: usize = 256;
 
@@ -83,6 +79,7 @@ pub struct ExternalProviderSupervisor {
 struct SupervisorInner {
     bindings: HashMap<EndpointRef, RuntimeBinding>,
     store: Arc<Mutex<ProviderOperationStore>>,
+    clock: Arc<dyn router_clock::RuntimeClock>,
     live_operations: StdMutex<LiveOperations>,
     /// Each binding's unknown outcomes: the one place admission asks
     /// whether an earlier send's outcome is unknown (design note §14.1).
@@ -91,29 +88,13 @@ struct SupervisorInner {
     /// provider retention wake on an ACP completion that writes no row.
     completions: tokio::sync::watch::Sender<u64>,
     queued_operations: ProviderQueueOperationRegistry,
-    hub: Option<Arc<collaboration_runtime::ProviderSessionEventHub>>,
     /// `<router root>/scratch`: each Claude or Cursor session created here gets
     /// its own `session-<uuidv7>` folder in it (R4). `None` grants no folder.
     scratch_root: Option<PathBuf>,
-    history_unavailable: Mutex<HashSet<SessionRef>>,
     settings_catalogs: Arc<Mutex<HashMap<SessionRef, acp_client_runtime::ProviderSettingsCatalog>>>,
-    catalog_tasks: Mutex<Vec<tokio::task::JoinHandle<()>>>,
     started_at_ms: i64,
-    /// The session line API prompts wait in when the agent can't steer (D1
-    /// R12), given once the delivery route is composed. Weak: the line holds
-    /// this supervisor.
-    message_fifo: std::sync::OnceLock<
-        std::sync::Weak<crate::provider_acp_message_fifo::ProviderAcpMessageFifo>,
-    >,
     #[cfg(test)]
     admission_test_pause: StdMutex<Option<AdmissionTestPause>>,
-    /// Pauses the next queued API dispatch right after it claims its entry.
-    #[cfg(test)]
-    dispatch_test_pause: StdMutex<Option<AdmissionTestPause>>,
-    /// Pauses the next admitted dispatch after its submission is spawned and
-    /// before its dispatch observation is awaited.
-    #[cfg(test)]
-    observation_test_pause: StdMutex<Option<AdmissionTestPause>>,
     /// Pauses the next steer after its injection reply, before it reads the
     /// joined turn's approver.
     #[cfg(test)]
@@ -122,24 +103,12 @@ struct SupervisorInner {
     /// injection is sent.
     #[cfg(test)]
     steer_injection_test_pause: StdMutex<Option<AdmissionTestPause>>,
-    /// Pauses the next API send routed to the line, after its admission and
-    /// before it enters the line.
-    #[cfg(test)]
-    queue_enqueue_test_pause: StdMutex<Option<AdmissionTestPause>>,
     /// Pauses one operation after its result is visible and waiters are notified.
     #[cfg(test)]
     result_published_test_pause: StdMutex<Option<(OperationId, AdmissionTestPause)>>,
-    /// Pauses one operation's settlement before its terminal write: its
-    /// outcome is known, nothing is stored yet, and its turn is still held.
-    #[cfg(any(test, feature = "test-support"))]
-    terminal_write_test_pause: StdMutex<Option<(OperationId, AdmissionTestPause)>>,
-    /// Pauses one explicit mode change after the agent applied it and before
-    /// its record is written (Lead V6b).
-    #[cfg(any(test, feature = "test-support"))]
-    explicit_mode_record_test_pause: StdMutex<Option<(SessionRef, String, AdmissionTestPause)>>,
 }
 
-#[cfg(any(test, feature = "test-support"))]
+#[cfg(test)]
 struct AdmissionTestPause {
     entered: tokio::sync::oneshot::Sender<()>,
     release: tokio::sync::oneshot::Receiver<()>,
@@ -148,6 +117,7 @@ struct AdmissionTestPause {
 struct RuntimeBinding {
     identity: ProviderBindingIdentity,
     runtime: Arc<ExternalProviderRuntime>,
+    owners: Arc<crate::session_owner_door::SessionOwnerDoor>,
 }
 
 impl ExternalProviderSupervisor {
@@ -198,6 +168,84 @@ impl ExternalProviderSupervisor {
             .map(|entry| Arc::clone(&entry.runtime))
     }
 
+    pub(crate) fn session_owner_for(
+        &self,
+        target: &SessionRef,
+    ) -> Result<
+        Arc<crate::session_owner_door::SessionOwnerAddress>,
+        crate::session_owner_door::OwnerDoorError,
+    > {
+        let binding = self
+            .inner
+            .bindings
+            .get(&target.endpoint)
+            .ok_or(crate::session_owner_door::OwnerDoorError::Unavailable)?;
+        binding
+            .owners
+            .open(target.clone(), binding.runtime.session_setup().work_roots())
+    }
+
+    fn owner_door(
+        &self,
+        endpoint: &EndpointRef,
+    ) -> Option<Arc<crate::session_owner_door::SessionOwnerDoor>> {
+        self.inner
+            .bindings
+            .get(endpoint)
+            .map(|binding| binding.owners.clone())
+    }
+
+    pub(crate) fn owner_session_snapshot(
+        &self,
+        target: &SessionRef,
+    ) -> Option<provider_session_machines::session_owner::SessionSnapshot> {
+        let owner = self
+            .inner
+            .bindings
+            .get(&target.endpoint)?
+            .owners
+            .existing(target)?;
+        let snapshot = owner.snapshots().borrow().clone();
+        Some(snapshot)
+    }
+
+    pub(crate) fn owner_session_catalog(
+        &self,
+        target: &SessionRef,
+    ) -> Option<acp_client_runtime::ProviderSettingsCatalog> {
+        self.inner
+            .bindings
+            .get(&target.endpoint)?
+            .owners
+            .existing(target)?
+            .catalog()
+    }
+
+    pub(crate) fn owner_session_activity(
+        &self,
+        target: &SessionRef,
+    ) -> crate::ProviderSessionActivity {
+        use crate::ProviderSessionActivity;
+        use provider_session_machines::{
+            session_lifecycle_machine::SessionLifecycle, session_turn_machine::SessionTurn,
+        };
+        match self.owner_session_snapshot(target) {
+            Some(snapshot) if matches!(snapshot.lifecycle, SessionLifecycle::Live { .. }) => {
+                match snapshot.turn {
+                    SessionTurn::Idle => ProviderSessionActivity::Idle,
+                    _ => ProviderSessionActivity::Running,
+                }
+            }
+            _ => ProviderSessionActivity::NotLoaded,
+        }
+    }
+
+    pub(crate) async fn cancel_waiting_owner_inputs(&self) {
+        for binding in self.inner.bindings.values() {
+            binding.owners.cancel_waiting_inputs().await;
+        }
+    }
+
     /// Announces a completion as a live operation publishing its result does.
     #[cfg(test)]
     pub(crate) fn announce_completion(&self) {
@@ -215,13 +263,13 @@ impl ExternalProviderSupervisor {
         binding: &ProviderBindingIdentity,
         target: Option<SessionRef>,
     ) {
-        if let Ok(cell) = self.inner.binding_uncertainty(binding).await {
-            let _recorded = provider_operation_index::apply_uncertainty(
-                &cell,
-                provider_session_machines::uncertainty_cell_machine::UncertaintyEvent::BecameUnknown {
-                    operation: operation_id.clone(),
-                    target,
-                },
+        if let Ok(cell) = self.inner.binding_uncertainty(binding).await
+            && let Some(record) = cell.outcomes.get()
+        {
+            crate::binding_dispatch_permit::lock(record).record_unknown(
+                operation_id.clone(),
+                target,
+                crate::binding_dispatch_permit::UnknownRecovery::Blocks,
             );
         }
     }
@@ -278,31 +326,6 @@ impl ExternalProviderSupervisor {
         true
     }
 
-    /// Whether the operation reached its terminal outcome: its live cell
-    /// answers while the live index holds it, its durable row after that.
-    pub(crate) async fn operation_reached_terminal(&self, operation_id: &OperationId) -> bool {
-        let live = self
-            .inner
-            .live_operations
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .operations
-            .get(operation_id)
-            .cloned();
-        if let Some(live) = live {
-            return live.published.load(Ordering::Acquire);
-        }
-        self.inner
-            .store
-            .lock()
-            .await
-            .inspect(operation_id)
-            .await
-            .ok()
-            .flatten()
-            .is_some_and(|record| record.stage == ProviderOperationStage::Terminal)
-    }
-
     /// A receiver that wakes after each live operation publishes its result. Subscribe
     /// before checking an operation, so a completion in between is not missed.
     #[must_use]
@@ -335,8 +358,22 @@ impl ExternalProviderSupervisor {
         hub: Option<Arc<collaboration_runtime::ProviderSessionEventHub>>,
         scratch_root: Option<PathBuf>,
     ) -> Result<Self, &'static str> {
+        let clock = bindings.first().map_or_else(
+            || {
+                Arc::new(router_clock::SystemRuntimeClock::new())
+                    as Arc<dyn router_clock::RuntimeClock>
+            },
+            |binding| binding.runtime.owner_clock(),
+        );
+        let started_at_ms = clock.utc_now().timestamp_millis();
+        let queued_operations = ProviderQueueOperationRegistry::new(clock.clone());
+        let owner_hub = hub.unwrap_or_else(|| {
+            Arc::new(collaboration_runtime::ProviderSessionEventHub::new(
+                Arc::clone(&store),
+            ))
+        });
         let mut runtimes = HashMap::with_capacity(bindings.len());
-        let mut catalog_tasks = Vec::with_capacity(bindings.len());
+        let uncertainty = UncertaintyCells::default();
         let settings_catalogs = Arc::new(Mutex::new(HashMap::new()));
         for binding in bindings {
             let endpoint = binding.identity.endpoint.clone();
@@ -344,31 +381,14 @@ impl ExternalProviderSupervisor {
                 return Err("external provider endpoint binding must be unique");
             }
             let runtime = Arc::new(binding.runtime);
-            let (refresh_sender, mut refresh_receiver) = mpsc::unbounded_channel::<String>();
-            runtime.install_catalog_refresh(refresh_sender);
-            let task_runtime = Arc::clone(&runtime);
-            let task_catalogs = Arc::clone(&settings_catalogs);
-            let task_endpoint = endpoint.clone();
-            catalog_tasks.push(tokio::spawn(async move {
-                while let Some(session_id) = refresh_receiver.recv().await {
-                    let Some(catalog) = task_runtime.settings_catalog(&session_id) else {
-                        continue;
-                    };
-                    let Ok(session_id) = SessionId::try_from(session_id) else {
-                        continue;
-                    };
-                    let target = SessionRef {
-                        endpoint: task_endpoint.clone(),
-                        session_id,
-                    };
-                    task_catalogs.lock().await.insert(target, catalog.clone());
-                }
-            }));
+            let owners = runtime.session_owner_door(Arc::clone(&store), Arc::clone(&owner_hub));
+            owners.install_binding_permit(uncertainty.slot(&endpoint));
             runtimes.insert(
                 endpoint,
                 RuntimeBinding {
                     identity: binding.identity,
                     runtime,
+                    owners,
                 },
             );
         }
@@ -376,47 +396,34 @@ impl ExternalProviderSupervisor {
             inner: Arc::new(SupervisorInner {
                 bindings: runtimes,
                 store,
+                clock,
                 live_operations: StdMutex::new(LiveOperations::default()),
-                uncertainty: UncertaintyCells::default(),
-                message_fifo: std::sync::OnceLock::new(),
+                uncertainty,
                 completions: tokio::sync::watch::channel(0).0,
-                queued_operations: ProviderQueueOperationRegistry::default(),
-                hub,
+                queued_operations,
                 scratch_root,
-                history_unavailable: Mutex::new(HashSet::new()),
                 settings_catalogs,
-                catalog_tasks: Mutex::new(catalog_tasks),
-                started_at_ms: now_ms(),
+                started_at_ms,
                 #[cfg(test)]
                 admission_test_pause: StdMutex::new(None),
-                #[cfg(test)]
-                dispatch_test_pause: StdMutex::new(None),
-                #[cfg(test)]
-                observation_test_pause: StdMutex::new(None),
                 #[cfg(test)]
                 steer_reply_test_pause: StdMutex::new(None),
                 #[cfg(test)]
                 steer_injection_test_pause: StdMutex::new(None),
                 #[cfg(test)]
-                queue_enqueue_test_pause: StdMutex::new(None),
-                #[cfg(test)]
                 result_published_test_pause: StdMutex::new(None),
-                #[cfg(any(test, feature = "test-support"))]
-                terminal_write_test_pause: StdMutex::new(None),
-                #[cfg(any(test, feature = "test-support"))]
-                explicit_mode_record_test_pause: StdMutex::new(None),
             }),
         })
     }
 
     /// Tells `observer` of every live event of every session on `endpoint`.
-    pub(crate) fn install_live_event_observer(
+    pub(crate) fn install_owner_snapshot_observer(
         &self,
         endpoint: &EndpointRef,
-        observer: Arc<dyn crate::provider_session_event_sink::LiveSessionEventObserver>,
+        observer: Arc<dyn crate::session_owner_door::SessionOwnerSnapshotObserver>,
     ) -> bool {
         self.inner.bindings.get(endpoint).is_some_and(|binding| {
-            binding.runtime.install_live_event_observer(observer);
+            binding.owners.install_snapshot_observer(observer);
             true
         })
     }
@@ -502,31 +509,9 @@ impl ExternalProviderSupervisor {
     /// Like `spawn_operation` for a prompt: its session's turn ends only
     /// once the operation's settlement is recorded, so the session's line
     /// commits nothing that would see it unresolved (design note §13.1).
-    fn spawn_prompt_operation<F>(
-        &self,
-        operation_id: OperationId,
-        live: Arc<LiveOperation>,
-        operation: F,
-    ) where
-        F: std::future::Future<
-                Output = (
-                    ProviderOperationCompletion,
-                    Option<acp_client_runtime::ProviderTurnEnd>,
-                ),
-            > + Send
-            + 'static,
-    {
-        let inner = Arc::clone(&self.inner);
-        tokio::spawn(async move {
-            let (completion, turn_end) = operation.await;
-            inner.finish(operation_id, live, completion).await;
-            drop(turn_end);
-        });
-    }
-
     #[expect(
         clippy::result_large_err,
-        reason = "The typed failure retains the full published operation payload."
+        reason = "Keeps the existing typed operation failure returned by the command port."
     )]
     async fn inspect_record(
         &self,
@@ -556,18 +541,16 @@ impl ExternalProviderSupervisor {
             binding.runtime.retirement().cancel();
         }
         for binding in self.inner.bindings.values() {
-            tokio::time::timeout(Duration::from_secs(10), binding.runtime.shutdown())
-                .await
-                .map_err(|_| "external provider runtime shutdown timed out")?;
+            router_clock::timeout(
+                self.inner.clock.as_ref(),
+                Duration::from_secs(10),
+                binding.runtime.shutdown(),
+            )
+            .await
+            .map_err(|_| "external provider runtime shutdown timed out")?;
             if binding.runtime.shutdown_failed() {
                 return Err("external provider runtime owner failed to join");
             }
-        }
-        for task in self.inner.catalog_tasks.lock().await.drain(..) {
-            tokio::time::timeout(Duration::from_secs(10), task)
-                .await
-                .map_err(|_| "provider model catalog task drain timed out")?
-                .map_err(|_| "provider model catalog task failed")?;
         }
         let operations = self
             .inner
@@ -579,7 +562,7 @@ impl ExternalProviderSupervisor {
             .cloned()
             .collect::<Vec<_>>();
         for operation in operations {
-            tokio::time::timeout(Duration::from_secs(10), async {
+            router_clock::timeout(self.inner.clock.as_ref(), Duration::from_secs(10), async {
                 loop {
                     let changed = operation.changed.notified();
                     if operation.result.lock().await.is_some() {
@@ -604,6 +587,10 @@ enum PreparedOperation {
 }
 
 impl SupervisorInner {
+    fn now_ms(&self) -> i64 {
+        self.clock.utc_now().timestamp_millis()
+    }
+
     async fn record_settings_catalog(
         &self,
         target: SessionRef,
@@ -782,10 +769,6 @@ fn failure_with_provider_code(
     let mut operation_failure = failure(kind, stage, effect, message, operation_id, target);
     operation_failure.provider_code = provider_code;
     operation_failure
-}
-
-fn now_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
 }
 
 mod provider_delivery_submission;

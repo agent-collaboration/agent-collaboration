@@ -11,14 +11,10 @@ use std::sync::OnceLock;
 /// A named point in the client's own code.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ClientSimPoint {
-    /// A close reached its wait for the session's turn end.
-    CloseTurnWait,
-    /// A prompt's turn is open on the session's cell; its command hasn't
-    /// reached the connection yet.
-    PromptTurnOpen,
-    /// A session's actor ended on its own (its command channel closed); the
-    /// hand-off of its exit to the session's cell and the hub hasn't finished.
-    ActorExitHandoff,
+    /// The owner offered the dispatch mark and is awaiting its settlement.
+    DispatchMarkOffered,
+    /// The reader reported a run loss. Its stamped event hasn't reached the owner.
+    RunLossReady,
 }
 
 /// What a test runs at each named point; the client awaits it.
@@ -32,7 +28,7 @@ pub fn install(hook: SimPointHook) {
 }
 
 /// The client reached `point`: the installed hook runs, if there is one.
-pub(crate) async fn reach(point: ClientSimPoint) {
+pub async fn reach(point: ClientSimPoint) {
     if let Some(hook) = HOOK.get() {
         hook(point).await;
     }

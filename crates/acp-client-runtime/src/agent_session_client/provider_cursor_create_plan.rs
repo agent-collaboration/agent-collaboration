@@ -18,7 +18,7 @@ use super::ActiveApprovalContext;
 use crate::provider_cursor_plan_items::{CursorPlanDefinition, CursorPlanItems, CursorTodo};
 use crate::{
     ApprovalPortOutcome, InteractionPort, SessionEventSink,
-    provider_connection_activity::ProviderConnectionActivity,
+    owner_callback_routing::OwnerCallbackRouting,
 };
 
 #[derive(Deserialize)]
@@ -33,7 +33,7 @@ struct CursorCreatePlan {
 }
 
 pub(super) struct ProviderCursorCreatePlanHandler<P: InteractionPort> {
-    tool_registry: Arc<ProviderConnectionActivity>,
+    tool_registry: Arc<OwnerCallbackRouting>,
     plan_items: Arc<CursorPlanItems>,
     event_sink: Arc<dyn SessionEventSink>,
     approval_contexts: Arc<Mutex<HashMap<String, ActiveApprovalContext<P>>>>,
@@ -44,7 +44,7 @@ pub(super) struct ProviderCursorCreatePlanHandler<P: InteractionPort> {
 
 impl<P: InteractionPort> ProviderCursorCreatePlanHandler<P> {
     pub(super) fn new(
-        tool_registry: Arc<ProviderConnectionActivity>,
+        tool_registry: Arc<OwnerCallbackRouting>,
         plan_items: Arc<CursorPlanItems>,
         event_sink: Arc<dyn SessionEventSink>,
         approval_contexts: Arc<Mutex<HashMap<String, ActiveApprovalContext<P>>>>,
@@ -145,9 +145,10 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderCursorCreatePlanH
                 return Ok(Handled::Yes);
             }
         };
-        let Some(crate::provider_connection_activity::ToolCallOwner {
+        let Some(crate::owner_callback_routing::ToolCallOwner {
             session_id,
-            generation,
+            run,
+            turn,
         }) = self.tool_registry.resolve_session(&plan.tool_call_id)
         else {
             tracing::warn!("unresolved Cursor create_plan request");
@@ -157,7 +158,11 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderCursorCreatePlanH
         let context = self.approval_contexts.lock().ok().and_then(|contexts| {
             contexts
                 .get(&session_id)
-                .filter(|context| context.generation == generation)
+                .filter(|context| {
+                    context.incarnation == run.incarnation
+                        && context.generation == run.generation
+                        && context.turn == Some(turn)
+                })
                 .cloned()
         });
         let Some(context) = context else {
@@ -166,7 +171,8 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderCursorCreatePlanH
             return Ok(Handled::Yes);
         };
         let (existed, item) = self.plan_items.set_plan(
-            &session_id,
+            run,
+            turn,
             CursorPlanDefinition {
                 tool_call_id: plan.tool_call_id.clone(),
                 name: plan.name.clone(),
@@ -184,7 +190,9 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderCursorCreatePlanH
         };
         // In the run the plan arrived in (D1 R14).
         // In the run that announced the tool call (review F4).
-        let publication = self.event_sink.publish_in(&session_id, generation, event);
+        let publication =
+            self.event_sink
+                .publish_for_turn(&session_id, run.generation, turn, event);
         if publication.is_err() {
             self.sink_closed.cancel();
             self.shutdown.cancel();
@@ -195,7 +203,9 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderCursorCreatePlanH
         }
         let port = Arc::clone(&self.interaction_port);
         let request_cancellation = responder.cancellation();
-        let response_guard = context.responses.track();
+        let response_guard = context
+            .responses
+            .track("cursor/create_plan", responder.id());
         connection.spawn(async move {
             let agent_cancellation = CancellationToken::new();
             let decision = port.request_approval(

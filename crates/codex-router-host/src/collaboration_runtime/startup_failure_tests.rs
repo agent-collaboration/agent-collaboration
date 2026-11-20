@@ -63,6 +63,7 @@ async fn assert_exposure_failure_cleanup(provider_launches: Vec<crate::ExternalP
             None,
             prepared,
             None,
+            None,
         ),
     )
     .await;

@@ -14,7 +14,7 @@ use crate::session_owner::{
     RestoredMode, RunAttempt, SessionDeadline, SessionOwnerEffect, SessionOwnerRefusal,
     SessionOwnerReply, SessionPublication, SessionStoreRequest, SessionWireRequest, WireOutcome,
 };
-use crate::session_setting_machine::{SettingApplication, SettingValueId};
+use crate::session_setting_machine::{SessionSettingEvent, SettingApplication, SettingValueId};
 use crate::session_turn_machine::{SessionTurn, SessionTurnEffect};
 use crate::{ProviderSettingKind, SessionGeneration};
 
@@ -52,11 +52,21 @@ impl PendingRestore {
 
 impl OwnerTransition {
     pub(super) fn start_restore(&mut self, attempt: LoadAttempt, via: RestoreVia) -> OwnerResult {
+        self.start_restore_after_queue_evidence(attempt, via, None)
+    }
+
+    pub(super) fn start_restore_after_queue_evidence(
+        &mut self,
+        attempt: LoadAttempt,
+        via: RestoreVia,
+        after_queue_evidence: Option<uuid::Uuid>,
+    ) -> OwnerResult {
         if !self.next.ports.connection_alive || self.next.ports.create.is_some() {
             return Err(SessionOwnerRefusal::EffectInProgress.into());
         }
         self.cell_move(SessionCellEvent::LoadRequested { attempt, via })?;
         self.next.ports.observed.clear();
+        self.next.ports.mode_reason = None;
         self.next.ports.admitted_inputs.clear();
         self.next.ports.replay.clear();
         self.next.ports.retained_items.clear();
@@ -69,10 +79,46 @@ impl OwnerTransition {
             generation,
             attempt,
         };
+        if after_queue_evidence.is_none() {
+            self.release(SessionOwnerEffect::Store(
+                SessionStoreRequest::ReadRestoreSetup(run),
+            ));
+        }
+        self.wait_for_restore(PendingRestore::Setup {
+            run,
+            via,
+            after_queue_evidence,
+        });
+        Ok(())
+    }
+
+    pub(super) fn release_cold_restore(
+        &mut self,
+        input: &super::super::OwnerInput,
+        recorded: bool,
+    ) -> OwnerResult {
+        let Some(PendingRestore::Setup {
+            run,
+            via,
+            after_queue_evidence: Some(operation),
+        }) = self.next.restore
+        else {
+            return Ok(());
+        };
+        if operation != input.operation || run.generation != input.generation {
+            return Ok(());
+        }
+        if !recorded {
+            return self.fail_loading(run, RestoreFailureStage::Setup, RemoteEffect::None);
+        }
+        self.next.restore = Some(PendingRestore::Setup {
+            run,
+            via,
+            after_queue_evidence: None,
+        });
         self.release(SessionOwnerEffect::Store(
             SessionStoreRequest::ReadRestoreSetup(run),
         ));
-        self.wait_for_restore(PendingRestore::Setup { run, via });
         Ok(())
     }
 
@@ -81,7 +127,12 @@ impl OwnerTransition {
         run: RunAttempt<LoadAttempt>,
         outcome: EffectOutcome,
     ) -> OwnerResult {
-        let Some(PendingRestore::Setup { run: pending, via }) = self.next.restore else {
+        let Some(PendingRestore::Setup {
+            run: pending,
+            via,
+            after_queue_evidence: None,
+        }) = self.next.restore
+        else {
             return Err(OwnerRejection::IgnoredLate);
         };
         if pending != run {
@@ -128,6 +179,7 @@ impl OwnerTransition {
             }
             WireOutcome::Confirmed(RestoredMode::Reapply { application, value }) => {
                 if self.setting_fenced(ProviderSettingKind::Mode) {
+                    self.record_restore_mode(None, Some(ObservationCause::NoAnswer));
                     return self.after_restore_mode(run, via, false);
                 }
                 let setting = OwnerSetting {
@@ -210,6 +262,7 @@ impl OwnerTransition {
             if self.setting_fenced(ProviderSettingKind::Fast) {
                 return self.finish_fast_off(
                     run,
+                    setting,
                     via,
                     mode_confirmed,
                     SettingEvidence {
@@ -227,6 +280,7 @@ impl OwnerTransition {
             ));
             self.wait_for_restore(PendingRestore::FastOff {
                 run,
+                setting,
                 via,
                 mode_confirmed,
             });
@@ -241,6 +295,9 @@ impl OwnerTransition {
         current: Option<SettingValueId>,
         cause: Option<ObservationCause>,
     ) {
+        if cause == Some(ObservationCause::FellBack) {
+            self.next.ports.mode_reason = Some(super::super::PermissionModeReason::AgentFellBack);
+        }
         self.next.ports.observed.insert(
             ProviderSettingKind::Mode,
             SettingEvidence {
@@ -266,10 +323,34 @@ impl OwnerTransition {
     fn finish_fast_off(
         &mut self,
         run: RunAttempt<LoadAttempt>,
+        setting: OwnerSetting,
         via: RestoreVia,
         mode_confirmed: bool,
         observation: SettingEvidence,
     ) -> OwnerResult {
+        if matches!(observation.value, ObservedSetting::Unknown)
+            && matches!(
+                observation.cause,
+                Some(ObservationCause::NoAnswer | ObservationCause::Unconfirmed)
+            )
+        {
+            let application = setting.change.attempt;
+            self.cell_move(SessionCellEvent::Setting {
+                kind: ProviderSettingKind::Fast,
+                event: SessionSettingEvent::SetRequested {
+                    to: SettingValueId("off".to_owned()),
+                    application,
+                },
+            })?;
+            self.cell_move(SessionCellEvent::Setting {
+                kind: ProviderSettingKind::Fast,
+                event: SessionSettingEvent::OutcomeUnknown { application },
+            })?;
+            self.next
+                .ports
+                .latest_setting
+                .insert(ProviderSettingKind::Fast, setting);
+        }
         self.next
             .ports
             .observed
@@ -311,10 +392,16 @@ impl OwnerTransition {
                 run: pending,
                 via,
                 mode_confirmed,
+                ..
             }) = self.next.restore
                 && pending == run
             {
-                return self.finish_fast_off(run, via, mode_confirmed, observation);
+                return self.finish_fast_off(run, setting, via, mode_confirmed, observation);
+            }
+            if self.is_live(run.generation)
+                && let ObservedSetting::Confirmed(value) = observation.value
+            {
+                self.setting_on_wire(setting, super::super::SettingObservation::Applied(value))?;
             }
             return Ok(());
         }
@@ -418,6 +505,10 @@ impl OwnerTransition {
             },
             observed: self.next.ports.observed.clone(),
         });
+        if self.next.cell.settings_held() {
+            return self
+                .retire_waiting_inputs(crate::session_owner::RevokeReason::SettingsUnresolved);
+        }
         self.drive_prompt_line()
     }
 
@@ -452,11 +543,13 @@ impl OwnerTransition {
                 self.after_restore_mode(run, via, false)
             }
             PendingRestore::FastOff {
+                setting,
                 via,
                 mode_confirmed,
                 ..
             } => self.finish_fast_off(
                 run,
+                setting,
                 via,
                 mode_confirmed,
                 SettingEvidence {
@@ -483,7 +576,10 @@ impl OwnerTransition {
         {
             return Err(OwnerRejection::IgnoredLate);
         }
-        let remote = if matches!(failure, RestoreFailure::Refused { .. }) {
+        let remote = if failure
+            .coded_evidence()
+            .is_some_and(|coded| coded.definitely_no_effect())
+        {
             RemoteEffect::None
         } else {
             RemoteEffect::Unknown
@@ -518,7 +614,7 @@ impl OwnerTransition {
             RestoreFailureStage::Wire if remote == RemoteEffect::Unknown => {
                 RestoreFailure::NoAnswer
             }
-            RestoreFailureStage::Wire => RestoreFailure::Lost,
+            RestoreFailureStage::Wire => RestoreFailure::Lost { reported: None },
             RestoreFailureStage::Preparation => RestoreFailure::LocalPrerequisite {
                 stage: PreparationStage::HostSetup,
             },
@@ -534,7 +630,7 @@ impl OwnerTransition {
         remote: RemoteEffect,
         failure: RestoreFailure,
     ) -> OwnerResult {
-        let event = if remote == RemoteEffect::Unknown {
+        let event = if failure == RestoreFailure::NoAnswer {
             SessionCellEvent::LoadUnanswered {
                 attempt: run.attempt,
             }
@@ -546,6 +642,10 @@ impl OwnerTransition {
         let effects = self.cell_move(event)?;
         self.next.restore = None;
         self.reply_restore_failed(run, stage, remote, failure);
+        self.tag_waiting_inputs(
+            run.generation,
+            super::super::RevokeReason::RestoreDidNotActivate,
+        );
         self.apply_entry_effects(effects)?;
         self.retire_generation(run.generation)?;
         Ok(())
@@ -589,6 +689,7 @@ impl OwnerTransition {
             );
         }
         self.next.ports.close_support = Some((run, request.provider_supports_close));
+        self.tag_waiting_inputs(run.generation, super::super::RevokeReason::QueueClosed);
         self.revoke_run(run.generation);
         self.release(SessionOwnerEffect::ArmDeadline(SessionDeadline::Close(run)));
         for effect in &effects {
@@ -672,7 +773,7 @@ impl OwnerTransition {
                     CloseOutcome::RefusedLoading
                 };
                 self.reply_close_finished(run, outcome);
-                Ok(())
+                self.drive_after_setting()
             }
         }
     }
@@ -714,7 +815,7 @@ impl OwnerTransition {
         })?;
         self.apply_entry_effects(effects)?;
         self.retire_generation(run.generation)?;
-        let fact = if outcome == CloseOutcome::Confirmed {
+        let fact = if matches!(outcome, CloseOutcome::Confirmed | CloseOutcome::RouterOnly) {
             SessionPublication::Closed(run.generation)
         } else {
             SessionPublication::Unloaded(run.generation)
@@ -740,7 +841,9 @@ impl OwnerTransition {
     }
 
     pub(super) fn retire_generation(&mut self, generation: SessionGeneration) -> OwnerResult {
+        self.retire_previous_prompts(generation);
         self.finish_retired_store_work(generation)?;
+        self.retire_queued_settings(generation);
         self.discontinue_setting()?;
         self.retire_run_tools(generation);
         self.effects

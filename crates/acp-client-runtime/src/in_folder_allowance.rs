@@ -21,7 +21,6 @@ use agent_client_protocol::schema::v1::{
 };
 
 use std::path::{Component, Path, PathBuf};
-use std::sync::Arc;
 
 /// Programs a scratch-only shell command may run without asking, each with the
 /// options it may carry. Every program reads or changes only the files it is
@@ -91,35 +90,6 @@ pub(crate) fn session_folders(
 pub(crate) struct SessionInFolderGrant {
     pub(crate) grant: InFolderGrant,
     pub(crate) router_auto: bool,
-}
-
-/// In-folder grants, one per run of a session (design note §11.3): a grant
-/// is written only under its run's generation, and a permission request
-/// reads only the session's current run's grant.
-pub(crate) type InFolderGrants = Arc<crate::run_owned_state::RunOwnedMap<SessionInFolderGrant>>;
-
-/// The grant a permission request may use: only the session's current run's,
-/// and only while that run is in Router auto.
-pub(crate) fn active_grant(grants: &InFolderGrants, session_id: &str) -> Option<InFolderGrant> {
-    grants
-        .read(session_id)
-        .filter(|session| session.router_auto)
-        .map(|session| session.grant)
-}
-
-/// Records the run's mode after a confirmed mode change (R4, Q3); a change
-/// from an ended run changes nothing.
-pub(crate) fn set_router_auto(
-    grants: &InFolderGrants,
-    session_id: &str,
-    generation: provider_session_machines::SessionGeneration,
-    router_auto: bool,
-) {
-    let _written = grants.write_with(session_id, generation, |session| {
-        if let Some(session) = session {
-            session.router_auto = router_auto;
-        }
-    });
 }
 
 impl InFolderGrant {

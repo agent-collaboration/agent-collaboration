@@ -2,10 +2,11 @@
 
 use std::{path::PathBuf, sync::Arc};
 
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::{
-    AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
-    HistoryReplayFuture, InteractionFuture, InteractionPort, ProviderPersistenceTarget,
-    RefusedApprovalOffer, RequestedProviderSettings, SessionEventSink,
+    ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch, HistoryReplayFuture,
+    InteractionFuture, InteractionPort, ProviderPersistenceTarget, RefusedApprovalOffer,
+    RequestedProviderSettings, SessionEventSink,
 };
 use session_event_model::{ApprovalRequest, SessionEvent};
 use tokio_util::sync::CancellationToken;
@@ -171,7 +172,7 @@ impl SessionEventSink for ClosedSettingsSink {
 }
 
 #[tokio::test]
-async fn closed_settings_sink_aborts_create_with_typed_error() {
+async fn closed_settings_sink_does_not_retire_the_created_session() {
     let root = tempfile::tempdir().expect("fixture root");
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
@@ -186,11 +187,29 @@ async fn closed_settings_sink_aborts_create_with_typed_error() {
     )
     .await
     .expect("fixture initializes");
-    let result = client.create_session(root.path().to_path_buf()).await;
-    assert!(matches!(
-        result,
-        Err(acp_client_runtime::ExternalProviderRuntimeError::SinkClosed)
-    ));
+    let session = client
+        .create_session(root.path().to_path_buf())
+        .await
+        .expect("the owner created a live session");
+    let completed = client
+        .submit_with_approval_dispatch_for_input(
+            session,
+            session_event_model::InputId::generate(),
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("still available".to_owned())
+                        .expect("prompt text"),
+                ]),
+            ),
+            (),
+            None,
+        )
+        .await
+        .expect("provider prompt completes despite refused publication");
+    assert_eq!(
+        completed.stop_reason,
+        session_event_model::StopReason::EndTurn
+    );
     client.shutdown().await;
 }
 

@@ -89,7 +89,7 @@ async fn a_refused_competing_load_leaves_the_admitted_run_alone() {
     let fixture = hub_runtime().await;
     let runtime = Arc::clone(&fixture.runtime);
     let cwd = fixture.receipt.parent().expect("root").to_owned();
-    let (activation_reached, activation_release) = runtime.pause_next_activation();
+    let (activation_reached, activation_release) = runtime.preparation_fixture.pause_restore();
     let first = tokio::spawn({
         let runtime = Arc::clone(&runtime);
         let cwd = cwd.clone();
@@ -121,7 +121,7 @@ async fn a_refused_competing_load_leaves_the_admitted_run_alone() {
     );
     assert!(first.is_ok(), "the admitted load activates: {first:?}");
     let state_after_first =
-        SessionEventHub::state(fixture.hub.as_ref(), fixture.hub_target.clone()).await;
+        wait_for_hub_state(&fixture, "reactive-session-1", SessionState::Idle).await;
     let after_activation =
         SessionEventHub::attach(fixture.hub.as_ref(), fixture.hub_target.clone())
             .await
@@ -132,12 +132,10 @@ async fn a_refused_competing_load_leaves_the_admitted_run_alone() {
     let closed = runtime
         .release_session("reactive-session-1".to_owned())
         .await;
-    // The connection enqueued the close's Closed before the release returned.
-    // A new session's activation waits until the hub takes its Idle, so by
-    // then the hub has applied everything enqueued before it.
+    // The other session can activate through its own publication inbox.
     let flushed = runtime.create_session(cwd).await;
     let state_after_close =
-        SessionEventHub::state(fixture.hub.as_ref(), fixture.hub_target.clone()).await;
+        wait_for_hub_state(&fixture, "reactive-session-1", SessionState::Closed).await;
     let loads = recorded_requests(&fixture.receipt, "session/load");
     runtime.shutdown().await;
 
@@ -182,6 +180,30 @@ async fn hub_state(fixture: &HubRuntime, session_id: &str) -> Result<SessionStat
         .map_err(|error| format!("{error:?}"))
 }
 
+async fn wait_for_hub_state(
+    fixture: &HubRuntime,
+    session_id: &str,
+    expected: SessionState,
+) -> Result<SessionState, String> {
+    let mut target = fixture.hub_target.clone();
+    target.session_id =
+        message_board::SessionId::try_from(session_id.to_owned()).expect("session ID");
+    let mut attached = SessionEventHub::attach(fixture.hub.as_ref(), target)
+        .await
+        .map_err(|error| format!("{error:?}"))?;
+    loop {
+        let current = hub_state(fixture, session_id).await?;
+        if current == expected {
+            return Ok(current);
+        }
+        attached
+            .receiver
+            .recv()
+            .await
+            .map_err(|error| format!("{error:?}"))?;
+    }
+}
+
 /// Oracle: the Reviewer's G1 follow-up. A session is loaded and active; a
 /// create whose session/new answers that same identity is rejected as a
 /// duplicate. The rejected create opens no run, so the loaded run's close
@@ -199,23 +221,37 @@ async fn a_rejected_duplicate_create_leaves_the_live_run_alone() {
 
     // Act: the duplicate create; then the loaded run closes; a load of
     // another session flushes the hub.
-    let duplicate = runtime.create_session(cwd.clone()).await;
+    let duplicate = runtime
+        .create_session_with_settings(
+            cwd.clone(),
+            acp_client_runtime::RequestedProviderSettings {
+                mode: Some("ask".to_owned()),
+                ..Default::default()
+            },
+        )
+        .await;
     let closed = runtime
         .release_session("reactive-session-2".to_owned())
         .await;
     let flushed = runtime
         .load_session("reactive-session-7".to_owned(), cwd)
         .await;
-    let state_after_close = hub_state(&fixture, "reactive-session-2").await;
+    let state_after_close =
+        wait_for_hub_state(&fixture, "reactive-session-2", SessionState::Closed).await;
+    let mode_writes = recorded_requests(&fixture.receipt, "session/set_config_option");
     runtime.shutdown().await;
 
     // Assert
     assert!(loaded.is_ok(), "{loaded:?}");
     assert!(
-        matches!(&duplicate, Err(ExternalProviderRuntimeError::Operation(message)) if message.contains("duplicate")),
+        matches!(&duplicate, Err(ExternalProviderRuntimeError::Operation(message)) if message == "this session id is already in use"),
         "the duplicate identity is rejected: {duplicate:?}"
     );
     assert!(closed.is_ok(), "{closed:?}");
+    assert_eq!(
+        mode_writes, 0,
+        "the losing create must send no setting to the incumbent ID"
+    );
     assert!(flushed.is_ok(), "{flushed:?}");
     assert!(
         matches!(state_after_close, Ok(SessionState::Closed)),
@@ -223,18 +259,16 @@ async fn a_rejected_duplicate_create_leaves_the_live_run_alone() {
     );
 }
 
-/// Oracle: the Reviewer's G2 follow-up. A create's continuation is held after
-/// the client's reply; the agent closes the session natively; the session is
-/// loaded again as a new run, which starts a turn. The old create then goes
-/// on: it publishes nothing into the new run (the hub stays Running) and
-/// answers closed.
+/// T1: a successful wire create remains provisional before it adopts its
+/// provider ID. A restore can own that ID by the time the create continues.
+/// The create must refuse and preserve the restored owner's running turn.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_create_continuation_held_past_a_close_publishes_nothing_into_the_next_run() {
     // Arrange: a create held before its activation, on an agent that closes.
     let fixture = hub_runtime_with(&["advertise-close", "hold-first-prompt-open"]).await;
     let runtime = Arc::clone(&fixture.runtime);
     let cwd = fixture.receipt.parent().expect("root").to_owned();
-    let (activation_reached, activation_release) = runtime.pause_next_activation();
+    let (activation_reached, activation_release) = runtime.preparation_fixture.pause_create();
     let create = tokio::spawn({
         let runtime = Arc::clone(&runtime);
         let cwd = cwd.clone();
@@ -244,9 +278,7 @@ async fn a_create_continuation_held_past_a_close_publishes_nothing_into_the_next
         .await
         .expect("the create's client answered and it is held");
 
-    // Act: native close; the session is loaded as a new run that starts a
-    // turn; then the old create goes on.
-    let closed = runtime.close_session("reactive-session-1".to_owned()).await;
+    // Adopt the known provider ID via restore and start a turn first.
     let reloaded = runtime
         .load_session("reactive-session-1".to_owned(), cwd)
         .await;
@@ -278,11 +310,11 @@ async fn a_create_continuation_held_past_a_close_publishes_nothing_into_the_next
     runtime.shutdown().await;
 
     // Assert
-    assert!(closed.is_ok(), "{closed:?}");
     assert!(reloaded.is_ok(), "{reloaded:?}");
     assert!(
-        matches!(created, Err(ExternalProviderRuntimeError::SessionReleased)),
-        "the old create answers closed: {created:?}"
+        matches!(created, Err(ExternalProviderRuntimeError::Operation(message))
+            if message.contains("already in use")),
+        "the old create cannot adopt the occupied ID"
     );
     assert!(
         matches!(state_after_old_create, Ok(SessionState::Running)),
@@ -324,7 +356,12 @@ async fn a_restore_completing_after_a_native_close_registers_nothing() {
     let fresh = runtime
         .load_session("reactive-session-1".to_owned(), cwd)
         .await;
-    let state_after_fresh = hub_state(&fixture, "reactive-session-1").await;
+    let state_after_fresh = if fresh.is_ok() {
+        wait_for_hub_state(&fixture, "reactive-session-1", SessionState::Idle).await
+    } else {
+        hub_state(&fixture, "reactive-session-1").await
+    };
+    let request_cancels = recorded_requests(&fixture.receipt, "$/cancel_request");
     runtime.shutdown().await;
 
     // Assert
@@ -340,7 +377,14 @@ async fn a_restore_completing_after_a_native_close_registers_nothing() {
         ),
         "the late completion registered no actor: {activity_after_late:?}"
     );
-    assert!(fresh.is_ok(), "a fresh load is admitted: {fresh:?}");
+    assert!(
+        fresh.is_ok(),
+        "a fresh load is admitted: {fresh:?}. SDK request cancels observed: {request_cancels}"
+    );
+    assert_eq!(
+        request_cancels, 0,
+        "the SDK restore stays correlated through its late reply"
+    );
     assert!(
         matches!(state_after_fresh, Ok(SessionState::Idle)),
         "the fresh run activated: {state_after_fresh:?}"

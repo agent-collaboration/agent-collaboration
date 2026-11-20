@@ -1,5 +1,7 @@
 #[path = "tests/deferred_uncertainty_admission_test.rs"]
 mod deferred_uncertainty_admission_tests;
+#[path = "tests/owner_skill_queue_test.rs"]
+mod owner_skill_queue_tests;
 #[path = "tests/persistence_overlay_test.rs"]
 mod persistence_overlay_tests;
 #[path = "tests/restore_recovery_test.rs"]
@@ -184,10 +186,6 @@ async fn delivery_prompt_reports_submission_before_turn_settles() {
     )
     .await
     .expect("fixture initializes");
-    runtime
-        .create_session(PathBuf::from("/tmp"))
-        .await
-        .expect("session/new");
     let store = ProviderOperationStore::open(&root.path().join("operations.sqlite"))
         .await
         .expect("operation store opens");
@@ -200,6 +198,10 @@ async fn delivery_prompt_reports_submission_before_turn_settles() {
     )
     .expect("supervisor initializes");
     let operation_id = OperationId::generate();
+    backend
+        .open_provider_fixture(&endpoint(), PathBuf::from("/tmp"))
+        .await
+        .expect("session/new");
     let target = SessionRef {
         endpoint: endpoint(),
         session_id: SessionId::try_from("fixture-session".to_owned()).expect("session"),
@@ -265,11 +267,9 @@ async fn delivery_prompt_without_loaded_session_is_known_not_submitted() {
     // consumer handles it as not submitted.
     assert_eq!(
         dispatch,
-        provider_delivery_submission::ProviderPromptDispatch::Refused(
-            acp_client_runtime::ProviderDispatchRefusal::NotLoaded {
-                answer: "session is not loaded; load it or resume it".to_owned()
-            }
-        )
+        provider_delivery_submission::ProviderPromptDispatch::NotSubmitted {
+            reason: Some(provider_session_machines::session_owner::RevokeReason::NotLoaded)
+        }
     );
     backend.shutdown().await.expect("shutdown");
 }
@@ -302,26 +302,21 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
     )
     .await
     .expect("fixture initializes");
-    runtime
-        .create_session(PathBuf::from("/tmp"))
-        .await
-        .expect("session/new");
     let backend = Arc::new(
-        ExternalProviderSupervisor::new(
+        ExternalProviderSupervisor::with_fixture_hub(
             vec![ExternalProviderBinding {
                 identity: binding(),
                 runtime,
             }],
             Arc::clone(&store),
+            Arc::clone(&hub),
         )
         .expect("supervisor initializes"),
     );
-    let queue = crate::provider_acp_message_fifo::ProviderAcpMessageFifo::new(
-        Arc::clone(&backend),
-        store,
-        Arc::new(NoLivePeer),
-        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
-    );
+    backend
+        .open_provider_fixture(&endpoint(), PathBuf::from("/tmp"))
+        .await
+        .expect("session/new");
     let target = SessionRef {
         endpoint: endpoint(),
         session_id: SessionId::try_from("fixture-session".to_owned()).expect("session"),
@@ -330,14 +325,6 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
     let mut expected_lines = Vec::new();
     for text in ["first", "second"] {
         let operation_id = OperationId::generate();
-        let permit = queue
-            .reserve(
-                &target,
-                &operation_id,
-                collaboration_contracts::LoadPolicy::MayLoad,
-            )
-            .await
-            .expect("queue capacity");
         let input_id = session_event_model::InputId::generate();
         queued_input_ids.push(input_id.clone());
         let push_id = PushId::try_from(agent_automation::AttemptId::generate().as_str().to_owned())
@@ -369,11 +356,12 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
                 acp_client_runtime::ProviderTurnInput::Compact => panic!("queued ordinary input"),
             },
         );
-        permit.send(
-            crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
-                request: contents,
-                admitted: None,
-            },
+        assert_eq!(
+            backend
+                .submit_owned_delivery(contents, collaboration_protocol::MessageDelivery::Queue)
+                .await
+                .expect("queue accepted"),
+            crate::session_owner_calls::InputAcceptance::Queued
         );
     }
 
@@ -389,7 +377,7 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
             .expect("prompt event bytes");
         assert_eq!(bytes, expected.as_bytes());
     }
-    queue.shutdown().await;
+    backend.cancel_waiting_owner_inputs().await;
     let hub_target: message_board::SessionRef =
         serde_json::from_value(serde_json::to_value(target).expect("target JSON"))
             .expect("hub target");
@@ -417,10 +405,6 @@ async fn router_queue_shutdown_drops_an_unstarted_prompt() {
     )
     .await
     .expect("fixture initializes");
-    runtime
-        .create_session(PathBuf::from("/tmp"))
-        .await
-        .expect("session/new");
     let store = Arc::new(Mutex::new(
         ProviderOperationStore::open(&root.path().join("operations.sqlite"))
             .await
@@ -436,6 +420,10 @@ async fn router_queue_shutdown_drops_an_unstarted_prompt() {
         )
         .expect("supervisor"),
     );
+    backend
+        .open_provider_fixture(&endpoint(), PathBuf::from("/tmp"))
+        .await
+        .expect("session/new");
     let target = SessionRef {
         endpoint: endpoint(),
         session_id: SessionId::try_from("fixture-session".to_owned()).expect("session"),
@@ -452,12 +440,6 @@ async fn router_queue_shutdown_drops_an_unstarted_prompt() {
     assert_eq!(
         active,
         provider_delivery_submission::ProviderPromptDispatch::Submitted
-    );
-    let queue = crate::provider_acp_message_fifo::ProviderAcpMessageFifo::new(
-        Arc::clone(&backend),
-        Arc::clone(&store),
-        Arc::new(NoLivePeer),
-        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let queued_id = OperationId::generate();
     let queued_input = session_event_model::InputId::generate();
@@ -490,22 +472,18 @@ async fn router_queue_shutdown_drops_an_unstarted_prompt() {
             acp_client_runtime::ProviderTurnInput::Compact => panic!("queued ordinary input"),
         },
     );
-    queue
-        .reserve(
-            &target,
-            &queued_id,
-            collaboration_contracts::LoadPolicy::MayLoad,
-        )
-        .await
-        .expect("queue capacity")
-        .send(
-            crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
-                request: queued_contents,
-                admitted: None,
-            },
-        );
+    assert_eq!(
+        backend
+            .submit_owned_delivery(
+                queued_contents,
+                collaboration_protocol::MessageDelivery::Queue
+            )
+            .await
+            .expect("queue accepted"),
+        crate::session_owner_calls::InputAcceptance::Queued
+    );
 
-    queue.shutdown().await;
+    backend.cancel_waiting_owner_inputs().await;
 
     assert!(
         store
@@ -531,10 +509,6 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
     )
     .await
     .expect("fixture initializes");
-    runtime
-        .create_session(PathBuf::from("/tmp"))
-        .await
-        .expect("session/new");
     let store = Arc::new(Mutex::new(
         ProviderOperationStore::open(&root.path().join("operations.sqlite"))
             .await
@@ -550,6 +524,10 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
         )
         .expect("supervisor"),
     );
+    backend
+        .open_provider_fixture(&endpoint(), PathBuf::from("/tmp"))
+        .await
+        .expect("session/new");
     let target = SessionRef {
         endpoint: endpoint(),
         session_id: SessionId::try_from("fixture-session".to_owned()).expect("session"),
@@ -566,22 +544,8 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
             .expect("active prompt"),
         provider_delivery_submission::ProviderPromptDispatch::Submitted
     );
-    let queue = crate::provider_acp_message_fifo::ProviderAcpMessageFifo::new(
-        Arc::clone(&backend),
-        Arc::clone(&store),
-        Arc::new(NoLivePeer),
-        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
-    );
     let queued_id = OperationId::generate();
     let queued_input_id = session_event_model::InputId::generate();
-    let permit = queue
-        .reserve(
-            &target,
-            &queued_id,
-            collaboration_contracts::LoadPolicy::MayLoad,
-        )
-        .await
-        .expect("queue capacity");
     let push_id = PushId::try_from(agent_automation::AttemptId::generate().as_str().to_owned())
         .expect("UUIDv7 push id");
     let queued_line = MessageText::try_from(format!(
@@ -610,11 +574,15 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
             acp_client_runtime::ProviderTurnInput::Compact => panic!("queued ordinary input"),
         },
     );
-    permit.send(
-        crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
-            request: queued_contents,
-            admitted: None,
-        },
+    assert_eq!(
+        backend
+            .submit_owned_delivery(
+                queued_contents,
+                collaboration_protocol::MessageDelivery::Queue
+            )
+            .await
+            .expect("queue accepted"),
+        crate::session_owner_calls::InputAcceptance::Queued
     );
     backend
         .runtime_for(&endpoint())
@@ -640,7 +608,7 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
         Some(collaboration_protocol::ConversationOperationQueueState::NotSubmitted { reason })
             if reason == "provider connection closed"
     ));
-    queue.shutdown().await;
+    backend.cancel_waiting_owner_inputs().await;
     backend.shutdown().await.expect("supervisor shutdown");
 }
 

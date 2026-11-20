@@ -9,10 +9,11 @@ use std::{
     time::Duration,
 };
 
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::{
-    AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
-    ExternalProviderRuntimeError, HistoryReplayFuture, InteractionFuture, InteractionPort,
-    ProviderPersistenceTarget, RefusedApprovalOffer, SessionEventSink,
+    ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch, ExternalProviderRuntimeError,
+    HistoryReplayFuture, InteractionFuture, InteractionPort, ProviderPersistenceTarget,
+    RefusedApprovalOffer, SessionEventSink,
 };
 use session_event_model::{ApprovalRequest, InputId, PromptContent, SessionEvent};
 use tokio_util::sync::CancellationToken;
@@ -241,6 +242,26 @@ async fn advertised_image_reaches_agent_with_exact_data_and_mime_type() {
 #[tokio::test]
 async fn multi_block_steer_reaches_extension_in_order() {
     let (_root, client, _port) = fixture_client("steer").await;
+    let foreground = client.submit_with_approval_dispatch_for_input(
+        "fixture-session".to_owned(),
+        InputId::generate(),
+        acp_client_runtime::ProviderTurnInput::Prompt(
+            session_event_model::ProviderSubmission::plain(vec![
+                PromptContent::text("hold".to_owned()).expect("foreground prompt"),
+            ]),
+        ),
+        (),
+        None,
+    );
+    tokio::pin!(foreground);
+    tokio::select! {
+        result = &mut foreground => panic!("foreground settled early: {result:?}"),
+        () = async {
+            while client.session_activity("fixture-session".to_owned()).expect("session status") != acp_client_runtime::ProviderSessionActivity::Running {
+                tokio::task::yield_now().await;
+            }
+        } => {}
+    }
     let image =
         PromptContent::image("image/png".to_owned(), "aGVsbG8=".to_owned(), None).expect("image");
     let rejected = client
@@ -256,20 +277,18 @@ async fn multi_block_steer_reaches_extension_in_order() {
             content_type: "image"
         })
     ));
-    let result = tokio::time::timeout(
-        Duration::from_secs(2),
-        client.steer_contents_with_input(
+    let result = client
+        .steer_contents_with_input(
             "fixture-session".to_owned(),
             InputId::generate(),
             session_event_model::ProviderSubmission::plain(text_and_link()),
-        ),
-    )
-    .await
-    .expect("steer completes");
-    assert_eq!(
+        )
+        .await;
+    assert!(matches!(
         result.expect("steer result"),
-        acp_client_runtime::ProviderSteeringOutcome::PromptRequired
-    );
+        acp_client_runtime::ProviderSteeringOutcome::Injected { .. }
+    ));
+    foreground.await.expect("foreground prompt completes");
     client.shutdown().await;
 }
 

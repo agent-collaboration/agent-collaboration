@@ -591,11 +591,9 @@ impl ModeFixture {
     }
 }
 
-/// Oracle: review F3 and owner Decision 3 (wrong build: a restore reads the
-/// session's record without joining its mode turn). A change to plan is
-/// applied and held before its record write; the session is closed and
-/// loaded again. The load waits for the change, and the session ends in
-/// plan both in its record and at the agent.
+/// T5. A confirmed change to plan is held in the store lane. A close retires
+/// the run while that accepted write is held. The later restore reads and
+/// preserves the saved mode.
 #[cfg(unix)]
 #[tokio::test]
 async fn a_restore_waits_for_an_applied_mode_change_still_being_recorded() -> TestResult {
@@ -604,10 +602,6 @@ async fn a_restore_waits_for_an_applied_mode_change_still_being_recorded() -> Te
     let (a_held, release_a) = fixture
         .backend
         .pause_explicit_mode_record_of(&target, "plan");
-    let load_waits = fixture
-        .backend
-        .notice_next_explicit_mode_wait(&target)
-        .ok_or("the binding is known")?;
 
     let change_a = fixture.set_mode(&target, "plan");
     tokio::pin!(change_a);
@@ -618,24 +612,18 @@ async fn a_restore_waits_for_an_applied_mode_change_still_being_recorded() -> Te
             return Err(format!("A ended instead of holding before its write: {ended:?}").into());
         }
     }
-    fixture.close(&target).await?;
-    // The reload either waits for A's turn or, with no turn, runs to its end.
-    let reload = fixture.load(&target);
-    tokio::pin!(reload);
-    let reloaded_while_a_held = tokio::select! {
+    let close = fixture.close(&target);
+    tokio::pin!(close);
+    tokio::select! {
         biased;
-        waiting = load_waits => {
-            waiting.map_err(|_| "the load's wait notice was dropped")?;
-            None
-        }
-        ended = &mut reload => Some(ended?),
+        retired = fixture.backend.wait_for_session_retirement_fixture(&target) => retired?,
+        ended = &mut close => return Err(format!("close settled before the earlier write: {ended:?}").into()),
     };
+    let mode_before_release = fixture.recorded_mode(&target).await?;
     let _released = release_a.send(());
     let ended_a = change_a.await;
-    let reloaded = match reloaded_while_a_held {
-        Some(output) => output,
-        None => reload.await?,
-    };
+    close.await?;
+    let reloaded = fixture.load(&target).await?;
     let recorded = fixture.recorded_mode(&target).await?;
     let live = fixture.live_mode(&target).await?;
     fixture.backend.shutdown().await.map_err(str::to_owned)?;
@@ -647,6 +635,7 @@ async fn a_restore_waits_for_an_applied_mode_change_still_being_recorded() -> Te
         reloaded,
         ConversationOperationWaitOutput::Available { .. }
     ));
+    ensure_eq!(mode_before_release.as_deref(), Some("default"));
     ensure_eq!(recorded.as_deref(), Some("plan"));
     ensure_eq!(live.as_deref(), Some("plan"));
     Ok(())

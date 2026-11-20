@@ -1,19 +1,24 @@
 //! Keep Cursor plan and todo updates on one stable Session Item.
 
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     sync::{Arc, Mutex},
 };
 
 use agent_client_protocol::{Agent, ConnectionTo, Dispatch, Error, HandleDispatchFrom, Handled};
+use provider_session_machines::session_turn_machine::TurnId;
 use serde::Deserialize;
 use session_event_model::{SessionEvent, SessionItem, SessionItemKind};
 use tokio_util::sync::CancellationToken;
 
-use crate::{SessionEventSink, provider_connection_activity::ProviderConnectionActivity};
+use crate::{
+    SessionEventSink, acp_transport::TransportRun, owner_callback_routing::OwnerCallbackRouting,
+};
 
 #[derive(Default)]
-pub(crate) struct CursorPlanItems(Mutex<HashMap<(String, String), CursorPlanRecord>>);
+pub(crate) struct CursorPlanItems(
+    Mutex<BTreeMap<(TransportRun, TurnId, String), CursorPlanRecord>>,
+);
 
 #[derive(Default)]
 struct CursorPlanRecord {
@@ -32,38 +37,51 @@ pub(crate) struct CursorPlanDefinition {
 }
 
 impl CursorPlanItems {
-    pub(crate) fn forget_session(&self, session_id: &str) {
+    pub(crate) fn forget_run(&self, run: TransportRun) {
         self.0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .retain(|(owner, _), _| owner != session_id);
+            .retain(|(saved_run, _, _), _| *saved_run != run);
+    }
+
+    pub(crate) fn forget_turn(&self, run: TransportRun, turn: TurnId) {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .retain(|(saved_run, saved_turn, _), _| (*saved_run, *saved_turn) != (run, turn));
     }
 
     pub(crate) fn set_plan(
         &self,
-        session_id: &str,
+        run: TransportRun,
+        turn: TurnId,
         plan: CursorPlanDefinition,
     ) -> (bool, SessionItem) {
         let mut plans = self
             .0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let key = (session_id.to_owned(), plan.tool_call_id);
+        let key = (run, turn, plan.tool_call_id);
         let existed = plans.contains_key(&key);
         let record = plans.entry(key.clone()).or_default();
         record.name = plan.name;
         record.overview = plan.overview;
         record.markdown = Some(plan.markdown);
         record.todos = plan.todos;
-        (existed, record.item(&key.1))
+        (existed, record.item(&key.2))
     }
 
-    fn update(&self, session_id: &str, request: CursorTodoUpdate) -> (bool, SessionItem) {
+    fn update(
+        &self,
+        run: TransportRun,
+        turn: TurnId,
+        request: CursorTodoUpdate,
+    ) -> (bool, SessionItem) {
         let mut plans = self
             .0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let key = (session_id.to_owned(), request.tool_call_id);
+        let key = (run, turn, request.tool_call_id);
         let existed = plans.contains_key(&key);
         let record = plans.entry(key.clone()).or_default();
         if !request.merge {
@@ -76,7 +94,7 @@ impl CursorPlanItems {
                 record.todos.push(update);
             }
         }
-        (existed, record.item(&key.1))
+        (existed, record.item(&key.2))
     }
 }
 
@@ -146,7 +164,7 @@ impl CursorTodoStatus {
 }
 
 pub(crate) struct ProviderCursorTodoHandler {
-    tool_registry: Arc<ProviderConnectionActivity>,
+    tool_registry: Arc<OwnerCallbackRouting>,
     todo_state: Arc<CursorPlanItems>,
     event_sink: Arc<dyn SessionEventSink>,
     shutdown: CancellationToken,
@@ -155,7 +173,7 @@ pub(crate) struct ProviderCursorTodoHandler {
 
 impl ProviderCursorTodoHandler {
     pub(crate) fn new(
-        tool_registry: Arc<ProviderConnectionActivity>,
+        tool_registry: Arc<OwnerCallbackRouting>,
         todo_state: Arc<CursorPlanItems>,
         event_sink: Arc<dyn SessionEventSink>,
         shutdown: CancellationToken,
@@ -175,15 +193,16 @@ impl ProviderCursorTodoHandler {
             tracing::warn!("malformed Cursor todo update");
             return;
         };
-        let Some(crate::provider_connection_activity::ToolCallOwner {
+        let Some(crate::owner_callback_routing::ToolCallOwner {
             session_id,
-            generation,
+            run,
+            turn,
         }) = self.tool_registry.resolve_session(&update.tool_call_id)
         else {
             tracing::warn!("unresolved Cursor todo update");
             return;
         };
-        let (existed, item) = self.todo_state.update(&session_id, update);
+        let (existed, item) = self.todo_state.update(run, turn, update);
         let event = if existed {
             SessionEvent::ItemUpdated { item }
         } else {
@@ -192,7 +211,7 @@ impl ProviderCursorTodoHandler {
         // In the run that announced the tool call (D1 R14; review F4).
         if self
             .event_sink
-            .publish_in(&session_id, generation, event)
+            .publish_for_turn(&session_id, run.generation, turn, event)
             .is_err()
         {
             self.sink_closed.cancel();
@@ -233,13 +252,22 @@ impl HandleDispatchFrom<Agent> for ProviderCursorTodoHandler {
 
 #[cfg(test)]
 mod tests {
-    use super::{CursorPlanItems, CursorTodo, CursorTodoStatus, CursorTodoUpdate};
+    use super::{
+        CursorPlanItems, CursorTodo, CursorTodoStatus, CursorTodoUpdate, TransportRun, TurnId,
+    };
+    use provider_session_machines::{SessionGeneration, session_owner::OwnerIncarnation};
 
     #[test]
     fn merge_updates_existing_todos_and_preserves_the_plan_item_id() {
         let state = CursorPlanItems::default();
+        let run = TransportRun {
+            incarnation: OwnerIncarnation(uuid::Uuid::now_v7()),
+            generation: SessionGeneration::from_number(1),
+        };
+        let turn = TurnId(uuid::Uuid::now_v7());
         let first = state.update(
-            "session",
+            run,
+            turn,
             CursorTodoUpdate {
                 tool_call_id: "tool".to_owned(),
                 todos: vec![CursorTodo {
@@ -251,7 +279,8 @@ mod tests {
             },
         );
         let second = state.update(
-            "session",
+            run,
+            turn,
             CursorTodoUpdate {
                 tool_call_id: "tool".to_owned(),
                 todos: vec![
@@ -276,15 +305,20 @@ mod tests {
             second.1.text.as_deref(),
             Some("- completed: First revised\n- in progress: Second")
         );
-        state.forget_session("session");
-        let after_end = state.update(
-            "session",
-            CursorTodoUpdate {
-                tool_call_id: "tool".to_owned(),
-                todos: Vec::new(),
-                merge: true,
-            },
-        );
+        let successor = TransportRun {
+            incarnation: OwnerIncarnation(uuid::Uuid::now_v7()),
+            ..run
+        };
+        let empty_update = || CursorTodoUpdate {
+            tool_call_id: "tool".to_owned(),
+            todos: Vec::new(),
+            merge: true,
+        };
+        assert!(!state.update(successor, turn, empty_update()).0);
+        state.forget_run(run);
+        assert!(state.update(successor, turn, empty_update()).0);
+        state.forget_turn(successor, turn);
+        let after_end = state.update(successor, turn, empty_update());
         assert!(!after_end.0);
     }
 }

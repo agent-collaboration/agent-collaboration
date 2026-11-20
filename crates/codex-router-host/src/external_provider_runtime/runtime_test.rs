@@ -79,7 +79,7 @@ fn steering_fixture(observed_prompt_socket: &std::path::Path) -> ExternalProvide
 
 #[cfg(unix)]
 #[tokio::test]
-async fn steering_injects_during_prompt_and_returns_prompt_required_when_idle() {
+async fn steering_injects_during_a_prompt_and_starts_a_normal_prompt_when_idle() {
     let root = tempfile::tempdir().expect("fixture root");
     let marker = root.path().join("prompt.sock");
     let listener = tokio::net::UnixListener::bind(&marker).expect("prompt event listener");
@@ -175,7 +175,7 @@ async fn steering_injects_during_prompt_and_returns_prompt_required_when_idle() 
         .await
         .expect("steer idle session");
     assert!(
-        matches!(idle, ProviderSteeringOutcome::PromptRequired),
+        matches!(idle, ProviderSteeringOutcome::StartedNewTurn),
         "{idle:?}"
     );
     runtime.shutdown().await;
@@ -254,6 +254,7 @@ fn named_mcp_tool_call_fixture(
 fn approval_context(operation_id: &str) -> ExternalProviderApprovalContext {
     let service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
     ExternalProviderApprovalContext {
+            owner_scope: None,
         requester: serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":service_id,"endpointId":"cursor-local"},"sessionId":"requester"})).expect("requester"),
         approver: serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"approver"})).expect("approver"),
         target: serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":service_id,"endpointId":"cursor-local"},"sessionId":"fixture-session"})).expect("target"),

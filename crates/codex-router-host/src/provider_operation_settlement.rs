@@ -22,6 +22,11 @@ pub(crate) enum ProviderOperationCompletion {
         failure: ConversationOperationFailure,
         session_record: Box<ProviderSessionRecord>,
     },
+    Owned {
+        result: Result<ConversationOperationSettlement, ConversationOperationFailure>,
+        target: SessionRef,
+        saved: bool,
+    },
 }
 
 pub(crate) async fn persist_provider_success(
@@ -134,6 +139,7 @@ pub(crate) fn provider_session_record(
     created_by: ProviderIdentity,
     approver: ProviderIdentity,
     resume: ProviderSessionResumeInputs,
+    updated_at_ms: i64,
 ) -> ProviderSessionRecord {
     ProviderSessionRecord {
         target,
@@ -141,7 +147,7 @@ pub(crate) fn provider_session_record(
         requested_policy,
         created_by,
         approver,
-        updated_at_ms: chrono::Utc::now().timestamp_millis(),
+        updated_at_ms,
         resume,
     }
 }

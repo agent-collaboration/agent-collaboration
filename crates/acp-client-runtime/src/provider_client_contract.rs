@@ -20,7 +20,7 @@ pub enum ProviderPromptDispatchObservation {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ProviderErrorCorrelationId(uuid::Uuid);
+pub struct ProviderErrorCorrelationId(pub(crate) uuid::Uuid);
 
 impl ProviderErrorCorrelationId {
     #[must_use]
@@ -343,4 +343,25 @@ pub(crate) fn provider_frame_decode_error(
     } else {
         ExternalProviderRuntimeError::FrameDecodeFailure
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ProviderSteeringOutcome<OperationId, Context> {
+    Injected {
+        running_operation_id: Option<OperationId>,
+        /// The approval context of the turn the input joined, captured when
+        /// the steer was sent (design note §12.4): the caller reads the
+        /// joined turn's approver from it, not from a shared record.
+        joined_turn: Option<Context>,
+    },
+    PromptRequired,
+    StartedNewTurn,
+    Failed,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProviderSessionActivity {
+    NotLoaded,
+    Idle,
+    Running,
 }

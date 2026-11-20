@@ -63,7 +63,10 @@ impl OwnerTransition {
                 {
                     return Err(OwnerRejection::IgnoredLate);
                 }
-                self.next.ports.replay.push(item);
+                self.next
+                    .ports
+                    .replay
+                    .push(session_event_model::SessionEvent::ItemStarted { item });
                 Ok(())
             }
             RoutedTool::ItemRetained { run, item_id } => {

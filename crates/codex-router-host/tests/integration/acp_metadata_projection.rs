@@ -1,149 +1,163 @@
 //! Real ACP decoding/projection retains metadata without making it Codex prose.
 
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{collections::VecDeque, path::PathBuf, sync::Arc};
 
-use acp_client_runtime::{
-    AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
-    HistoryReplayFuture, InteractionFuture, InteractionPort, ProviderPersistenceTarget,
-    RefusedApprovalOffer, SessionEventSink,
+use acp_client_runtime::{ExternalProviderLaunch, ProviderPersistenceTarget};
+use codex_router_host::{
+    ExternalProviderBinding, ExternalProviderRuntime, ExternalProviderSupervisor,
 };
-use collaboration_runtime::HistoricalTurn;
-use collaboration_runtime::render_historical_turn;
+use collaboration_contracts::{ProviderConversationBackend, SessionEventHub};
+use collaboration_protocol::{
+    ConversationLoadRequest, ConversationOperationWaitRequest, ConversationPromptRequest,
+    MessageContent, MessageDelivery, MessageText, OperationId, PositiveSeconds,
+    ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess, SessionId,
+};
+use collaboration_runtime::{
+    HistoricalTurn, ProviderOperationStore, ProviderSessionEventHub, ProviderSessionRecord,
+    render_historical_turn,
+};
 use serde_json::{Value, json};
-use session_event_model::{
-    ApprovalRequest, SessionEvent, SessionItemKind, StopReason, TurnOutcome,
-};
-use tokio_util::sync::CancellationToken;
+use session_event_model::{SessionEvent, SessionItemKind, StopReason, TurnOutcome};
+use tokio::sync::Mutex;
 
 const METADATA_PROVIDER: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../verification/fixtures/provider-metadata-agent.ts"
 );
 
-struct NoInteractions;
-
-impl InteractionPort for NoInteractions {
-    type Context = ();
-    type OperationId = u64;
-
-    fn operation_id(_context: &()) -> u64 {
-        0
-    }
-    fn binding_retirement(_context: &()) -> CancellationToken {
-        CancellationToken::new()
-    }
-    fn request_approval(
-        &self,
-        _context: (),
-        _request: ApprovalRequest,
-        _turn: CancellationToken,
-        _agent: CancellationToken,
-    ) -> InteractionFuture<'_, ApprovalPortOutcome> {
-        Box::pin(async { ApprovalPortOutcome::Cancelled })
-    }
-    fn request_question(
-        &self,
-        _context: (),
-        _request: session_event_model::QuestionRequest,
-        _turn: CancellationToken,
-        _agent: CancellationToken,
-    ) -> InteractionFuture<'_, session_event_model::QuestionResponse> {
-        Box::pin(async { session_event_model::QuestionResponse::Cancelled })
-    }
-    fn record_refusal(
-        &self,
-        _context: (),
-        _refusal: RefusedApprovalOffer,
-    ) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
-    fn cancel_all(&self, _context: (), _reason: &'static str) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
-    fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
-}
-
-struct MetadataCapture(tokio::sync::mpsc::UnboundedSender<SessionEvent>);
-
-impl SessionEventSink for MetadataCapture {
-    fn publish_skill_view(
-        &self,
-        _session_id: &str,
-        _view: session_event_model::SkillView,
-    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
-        Ok(())
-    }
-
-    fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
-        Box::pin(async { Ok(()) })
-    }
-    fn publish(&self, _session_id: &str, event: SessionEvent) -> Result<(), EventSinkClosed> {
-        self.0.send(event).map_err(|_| EventSinkClosed)
-    }
-}
-
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 async fn check_metadata_projection(replay: bool) {
-    // Arrange: actual ACP subprocess and runtime projection, with literal payloads.
     let root = tempfile::tempdir().expect("provider working directory");
-    let (sender, mut received) = tokio::sync::mpsc::unbounded_channel();
-    let client = AgentSessionClient::initialize(
+    let mut target = super::provider_acp_message_fifo_support::target();
+    target.session_id = SessionId::try_from("metadata-session".to_owned()).expect("provider ID");
+    let binding = super::provider_acp_message_fifo_support::provider_binding(&target);
+    let cwd =
+        ProviderWorkingDirectory::try_from(root.path().display().to_string()).expect("directory");
+    let policy = ProviderRequestedPolicy {
+        access: RouterAccess::WriteRestricted,
+    };
+    let store = Arc::new(Mutex::new(
+        ProviderOperationStore::open(&root.path().join("operations.sqlite"))
+            .await
+            .expect("fixture store"),
+    ));
+    store
+        .lock()
+        .await
+        .record_session(&ProviderSessionRecord {
+            target: target.clone(),
+            working_directory: cwd.clone(),
+            requested_policy: policy.clone(),
+            created_by: target.clone().into(),
+            approver: target.clone().into(),
+            updated_at_ms: 0,
+            resume: Default::default(),
+        })
+        .await
+        .expect("fixture setup");
+    let hub = Arc::new(ProviderSessionEventHub::new(store.clone()));
+    let board: message_board::SessionRef = target.clone().try_into().expect("board target");
+    let mut attached = hub
+        .attach(board.clone())
+        .await
+        .expect("real event subscriber");
+    let runtime = ExternalProviderRuntime::initialize(
         ExternalProviderLaunch {
             executable: PathBuf::from("node"),
             arguments: vec![METADATA_PROVIDER.into()],
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,
         },
-        Arc::new(NoInteractions),
-        Arc::new(MetadataCapture(sender)),
-        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        Arc::new(acp_provider_adapters::StandardAcpBehavior),
     )
     .await
     .expect("ACP initializes");
+    let supervisor = ExternalProviderSupervisor::with_fixture_hub(
+        vec![ExternalProviderBinding {
+            identity: binding,
+            runtime,
+        }],
+        store,
+        hub.clone(),
+    )
+    .expect("real Host owner");
+    let operation_id = OperationId::generate();
+    if replay {
+        supervisor
+            .load(ConversationLoadRequest {
+                operation_id: operation_id.clone(),
+                target: target.clone(),
+                generation: None,
+                working_directory: cwd,
+                requested_by: target.clone().into(),
+                approver: target.clone().into(),
+                requested_policy: policy,
+            })
+            .await
+            .expect("admit replay");
+    } else {
+        let opened = supervisor
+            .open_provider_fixture(&target.endpoint, root.path().to_owned())
+            .await
+            .expect("session opens");
+        assert_eq!(opened, String::from(target.session_id.clone()));
+        supervisor
+            .prompt(ConversationPromptRequest {
+                delivery: MessageDelivery::Auto,
+                input_id: None,
+                operation_id: operation_id.clone(),
+                target: target.clone(),
+                generation: None,
+                requested_by: target.clone().into(),
+                approver: target.into(),
+                prompt: MessageContent::HumanUser {
+                    text: MessageText::try_from("Reply".to_owned()).expect("prompt"),
+                },
+            })
+            .await
+            .expect("admit live prompt");
+    }
+    supervisor
+        .wait(ConversationOperationWaitRequest {
+            operation_id,
+            timeout_seconds: PositiveSeconds::try_from(5).expect("bound"),
+        })
+        .await
+        .expect("owner operation settles");
 
-    // Act: both session/load replay and live session/prompt reach the same projection.
-    tokio::time::timeout(Duration::from_secs(5), async {
-        if replay {
-            client
-                .load_session("metadata-session".into(), root.path().to_path_buf())
-                .await
-                .expect("provider replay loads");
-        } else {
-            let session = client
-                .create_session(root.path().to_path_buf())
-                .await
-                .expect("session opens");
-            client
-                .submit_with_approval_dispatch_for_input(
-                    session,
-                    session_event_model::InputId::generate(),
-                    acp_client_runtime::ProviderTurnInput::Prompt(
-                        session_event_model::ProviderSubmission::plain(vec![
-                            session_event_model::PromptContent::text("Reply".into())
-                                .expect("prompt"),
-                        ]),
-                    ),
-                    (),
-                    None,
-                )
-                .await
-                .expect("provider prompt settles");
-        }
-    })
-    .await
-    .expect("provider operation deadline");
-    client.shutdown().await;
     let mut items = Vec::new();
     let mut completed_items = Vec::new();
-    while let Ok(event) = received.try_recv() {
-        match event {
+    let mut buffered = VecDeque::from(std::mem::take(&mut attached.snapshot));
+    loop {
+        let observed = match buffered.pop_front() {
+            Some(observed) => observed,
+            None => attached
+                .receiver
+                .recv()
+                .await
+                .expect("hub event until resync"),
+        };
+        match observed.event {
+            SessionEvent::ResyncRequired { replay_epoch } => {
+                attached = hub
+                    .attach(board.clone())
+                    .await
+                    .expect("attach to the current epoch");
+                assert!(attached.epoch >= replay_epoch);
+                buffered = VecDeque::from(std::mem::take(&mut attached.snapshot));
+                items.clear();
+                completed_items.clear();
+            }
             SessionEvent::ItemStarted { item } => items.push(item),
             SessionEvent::ItemCompleted { item_id } => completed_items.push(item_id),
+            SessionEvent::TurnEnded { .. } if !replay => break,
+            SessionEvent::StateChanged {
+                state: session_event_model::SessionState::Idle,
+            } if replay => break,
             _ => {}
         }
     }
+    supervisor.shutdown().await.expect("stop Host");
 
     // Assert retention separately: suppressing the producer would fail these checks.
     let usage = items

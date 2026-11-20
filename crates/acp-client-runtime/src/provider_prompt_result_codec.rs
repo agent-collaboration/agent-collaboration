@@ -1,7 +1,6 @@
 //! Decode an ACP prompt result without the SDK's closed stop-reason enum.
 
 use crate::provider_client_contract::ExternalProviderRuntimeError;
-use agent_client_protocol::schema::v1::StopReason;
 use session_event_model::StopReason as ProviderPromptStopReason;
 
 pub(crate) fn decode_prompt_result(
@@ -20,19 +19,6 @@ pub(crate) fn decode_prompt_result(
         unknown => Ok(ProviderPromptStopReason::Unknown(
             safe_unknown_stop_reason(unknown).to_owned(),
         )),
-    }
-}
-
-pub(crate) fn decode_typed_stop_reason(
-    reason: StopReason,
-) -> Result<ProviderPromptStopReason, ExternalProviderRuntimeError> {
-    match reason {
-        StopReason::EndTurn => Ok(ProviderPromptStopReason::EndTurn),
-        StopReason::MaxTokens => Ok(ProviderPromptStopReason::MaxTokens),
-        StopReason::MaxTurnRequests => Ok(ProviderPromptStopReason::MaxTurnRequests),
-        StopReason::Refusal => Ok(ProviderPromptStopReason::Refusal),
-        StopReason::Cancelled => Ok(ProviderPromptStopReason::Cancelled),
-        _ => Ok(ProviderPromptStopReason::Unknown("unrecognized".to_owned())),
     }
 }
 

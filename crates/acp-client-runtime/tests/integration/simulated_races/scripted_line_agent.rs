@@ -31,6 +31,7 @@ pub(super) struct ScriptedLineAgent {
     load_released: Arc<AtomicBool>,
     held_load_answered: Arc<AtomicBool>,
     restore_error: Arc<Mutex<Option<i32>>>,
+    next_restore_replay: Arc<Mutex<Option<String>>>,
     restored_mode: Arc<Mutex<Option<String>>>,
     mode_sets: Arc<Mutex<Vec<String>>>,
     prompt_sessions: Arc<Mutex<Vec<String>>>,
@@ -136,6 +137,13 @@ impl ScriptedLineAgent {
             .restore_error
             .lock()
             .unwrap_or_else(PoisonError::into_inner) = Some(code);
+    }
+
+    pub(super) fn replay_on_next_restore(&self, text: &str) {
+        *self
+            .next_restore_replay
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(text.to_owned());
     }
 
     pub(super) async fn held_load_answer_sent(&self) {
@@ -450,6 +458,18 @@ impl ScriptedLineAgent {
                     reply
                 }
                 "session/load" | "session/resume" => {
+                    let replay = self
+                        .next_restore_replay
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .take();
+                    if let Some(replay) = replay {
+                        let session = frame
+                            .pointer("/params/sessionId")
+                            .and_then(Value::as_str)
+                            .expect("restore session");
+                        self.send_replay_chunk(session, &replay).await;
+                    }
                     let restored = self
                         .restored_mode
                         .lock()

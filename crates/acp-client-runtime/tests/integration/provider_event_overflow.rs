@@ -8,10 +8,11 @@ use std::{
     },
 };
 
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::{
-    AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
-    ExternalProviderRuntimeError, HistoryReplayFuture, InteractionFuture, InteractionPort,
-    ProviderPersistenceTarget, RefusedApprovalOffer, SessionEventSink,
+    ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch, ExternalProviderRuntimeError,
+    HistoryReplayFuture, InteractionFuture, InteractionPort, ProviderPersistenceTarget,
+    RefusedApprovalOffer, SessionEventSink,
 };
 use session_event_model::{ApprovalRequest, LocalCause, SessionEvent, StopReason, TurnOutcome};
 use tokio_util::sync::CancellationToken;
@@ -91,6 +92,22 @@ struct CaptureEventSink {
     closed: AtomicBool,
 }
 impl SessionEventSink for CaptureEventSink {
+    fn publish_connection_auth(
+        &self,
+        session: &str,
+        auth_status: session_event_model::ProviderAuthStatus,
+    ) -> Result<(), EventSinkClosed> {
+        self.publish(
+            session,
+            SessionEvent::CapabilitiesChanged {
+                capabilities: session_event_model::CapabilityReport {
+                    auth_status,
+                    ..Default::default()
+                },
+            },
+        )
+    }
+
     fn publish_skill_view(
         &self,
         _session_id: &str,
@@ -117,7 +134,8 @@ impl SessionEventSink for CaptureEventSink {
         }
         if (self.reject_items && matches!(event, SessionEvent::ItemStarted { .. }))
             || (self.reject_capabilities
-                && matches!(event, SessionEvent::CapabilitiesChanged { .. }))
+                && matches!(&event, SessionEvent::CapabilitiesChanged { capabilities }
+                    if matches!(capabilities.auth_status, session_event_model::ProviderAuthStatus::LoggedOut)))
         {
             self.closed.store(true, Ordering::SeqCst);
             return Err(EventSinkClosed);
@@ -156,9 +174,8 @@ async fn run_fixture(
         .create_session(root.path().to_path_buf())
         .await
         .expect("session opens");
-    let result = tokio::time::timeout(
-        std::time::Duration::from_secs(2),
-        client.submit_with_approval_dispatch_for_input(
+    let result = client
+        .submit_with_approval_dispatch_for_input(
             session_id,
             session_event_model::InputId::generate(),
             acp_client_runtime::ProviderTurnInput::Prompt(
@@ -169,10 +186,8 @@ async fn run_fixture(
             ),
             (),
             None,
-        ),
-    )
-    .await
-    .expect("turn settles");
+        )
+        .await;
     client.shutdown().await;
     (result, sink)
 }
@@ -189,8 +204,12 @@ async fn output_byte_limit_cancels_turn_and_keeps_agent_stop_reason() {
     ));
     let events = sink.events.lock().expect("event sink");
     assert!(matches!(
-        events.first(),
-        Some(SessionEvent::SettingsChanged { .. })
+        events.as_slice(),
+        [
+            SessionEvent::CapabilitiesChanged { .. },
+            SessionEvent::SettingsChanged { .. },
+            ..
+        ]
     ));
     assert!(
         events
@@ -209,10 +228,9 @@ async fn output_byte_limit_cancels_turn_and_keeps_agent_stop_reason() {
     )));
 }
 
-/// A closed event consumer is a typed shutdown, without inventing an agent
-/// stop reason or treating it as the prompt byte limit.
+/// T6. A failed publication does not replace the provider's prompt result.
 #[tokio::test]
-async fn closed_event_consumer_ends_active_turn_with_sink_closed() {
+async fn closed_event_consumer_keeps_the_provider_prompt_result() {
     let (result, sink) = run_fixture(
         CLOSED_SINK_FIXTURE,
         Arc::new(CaptureEventSink {
@@ -221,14 +239,21 @@ async fn closed_event_consumer_ends_active_turn_with_sink_closed() {
         }),
     )
     .await;
-    assert!(matches!(
-        result,
-        Err(ExternalProviderRuntimeError::SinkClosed)
-    ));
+    let completed = result.expect("the provider prompt still completes");
+    assert_eq!(completed.stop_reason, StopReason::EndTurn);
+    assert_eq!(completed.output, "Chunk");
+    assert!(
+        sink.closed.load(Ordering::SeqCst),
+        "the item publication was refused"
+    );
     let events = sink.events.lock().expect("event sink");
     assert!(matches!(
-        events.first(),
-        Some(SessionEvent::SettingsChanged { .. })
+        events.as_slice(),
+        [
+            SessionEvent::CapabilitiesChanged { .. },
+            SessionEvent::SettingsChanged { .. },
+            ..
+        ]
     ));
     assert!(
         events
@@ -242,10 +267,9 @@ async fn closed_event_consumer_ends_active_turn_with_sink_closed() {
     );
 }
 
-/// A connection-scoped callback also retires the active prompt with the same
-/// typed shutdown when its consumer closes.
+/// A refused auth publication does not settle the active prompt locally.
 #[tokio::test]
-async fn closed_auth_event_consumer_retires_active_prompt() {
+async fn closed_auth_event_consumer_keeps_the_provider_prompt_result() {
     let (result, sink) = run_fixture(
         CLOSED_AUTH_SINK_FIXTURE,
         Arc::new(CaptureEventSink {
@@ -254,14 +278,24 @@ async fn closed_auth_event_consumer_retires_active_prompt() {
         }),
     )
     .await;
+    assert_eq!(
+        result
+            .expect("the provider prompt still completes")
+            .stop_reason,
+        StopReason::EndTurn
+    );
     assert!(
-        matches!(result, Err(ExternalProviderRuntimeError::SinkClosed)),
-        "result: {result:?}"
+        sink.closed.load(Ordering::SeqCst),
+        "the signed-out publication was refused"
     );
     let events = sink.events.lock().expect("event sink");
     assert!(matches!(
-        events.first(),
-        Some(SessionEvent::SettingsChanged { .. })
+        events.as_slice(),
+        [
+            SessionEvent::CapabilitiesChanged { .. },
+            SessionEvent::SettingsChanged { .. },
+            ..
+        ]
     ));
     assert!(
         events
@@ -279,8 +313,12 @@ async fn provider_eof_ends_running_turn_lost() {
     assert!(result.is_err());
     let events = sink.events.lock().expect("event sink");
     assert!(matches!(
-        events.first(),
-        Some(SessionEvent::SettingsChanged { .. })
+        events.as_slice(),
+        [
+            SessionEvent::CapabilitiesChanged { .. },
+            SessionEvent::SettingsChanged { .. },
+            ..
+        ]
     ));
     assert!(
         events

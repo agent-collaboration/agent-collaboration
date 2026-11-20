@@ -362,9 +362,13 @@ async fn thinking_first_and_explicit_effort_win_without_companion_rewrites() {
                 },
             )
             .await;
-        fixture.client.shutdown().await;
         let observed = observed.expect("independent advertised effort must apply");
         assert_eq!(observed.effort.as_deref(), Some("high"));
+        let catalog = fixture
+            .client
+            .settings_catalog(&session)
+            .expect("live catalog");
+        fixture.client.shutdown().await;
         let requests = fixture.requests();
         assert_eq!(requests.len(), 3);
         assert_eq!(requests[2]["method"], "session/set_config_option");
@@ -378,7 +382,6 @@ async fn thinking_first_and_explicit_effort_win_without_companion_rewrites() {
             serde_json::json!({
             "sessionId":"fixture-session", "configId":config_id, "value":"high"})
         );
-        let catalog = fixture.client.settings_catalog(&session).expect("catalog");
         for (config_id, value) in [
             ("model", "fixture-a"),
             ("thinking", "true"),

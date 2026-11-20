@@ -132,17 +132,11 @@ impl ScheduledRunExecution for ProviderAcpScheduledRuns {
                 if let ScheduleDestination::Existing { target } = &destination
                     && !self.has_capability(endpoint, ProviderCapabilityName::Load)
                 {
-                    let loaded = if let Some(runtime) = self.supervisor.runtime_for(endpoint) {
-                        matches!(
-                            runtime
-                                .session_activity(String::from(target.session_id.clone()))
-                                .await,
-                            Ok(crate::ProviderSessionActivity::Idle
-                                | crate::ProviderSessionActivity::Running)
-                        )
-                    } else {
-                        false
-                    };
+                    let loaded = matches!(
+                        self.supervisor.owner_session_activity(target),
+                        crate::ProviderSessionActivity::Idle
+                            | crate::ProviderSessionActivity::Running
+                    );
                     if !loaded {
                         missing.push(ScheduleCapability::ReadTarget);
                     }

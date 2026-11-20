@@ -2,6 +2,107 @@
 
 use crate::provider_client_contract::{ExternalProviderRuntimeError, ProviderErrorCorrelationId};
 use agent_client_protocol::schema::v1::ErrorCode;
+use provider_session_machines::session_owner::{ProviderWireFailure, ProviderWireFailureKind};
+
+impl ExternalProviderRuntimeError {
+    #[must_use]
+    pub fn coded_wire_failure(&self) -> Option<ProviderWireFailure> {
+        use ExternalProviderRuntimeError as RuntimeError;
+        use ProviderWireFailureKind as Kind;
+
+        let (kind, code, correlation_id) = match *self {
+            RuntimeError::AuthenticationRequired {
+                code,
+                correlation_id,
+            } => (Kind::AuthenticationRequired, code, correlation_id),
+            RuntimeError::ProviderSessionNotFound {
+                code,
+                correlation_id,
+            } => (Kind::SessionNotFound, code, correlation_id),
+            RuntimeError::ResourceNotFound {
+                code,
+                correlation_id,
+            } => (Kind::ResourceNotFound, code, correlation_id),
+            RuntimeError::UnsupportedMethod {
+                code,
+                correlation_id,
+            } => (Kind::UnsupportedMethod, code, correlation_id),
+            RuntimeError::InvalidParams {
+                code,
+                correlation_id,
+            } => (Kind::InvalidParams, code, correlation_id),
+            RuntimeError::RequestCancelled {
+                code,
+                correlation_id,
+            } => (Kind::RequestCancelled, code, correlation_id),
+            RuntimeError::ProviderRejected {
+                code,
+                correlation_id,
+            } => (Kind::Rejected, code, correlation_id),
+            RuntimeError::RestoreFailed {
+                code,
+                correlation_id,
+            } => (Kind::RestoreFailed, code, correlation_id),
+            RuntimeError::RestoreRefused {
+                code,
+                correlation_id,
+            } => (Kind::RestoreRefused, code, correlation_id),
+            _ => return None,
+        };
+        Some(ProviderWireFailure {
+            kind,
+            code,
+            correlation_id: correlation_id.0,
+        })
+    }
+}
+
+impl From<ProviderWireFailure> for ExternalProviderRuntimeError {
+    fn from(failure: ProviderWireFailure) -> Self {
+        use ProviderWireFailureKind as Kind;
+
+        let code = failure.code;
+        let correlation_id = ProviderErrorCorrelationId(failure.correlation_id);
+        match failure.kind {
+            Kind::AuthenticationRequired => Self::AuthenticationRequired {
+                code,
+                correlation_id,
+            },
+            Kind::SessionNotFound => Self::ProviderSessionNotFound {
+                code,
+                correlation_id,
+            },
+            Kind::ResourceNotFound => Self::ResourceNotFound {
+                code,
+                correlation_id,
+            },
+            Kind::UnsupportedMethod => Self::UnsupportedMethod {
+                code,
+                correlation_id,
+            },
+            Kind::InvalidParams => Self::InvalidParams {
+                code,
+                correlation_id,
+            },
+            Kind::RequestCancelled => Self::RequestCancelled {
+                code,
+                correlation_id,
+            },
+            Kind::Rejected => Self::ProviderRejected {
+                code,
+                correlation_id,
+            },
+            Kind::RestoreFailed => Self::RestoreFailed {
+                code,
+                correlation_id,
+            },
+            Kind::RestoreRefused => Self::RestoreRefused {
+                code,
+                correlation_id,
+            },
+        }
+    }
+}
 
 // Only the adapter's finite reported convention is retained. It is not vendor attribution.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

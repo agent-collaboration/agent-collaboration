@@ -63,10 +63,6 @@ async fn unknown_agent_stop_reason_settles_with_typed_value() {
     )
     .await
     .expect("fixture initializes");
-    runtime
-        .create_session(root.path().to_owned())
-        .await
-        .expect("session created");
     let store = Arc::new(Mutex::new(
         ProviderOperationStore::open(&root.path().join("operations.sqlite"))
             .await
@@ -80,6 +76,10 @@ async fn unknown_agent_stop_reason_settles_with_typed_value() {
         store,
     )
     .expect("supervisor");
+    backend
+        .open_provider_fixture(&endpoint(), root.path().to_owned())
+        .await
+        .expect("session created");
     let operation_id = OperationId::generate();
     assert_eq!(
         backend

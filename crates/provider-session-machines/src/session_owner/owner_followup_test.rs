@@ -1,5 +1,151 @@
 use super::*;
 
+fn submit_evidenced_queue(state: &mut SessionOwnerState, input: OwnerInput) -> Vec<OwnerEffect> {
+    command(
+        state,
+        SessionOwnerCommand::PlaceDelivery {
+            input,
+            delivery: DeliveryInput::Prompt {
+                admission: PromptAdmission::Queue,
+                selected: Vec::new(),
+            },
+        },
+    )
+}
+
+fn pending_placement(effects: &[OwnerEffect], kind: DeliveryPlacementKind) -> DeliveryPlacement {
+    assert!(!effects.iter().any(|effect| matches!(
+        effect,
+        OwnerEffect::Store(
+            SessionStoreRequest::MarkDispatch(_) | SessionStoreRequest::MarkSteerDispatch(_)
+        ) | OwnerEffect::Authorize { .. }
+    )));
+    effects
+        .iter()
+        .find_map(|effect| match effect {
+            OwnerEffect::RecordDeliveryEvidence(placement) if placement.kind == kind => {
+                Some(placement.clone())
+            }
+            _ => None,
+        })
+        .expect("one placement offered before its mark")
+}
+
+#[test]
+fn t4_cold_queue_records_intake_before_releasing_the_exact_restore() {
+    let mut state = fresh();
+    let queued = input(SessionGeneration::from_number(1), 2);
+    let attempt = LoadAttempt(uuid(3));
+    let held = command(
+        &mut state,
+        SessionOwnerCommand::QueueColdDelivery {
+            input: queued.clone(),
+            attempt,
+            selected: Vec::new(),
+            record_evidence: true,
+        },
+    );
+    let intake = pending_placement(&held, DeliveryPlacementKind::Queue);
+    assert!(!held.iter().any(|effect| matches!(
+        effect,
+        OwnerEffect::Store(SessionStoreRequest::ReadRestoreSetup(_))
+    )));
+
+    let released = apply(
+        &mut state,
+        OwnerEvent::DeliveryEvidence {
+            placement: intake,
+            outcome: EffectOutcome::Applied,
+        },
+    );
+    let accepted = released
+        .iter()
+        .position(|effect| *effect == OwnerEffect::InputQueued(queued.clone()))
+        .expect("queue acceptance before the restore can settle");
+    let setup_read = released
+        .iter()
+        .position(|effect| {
+            *effect
+                == OwnerEffect::Store(SessionStoreRequest::ReadRestoreSetup(RunAttempt {
+                    generation: queued.generation,
+                    attempt,
+                }))
+        })
+        .expect("the queued input releases its exact restore's setup read");
+    assert!(accepted < setup_read);
+}
+
+#[test]
+fn t2_queued_delivery_records_intake_then_dispatch_evidence_before_its_first_mark() {
+    let mut state = fresh();
+    let run = restore_live(&mut state, 1);
+    let queued = input(run.generation, 2);
+    let admission = submit_evidenced_queue(&mut state, queued.clone());
+    let intake = pending_placement(&admission, DeliveryPlacementKind::Queue);
+    assert_eq!(intake.input, queued);
+    assert!(!admission.contains(&OwnerEffect::InputQueued(queued.clone())));
+
+    let dispatching = apply(
+        &mut state,
+        OwnerEvent::DeliveryEvidence {
+            placement: intake,
+            outcome: EffectOutcome::Applied,
+        },
+    );
+    assert!(dispatching.contains(&OwnerEffect::InputQueued(queued.clone())));
+    let dispatch = pending_placement(&dispatching, DeliveryPlacementKind::Start);
+    assert_eq!(dispatch.input, queued);
+    let marked = apply(
+        &mut state,
+        OwnerEvent::DeliveryEvidence {
+            placement: dispatch,
+            outcome: EffectOutcome::Applied,
+        },
+    );
+    assert!(
+        marked.contains(&OwnerEffect::Store(SessionStoreRequest::MarkDispatch(
+            queued
+        )))
+    );
+}
+
+#[test]
+fn t2_expired_dispatch_evidence_retires_a_queue_input_before_its_first_mark() {
+    let mut state = fresh();
+    let run = restore_live(&mut state, 1);
+    let queued = input(run.generation, 2);
+    let admission = submit_evidenced_queue(&mut state, queued.clone());
+    let intake = pending_placement(&admission, DeliveryPlacementKind::Queue);
+    let dispatching = apply(
+        &mut state,
+        OwnerEvent::DeliveryEvidence {
+            placement: intake,
+            outcome: EffectOutcome::Applied,
+        },
+    );
+    let dispatch = pending_placement(&dispatching, DeliveryPlacementKind::Start);
+    let effects = apply(
+        &mut state,
+        OwnerEvent::Deadline(OwnerDeadline::DeliveryEvidence(dispatch.clone())),
+    );
+    assert!(!effects.iter().any(|effect| matches!(
+        effect,
+        OwnerEffect::Store(SessionStoreRequest::MarkDispatch(_)) | OwnerEffect::Authorize { .. }
+    )));
+    assert!(effects.iter().any(|effect| matches!(effect,
+        OwnerEffect::Store(SessionStoreRequest::RecordTerminal { reply, .. })
+            if **reply == SessionOwnerReply::InputUnsent { input: queued.clone(), reason: RevokeReason::DeliveryEvidenceUnavailable }
+    )));
+    let late = state.decide(OwnerMailboxEvent {
+        owner: dispatch.owner,
+        event: OwnerEvent::DeliveryEvidence {
+            placement: dispatch,
+            outcome: EffectOutcome::Applied,
+        },
+    });
+    assert!(matches!(late, Err(SessionOwnerRejection::IgnoredLate)));
+}
+
 fn pending_steer(state: &mut SessionOwnerState, foreground: &OwnerInput) -> OwnerInput {
     let request = OwnerInput {
         turn: foreground.turn,
@@ -121,7 +267,17 @@ fn t2_revoking_a_cancel_does_not_change_its_existing_turn_membership() {
     assert!(cancel.matches_route(run.generation, Some(foreground.turn)));
     no_membership_change(&effects);
 
-    deadline(&mut state, OwnerDeadline::Enqueue(cancel.clone()));
+    let closed = command(
+        &mut state,
+        SessionOwnerCommand::Close {
+            generation: run.generation,
+            attempt: CloseAttempt(uuid(3)),
+        },
+    );
+    assert!(closed.contains(&OwnerEffect::Revoke {
+        authorization: cancel.clone(),
+        reason: RevokeReason::Closed,
+    }));
     let revoked = apply(
         &mut state,
         OwnerEvent::Dispatch(DispatchResult::Revoked(cancel.clone())),
@@ -129,11 +285,11 @@ fn t2_revoking_a_cancel_does_not_change_its_existing_turn_membership() {
     no_membership_change(&revoked);
     assert!(revoked.contains(&OwnerEffect::CancelNotSent {
         authorization: cancel,
-        reason: RevokeReason::EnqueueExpired,
+        reason: RevokeReason::Closed,
     }));
     assert_eq!(
         state.snapshot().turn,
-        SessionTurn::Running {
+        SessionTurn::Cancelling {
             turn: foreground.turn
         }
     );
@@ -373,4 +529,124 @@ fn t4_fallback_restore_setting_still_commits_with_its_actual_value() {
         RestoreModeOutcome::FellBack(SettingValueId("default".into())),
     );
     assert_usable_with_mode_delta(&mut state, run, "default", ObservationCause::FellBack);
+}
+
+#[test]
+fn t2_explicit_steer_on_idle_uses_the_prompt_path_and_preserves_the_input() {
+    let mut state = fresh();
+    let run = restore_live(&mut state, 1);
+    let request = input(run.generation, 2);
+    let effects = command(
+        &mut state,
+        SessionOwnerCommand::Steer {
+            input: request.clone(),
+            supported: true,
+        },
+    );
+    assert!(effects.contains(&OwnerEffect::IdleSteerUsesPrompt(request.clone())));
+    assert!(
+        effects.contains(&OwnerEffect::Store(SessionStoreRequest::MarkDispatch(
+            request.clone()
+        )))
+    );
+    assert!(!effects.iter().any(|effect| matches!(
+        effect,
+        OwnerEffect::Store(SessionStoreRequest::MarkSteerDispatch(_))
+    )));
+
+    let marked = apply(
+        &mut state,
+        OwnerEvent::Store(SessionStoreResult::Dispatch {
+            input: request.clone(),
+            outcome: EffectOutcome::Applied,
+        }),
+    );
+    let token = authorization(&marked);
+    assert_eq!(token.target, AuthorizationTarget::NewTurn);
+    assert_eq!(token.input_id, request.input);
+}
+
+#[test]
+fn t2_correlated_provider_started_turn_is_applied_and_eligible_without_another_send() {
+    let mut state = fresh();
+    let run = restore_live(&mut state, 1);
+    let foreground = input(run.generation, 2);
+    let first = send_prompt(&mut state, &foreground);
+    let request = pending_steer(&mut state, &foreground);
+    let marked = apply(&mut state, steer_marked(&request));
+    let steer = authorization(&marked);
+    apply(
+        &mut state,
+        OwnerEvent::Dispatch(DispatchResult::Taken(steer.clone())),
+    );
+    let observed_turn = TurnId(uuid(4));
+    let response = OwnerEvent::Dispatch(DispatchResult::SteerStartedNewTurn {
+        authorization: steer,
+        turn: observed_turn,
+    });
+    let effects = apply_pending(&mut state, response.clone());
+    assert!(effects.iter().any(|effect| matches!(effect,
+        OwnerEffect::Store(SessionStoreRequest::RecordTerminal { reply, .. })
+            if **reply == SessionOwnerReply::SteerStarted { input: request.clone(), turn: observed_turn })));
+    assert!(effects.contains(&OwnerEffect::CallbackMembership(
+        TurnMembership::ObservedEligible {
+            run: run.generation,
+            turn: observed_turn,
+        }
+    )));
+    assert!(
+        effects.contains(&OwnerEffect::ProviderStartedTurn(OwnerInput {
+            turn: observed_turn,
+            ..request
+        }))
+    );
+    assert!(
+        !effects
+            .iter()
+            .any(|effect| matches!(effect, OwnerEffect::Authorize { .. })),
+        "the provider already applied the steer input"
+    );
+    assert_eq!(
+        state.snapshot().turn,
+        SessionTurn::Running {
+            turn: observed_turn
+        }
+    );
+    assert_late(&state, response);
+    let prior_terminal = apply_pending(
+        &mut state,
+        OwnerEvent::Dispatch(DispatchResult::PromptFinished {
+            authorization: first,
+            outcome: WireOutcome::Confirmed(PromptCompletion {
+                stop_reason: session_event_model::StopReason::EndTurn,
+                local_cause: None,
+                response: String::new(),
+            }),
+        }),
+    );
+    assert!(prior_terminal.iter().any(|effect| matches!(effect,
+        OwnerEffect::Store(SessionStoreRequest::RecordTerminal { reply, .. })
+            if matches!(reply.as_ref(), SessionOwnerReply::PromptCompleted { input, .. } if input == &foreground)
+    )));
+    assert!(prior_terminal.iter().any(|effect| matches!(effect,
+        OwnerEffect::Publish(PublicationBatch::Commit { facts, .. }) if facts.iter().any(|fact|
+            matches!(fact, PublicationFact::Live(SessionPublication::PreviousTurnEnded { turn, .. }) if *turn == foreground.turn))
+    )));
+    assert_eq!(
+        state.snapshot().turn,
+        SessionTurn::Running {
+            turn: observed_turn
+        }
+    );
+    apply(
+        &mut state,
+        OwnerEvent::ObservedTurnEnded {
+            run: run.generation,
+            turn: observed_turn,
+            outcome: session_event_model::TurnOutcome::Lost {
+                reason: session_event_model::TurnLostReason::EndNotObservable,
+            },
+        },
+    );
+    assert_eq!(state.snapshot().turn, SessionTurn::Idle);
 }

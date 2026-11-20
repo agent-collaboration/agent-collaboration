@@ -1,4 +1,3 @@
-use super::provider_operation_failure::restore_operation_failure;
 use super::{
     Arc, ConversationBindingIdentity, ConversationCancelRequest, ConversationCloseRequest,
     ConversationCreateRequest, ConversationLoadRequest, ConversationOperationFailureKind,
@@ -15,7 +14,7 @@ use super::{
     ProviderReconciliationState, ProviderSessionInspectFuture, ProviderSessionInspectRequest,
     ProviderSettingsAcceptRequest, ProviderSettingsFuture, ProviderSettingsSetRequest, SessionId,
     SessionRef, admitted_submission, effective_settings, existing_submission, failure,
-    invalid_setting_failure, now_ms, provider_applied_setting, provider_failed_setting,
+    invalid_setting_failure, provider_applied_setting, provider_failed_setting,
     provider_session_inspection, provider_session_lifecycle, provider_session_record,
     provider_settings_control, retain_operation, runtime_failure, snapshot_failure,
     snapshot_from_record, unavailable_failure,
@@ -181,6 +180,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                     let named_work_roots = request.work_roots;
                     let scratch_root = backend.inner.scratch_root.clone();
                     let completion_inner = Arc::clone(&backend.inner);
+                    let completion_backend = backend.clone();
                     backend.spawn_operation(operation_id.clone(), live, async move {
                         let scratch_folder = match super::provider_session_scratch::prepare_provider_session_scratch(scratch_root.as_deref()).await {
                             Ok(scratch_folder) => scratch_folder,
@@ -198,35 +198,34 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                         let cwd = PathBuf::from(String::from(working_directory.clone()));
                         let work_roots = crate::provider_session_setup::session_work_roots(&configured_roots, &cwd, scratch_folder.as_deref(), &named_roots, auto);
                         let resume = crate::provider_operation_settlement::created_session_resume_inputs(requested_settings.mode.clone(), named_work_roots, scratch_folder.as_deref());
-                        match runtime
-                            .create_session_with_work_roots(
-                                cwd,
-                                scratch_folder,
-                                acp_client_runtime::RequestedProviderSettings {
-                                    mode: requested_settings.mode,
-                                    model: requested_settings.model,
-                                    effort: requested_settings.effort,
-                                    // Owner, 2026-11-15: "--fast off is default in ckursor ...
-                                    // unless user provices --fast auto" (D1 R7).
-                                    fast: if requested_settings.fast == Some(collaboration_protocol::FastSetting::Auto) {
-                                        acp_client_runtime::FastRequest::Leave
-                                    } else {
-                                        acp_client_runtime::FastRequest::OffIfOffered
-                                    },
+                        let Some(owner_door) = completion_backend.owner_door(&endpoint) else {
+                            return ProviderOperationCompletion::Failure(unavailable_failure(operation_id, None));
+                        };
+                        let created = owner_door.create(
+                            endpoint.clone(),
+                            operation_id.clone(),
+                            acp_client_runtime::owner_session_open::OwnerSessionOpenSetup { cwd, scratch_folder, work_roots },
+                            acp_client_runtime::RequestedProviderSettings {
+                                mode: requested_settings.mode,
+                                model: requested_settings.model,
+                                effort: requested_settings.effort,
+                                fast: if requested_settings.fast == Some(collaboration_protocol::FastSetting::Auto) {
+                                    acp_client_runtime::FastRequest::Leave
+                                } else {
+                                    acp_client_runtime::FastRequest::OffIfOffered
                                 },
-                                work_roots,
-                            )
-                            .await
-                        {
+                            },
+                            configured_roots,
+                        ).await.and_then(|setup| setup.settings_failure.map_or(Ok(setup.created), Err));
+                        match created {
                             Ok(created) => {
-                                let catalog = runtime.settings_catalog(&created.provider_session_id);
                                 match SessionId::try_from(created.provider_session_id) {
                                     Ok(session_id) => {
                                         let target = SessionRef {
                                             endpoint,
                                             session_id,
                                         };
-                                        if let Some(catalog) = catalog {
+                                        if let Some(catalog) = completion_backend.owner_session_catalog(&target) {
                                             completion_inner.record_settings_catalog(target.clone(), catalog).await;
                                         }
                                         let mut observed = effective_settings(requested_policy.clone());
@@ -251,6 +250,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                                     created_by,
                                                     approver,
                                                     resume,
+                                                    completion_inner.now_ms(),
                                                 ),
                                             )),
                                         }
@@ -272,11 +272,10 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                 not_applied,
                                 permission_mode,
                             }) => {
-                                let catalog = runtime.settings_catalog(&provider_session_id);
                                 match SessionId::try_from(provider_session_id) {
                                 Ok(session_id) => {
                                     let target = SessionRef { endpoint, session_id };
-                                    if let Some(catalog) = catalog {
+                                    if let Some(catalog) = completion_backend.owner_session_catalog(&target) {
                                         completion_inner.record_settings_catalog(target.clone(), catalog).await;
                                     }
                                     // Show keeps the requested mode and reason of a partial start too.
@@ -296,6 +295,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                             created_by,
                                             approver,
                                             resume,
+                                            completion_inner.now_ms(),
                                         ))),
                                     }
                                 }
@@ -338,6 +338,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                                 created_by,
                                                 approver,
                                                 resume,
+                                                completion_inner.now_ms(),
                                             )),
                                         }
                                     }
@@ -393,92 +394,24 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                 PreparedOperation::Existing(operation) => Ok(existing_submission(operation)),
                 PreparedOperation::Admitted { snapshot, live } => {
                     let operation_id = request.operation_id.clone();
-                    let provider_session_id = String::from(target.session_id.clone());
-                    let requested_policy = request.requested_policy;
-                    let working_directory = request.working_directory;
-                    let created_by = request.requested_by;
-                    let approver = request.approver;
-                    let completion_target = target.clone();
-                    let completion_inner = Arc::clone(&backend.inner);
+                    let record = Box::new(provider_session_record(
+                        target,
+                        request.working_directory,
+                        request.requested_policy,
+                        request.requested_by,
+                        request.approver,
+                        collaboration_runtime::ProviderSessionResumeInputs::default(),
+                        backend.inner.now_ms(),
+                    ));
+                    let completion_backend = backend.clone();
                     backend.spawn_operation(operation_id.clone(), live, async move {
-                        let cwd = PathBuf::from(String::from(working_directory.clone()));
-                        // One mode operation at a time per session: the record read and the mode
-                        // the restore puts back wait for any explicit change still recording,
-                        // and a change waits for the restore (review F3).
-                        let _mode_turn = runtime
-                            .session_setup()
-                            .mode_order()
-                            .enter(&provider_session_id)
-                            .await;
-                        // The setup its create had, rebuilt from its record (D1 R18; Decision 3).
-                        let setup = match crate::provider_session_setup::recorded_restore_setup(
-                            &completion_inner.store,
-                            runtime.session_setup(),
-                            &completion_target,
-                            &cwd,
+                        super::provider_owner_operations::restore(
+                            &completion_backend,
+                            operation_id,
+                            record,
+                            provider_session_machines::session_lifecycle_machine::RestoreVia::Load,
                         )
                         .await
-                        {
-                            Ok(setup) => setup,
-                            Err(_) => {
-                                return ProviderOperationCompletion::Failure(failure(
-                                    ConversationOperationFailureKind::Unavailable,
-                                    ConversationOperationFailureStage::Dispatch,
-                                    ProviderOperationEffect::None,
-                                    "the session's record could not be read",
-                                    operation_id,
-                                    Some(completion_target),
-                                ));
-                            }
-                        };
-                        match runtime
-                            .load_session_with_setup(provider_session_id.clone(), cwd, setup)
-                            .await
-                        {
-                            Ok(()) => {
-                                let mut observed = effective_settings(requested_policy.clone());
-                                if let Some(catalog) =
-                                    runtime.settings_catalog(&provider_session_id)
-                                {
-                                    let effective = catalog.effective_settings();
-                                    observed.mode = effective.mode;
-                                    observed.model = effective.model;
-                                    observed.effort = effective.effort;
-                                    observed.fast = effective.fast.map(
-                                        crate::provider_operation_settlement::provider_fast_state,
-                                    );
-                                    completion_inner
-                                        .record_settings_catalog(completion_target.clone(), catalog)
-                                        .await;
-                                }
-                                completion_inner
-                                    .history_unavailable
-                                    .lock()
-                                    .await
-                                    .remove(&completion_target);
-                                ProviderOperationCompletion::Success {
-                                    settlement: ConversationOperationSettlement::Loaded {
-                                        target: completion_target.clone(),
-                                        effective_settings: observed,
-                                    },
-                                    target: Some(completion_target.clone()),
-                                    // A load writes none of the resume inputs, so the
-                                    // ones its create recorded stay (Decision 3).
-                                    session_record: Some(Box::new(provider_session_record(
-                                        completion_target,
-                                        working_directory,
-                                        requested_policy,
-                                        created_by,
-                                        approver,
-                                        collaboration_runtime::ProviderSessionResumeInputs::default(
-                                        ),
-                                    ))),
-                                }
-                            }
-                            Err(error) => ProviderOperationCompletion::Failure(
-                                restore_operation_failure(operation_id, completion_target, error),
-                            ),
-                        }
                     });
                     Ok(admitted_submission(snapshot))
                 }
@@ -507,7 +440,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
         let backend = self.clone();
         retain_operation(operation_id, failure_target, async move {
             let target = request.target.clone();
-            let (binding, runtime) = backend.runtime_binding(
+            let (binding, _runtime) = backend.runtime_binding(
                 &target.endpoint,
                 &request.operation_id,
                 Some(target.clone()),
@@ -539,6 +472,12 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                 )?));
             }
             let target_operation = backend.inspect_record(&request.target_operation_id).await?;
+            let active_started_steer = backend
+                .owner_session_snapshot(&target)
+                .and_then(|snapshot| snapshot.provider_started_turn)
+                .is_some_and(|active| {
+                    active.operation.to_string() == request.target_operation_id.as_str()
+                });
             if target_operation.operation_kind != ProviderOperationKind::ConversationPrompt
                 || target_operation.target.as_ref() != Some(&target)
                 || !matches!(
@@ -546,7 +485,8 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                     ConversationBindingIdentity::ExternalProvider { binding }
                         if request.generation.as_ref() == Some(&binding.generation)
                 )
-                || target_operation.stage == ProviderOperationStage::Terminal
+                || (target_operation.stage == ProviderOperationStage::Terminal
+                    && !active_started_steer)
             {
                 return Err(failure(
                     ConversationOperationFailureKind::NotFound,
@@ -570,59 +510,15 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                 PreparedOperation::Admitted { snapshot, live } => {
                     let operation_id = request.operation_id.clone();
                     let target_operation_id = request.target_operation_id;
-                    let provider_session_id = String::from(target.session_id.clone());
-                    let completion_target = target.clone();
-                    // A prompt still waiting in its session's line is taken
-                    // out of it and ends not sent; one already running or
-                    // dispatched keeps the interrupt (D1 R12, R14).
-                    let waiting_input = backend
-                        .inner
-                        .queued_operations
-                        .snapshot(&target_operation_id)
-                        .ok()
-                        .flatten()
-                        .filter(|queued| {
-                            queued.queue_state
-                                == Some(collaboration_protocol::ConversationOperationQueueState::RouterQueued)
-                        })
-                        .and_then(|queued| queued.input_id);
-                    let dequeued = waiting_input.is_some_and(|input_id| {
-                        backend
-                            .message_fifo()
-                            .is_some_and(|fifo| fifo.cancel_queued(&target, &input_id).is_ok())
-                    });
+                    let completion_backend = backend.clone();
                     backend.spawn_operation(operation_id.clone(), live, async move {
-                        if dequeued {
-                            return ProviderOperationCompletion::Success {
-                                settlement: ConversationOperationSettlement::CancelRequested {
-                                    target: completion_target.clone(),
-                                    target_operation_id,
-                                },
-                                target: Some(completion_target),
-                                session_record: None,
-                            };
-                        }
-                        match runtime
-                            .cancel_prompt_operation(
-                                provider_session_id,
-                                target_operation_id.clone(),
-                            )
-                            .await
-                        {
-                            Ok(()) => ProviderOperationCompletion::Success {
-                                settlement: ConversationOperationSettlement::CancelRequested {
-                                    target: completion_target.clone(),
-                                    target_operation_id,
-                                },
-                                target: Some(completion_target),
-                                session_record: None,
-                            },
-                            Err(error) => ProviderOperationCompletion::Failure(runtime_failure(
-                                operation_id,
-                                Some(completion_target),
-                                error,
-                            )),
-                        }
+                        super::provider_owner_operations::cancel(
+                            &completion_backend,
+                            operation_id,
+                            target,
+                            target_operation_id,
+                        )
+                        .await
                     });
                     Ok(admitted_submission(snapshot))
                 }
@@ -646,19 +542,33 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
             if let Some(record) = stored_record {
                 let mut snapshot = snapshot_from_record(record)
                     .map_err(|message| snapshot_failure(request.operation_id.clone(), message))?;
-                // A waiting API prompt's row is Admitted; the session's line
-                // knows it is queued, or why it wasn't sent (D1 R14).
-                if snapshot.stage == collaboration_protocol::ProviderOperationStage::Admitted
-                    && let Some(queued) = self
+                if snapshot.stage == ProviderOperationStage::Admitted {
+                    let operation = uuid::Uuid::parse_str(request.operation_id.as_str()).ok();
+                    let owner_queue = snapshot
+                        .target
+                        .as_ref()
+                        .and_then(|target| self.owner_session_snapshot(target))
+                        .and_then(|owner| {
+                            owner.queue.into_iter().find(|entry| {
+                                !entry.started && Some(entry.input.operation) == operation
+                            })
+                        });
+                    if let Some(queued) = owner_queue {
+                        snapshot.queue_state = Some(
+                            collaboration_protocol::ConversationOperationQueueState::RouterQueued,
+                        );
+                        snapshot.input_id = Some(queued.input.input);
+                    } else if let Some(queued) = self
                         .inner
                         .queued_operations
                         .snapshot(&request.operation_id)
                         .map_err(|message| {
                             snapshot_failure(request.operation_id.clone(), message)
                         })?
-                {
-                    snapshot.queue_state = queued.queue_state;
-                    snapshot.input_id = queued.input_id;
+                    {
+                        snapshot.queue_state = queued.queue_state;
+                        snapshot.input_id = queued.input_id;
+                    }
                 }
                 return Ok(snapshot);
             }
@@ -697,22 +607,28 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                 .get(&operation_id)
                 .cloned();
             if let Some(live) = live {
-                let deadline =
-                    tokio::time::Instant::now() + Duration::from_secs(timeout_seconds.into());
+                let clock = self.inner.clock.as_ref();
+                let deadline = clock
+                    .monotonic_now()
+                    .after(Duration::from_secs(timeout_seconds.into()));
                 loop {
                     let changed = live.changed.notified();
                     if let Some(result) = live.result.lock().await.clone() {
+                        let settlement = result?;
                         let operation =
                             snapshot_from_record(self.inspect_record(&operation_id).await?)
                                 .map_err(|message| {
                                     snapshot_failure(operation_id.clone(), message)
                                 })?;
-                        return result.map(|settlement| ConversationOperationWaitResult {
+                        return Ok(ConversationOperationWaitResult {
                             operation,
                             output: ConversationOperationWaitOutput::Available { settlement },
                         });
                     }
-                    if tokio::time::timeout_at(deadline, changed).await.is_err() {
+                    if router_clock::timeout_at(clock, deadline, changed)
+                        .await
+                        .is_err()
+                    {
                         // Through show, so a queued prompt says so (D1 R12).
                         let operation = self
                             .show(ConversationOperationShowRequest {
@@ -804,12 +720,14 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                 })?;
             let record = if record.reconciliation_state == ProviderReconciliationState::Unresolved {
                 store
-                    .record_not_reconcilable(&request.operation_id, now_ms())
+                    .record_not_reconcilable(&request.operation_id, self.inner.now_ms())
                     .await
                     .map_err(|_| unavailable_failure(request.operation_id.clone(), record.target))?
             } else {
                 record
             };
+            drop(store);
+            self.inner.release_reconciled_prompt(&record).await;
             snapshot_from_record(record).map_err(|message| {
                 failure(
                     ConversationOperationFailureKind::ProtocolViolation,

@@ -363,6 +363,7 @@ async fn fixture_acp_permission_notice_reaches_approver_and_allow_executes_comma
             provider_session_id,
             format!("Run `echo {endpoint_id}-ok` and report its output."),
             ExternalProviderApprovalContext {
+                owner_scope: None,
                 // The creator is also the prompt sender and default approver.
                 requester: (approver.clone()).into(),
                 approver: (approver.clone()).into(),
@@ -470,6 +471,7 @@ async fn reject_only_offer_reaches_approver_and_returns_selected_id() -> TestRes
         provider_session_id,
         "Run a command requiring permission.".to_owned(),
         ExternalProviderApprovalContext {
+            owner_scope: None,
             requester: (approver.clone()).into(),
             approver: (approver.clone()).into(),
             target,
@@ -643,6 +645,7 @@ async fn live_composed_cursor_native_mcp_requires_typed_call_and_router_result()
             "Call router-collaboration-endpoints_list once. In its JSON result, select the endpoints item whose endpoint.endpointId is claude-local, then return only endpoint.serviceId, without backticks or explanation. Do not use serviceEpoch."
                 .to_owned(),
             ExternalProviderApprovalContext {
+            owner_scope: None,
                 requester: requester.into(),
                 approver: (approver.clone()).into(),
                 target,

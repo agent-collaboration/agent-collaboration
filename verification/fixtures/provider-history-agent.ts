@@ -17,7 +17,12 @@ if (request !== undefined) {
   assert.equal(request.method, "session/load");
   if (scenario === "reset") {
     const marker = requireArgument(3);
-    if (!existsSync(marker)) writeFileSync(`${marker}.early`, "load preceded replay reset");
+    if (existsSync(marker)) writeFileSync(`${marker}.early`, "replay reset preceded load");
+    writeFileSync(`${marker}.load`, "session/load received");
+    agent.update({
+      sessionUpdate: "user_message_chunk",
+      content: { type: "text", text: "Replayed input" },
+    });
     agent.respond(request, {
       configOptions: [
         {
