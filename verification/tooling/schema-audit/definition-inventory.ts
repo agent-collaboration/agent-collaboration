@@ -12,7 +12,6 @@ import { rows as agentCollaboration2 } from "./definition-inventory/agent-collab
 import { rows as agentCollaboration } from "./definition-inventory/agent-collaboration.ts";
 import { rows as agentSessionInventory } from "./definition-inventory/agent-session-inventory.ts";
 import { rows as agentSessionTui } from "./definition-inventory/agent-session-tui.ts";
-import { rows as automationStorage } from "./definition-inventory/automation-storage.ts";
 import { rows as boardFleetSync } from "./definition-inventory/board-fleet-sync.ts";
 import { rows as boardSyncProtocol } from "./definition-inventory/board-sync-protocol.ts";
 import { rows as claudeCodePeerMessaging } from "./definition-inventory/claude-code-peer-messaging.ts";
@@ -58,7 +57,6 @@ export const DEFINITION_INVENTORY: readonly InventoryRow[] = [
   ...agentCollaboration,
   ...agentSessionInventory,
   ...agentSessionTui,
-  ...automationStorage,
   ...boardFleetSync,
   ...boardSyncProtocol,
   ...claudeCodePeerMessaging,

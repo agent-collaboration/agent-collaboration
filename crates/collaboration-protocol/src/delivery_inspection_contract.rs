@@ -1,9 +1,7 @@
-//! Delivery eligibility and native evidence are separate, explicit inspection dimensions.
-use crate::{
-    CodexGeneration, DeliveryReceipt, DeliveryRouteEvidence, MessageDelivery, ObservationTimestamp,
-    SessionRef,
-};
-use agent_automation::{AttemptId, DeliveryId, OccurrenceId, WakeupId};
+//! What a native Codex route did with one submission: preparation, submission and
+//! cessation recorded as separate dimensions. The delivery inspection types that shared
+//! this module left with the local wakes.
+use crate::{CodexGeneration, SessionRef};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
@@ -50,85 +48,4 @@ pub enum CessationEvidence {
     NotApplicable,
     Unconfirmed,
     Confirmed,
-}
-#[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
-#[serde(
-    tag = "kind",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum DeliveryEvidence {
-    NotDispatched,
-    Dispatching {
-        attempt_id: AttemptId,
-        #[serde(deserialize_with = "Option::deserialize")]
-        effects: Option<DeliveryRouteEvidence>,
-    },
-    KnownNotSubmitted {
-        attempt_id: AttemptId,
-        reason: String,
-        #[serde(deserialize_with = "Option::deserialize")]
-        effects: Option<DeliveryRouteEvidence>,
-        #[serde(default, deserialize_with = "Option::deserialize")]
-        receipt: Option<DeliveryReceipt>,
-    },
-    Accepted {
-        attempt_id: AttemptId,
-        receipt: DeliveryReceipt,
-    },
-    OutcomeUnknown {
-        attempt_id: AttemptId,
-        effects: DeliveryRouteEvidence,
-        explanation: String,
-        #[serde(default, deserialize_with = "Option::deserialize")]
-        receipt: Option<DeliveryReceipt>,
-    },
-}
-#[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
-#[serde(
-    tag = "kind",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum DeliverySource {
-    Wake {
-        wakeup_id: WakeupId,
-        occurrence_id: OccurrenceId,
-    },
-}
-#[derive(Clone, Copy, Debug, JsonSchema, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum DeliveryDisposition {
-    Pending,
-    Discarded,
-    Failed,
-    Accepted,
-    Uncertain,
-}
-#[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct DeliveryInspection {
-    pub delivery_id: DeliveryId,
-    pub target: SessionRef,
-    pub mode: MessageDelivery,
-    pub source: DeliverySource,
-    pub eligible_at: ObservationTimestamp,
-    #[serde(deserialize_with = "Option::deserialize")]
-    pub expires_at: Option<ObservationTimestamp>,
-    pub disposition: DeliveryDisposition,
-    pub evidence: DeliveryEvidence,
-}
-#[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct DeliveryShowRequest {
-    pub delivery_id: DeliveryId,
-}
-#[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct WakeMutationResult {
-    pub wakeup: crate::WakeSnapshot,
-    pub discarded_delivery_ids: Vec<DeliveryId>,
-    pub dispatched_deliveries: Vec<DeliveryInspection>,
 }

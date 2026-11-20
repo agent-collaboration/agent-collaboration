@@ -29,12 +29,8 @@ export const rows: InventoryRow[] = [
     owner: "router-vocabulary",
     kind: "rust-type",
     defines:
-      "NativeEffectEvidence<TTarget, TGeneration>: Router record of a Codex turn start or steer, holding Codex identities client_user_message_id, native_turn_id and native_submission_id as plain Strings, with allocation, resume, submission and cessation effects. A second, separately written copy of the same contract is collaboration-protocol delivery_inspection_contract.rs:11 (SessionRef/CodexGeneration, no routerQueued SubmissionEffect); collaboration-runtime codex_app_server_scheduled_runs.rs:43-51 JSON round-trips the public copy into this one",
-    usedBy: [
-      { crate: "collaboration-protocol" },
-      { crate: "automation-storage" },
-      { crate: "collaboration-runtime" },
-    ],
+      "NativeEffectEvidence<TTarget, TGeneration>: Router record of a Codex turn start or steer, holding Codex identities client_user_message_id, native_turn_id and native_submission_id as plain Strings, with allocation, resume, submission and cessation effects. A second, separately written copy of the same contract is collaboration-protocol delivery_inspection_contract.rs:9 (SessionRef/CodexGeneration, no routerQueued SubmissionEffect)",
+    usedBy: [{ crate: "collaboration-protocol" }, { crate: "collaboration-runtime" }],
     duplicateGroup: "native-effect-evidence",
     disposition: "duplicate",
     fixedBy: "D2",
@@ -46,7 +42,7 @@ export const rows: InventoryRow[] = [
     kind: "json-in-string",
     defines:
       "PortableRecord JSONL schedule package (packageHeader agentSchedule v1, instructionDocument, scheduleDefinition, continuitySummary, packageEnd with record count and SHA-256), carried inside MCP schedule_export / schedule_import as the packageUtf8 string. Intentional export format; no defect. Its nested ScheduleDefinition, ExecutionDestination and TimingRule have their own rows",
-    usedBy: [{ part: "N11" }, { crate: "collaboration-service" }, { crate: "automation-storage" }],
+    usedBy: [{ part: "N11" }, { crate: "collaboration-service" }],
     duplicateGroup: null,
     disposition: "boundary-encoding",
   },
@@ -57,7 +53,7 @@ export const rows: InventoryRow[] = [
     kind: "rust-type",
     defines:
       "ScheduleDefinition<TTarget, TEndpoint> {instructionId, timing: TimingRule, enabled, destination, executionTimeoutSeconds, model, effort} (camelCase, deny_unknown_fields): nested in the portable package scheduleDefinition record (portable_schedule_encoding.rs:22-25) and so in MCP packageUtf8; a separately written copy of the MCP collaboration-protocol ScheduleDefinition (schedule_contract.rs:23, TimingRequest/PositiveSeconds and a freshEachRun schema rule), into which collaboration-service schedule_operations.rs:48-50,100-102 converts by serde_json to_value then from_value",
-    usedBy: [{ part: "N11" }, { crate: "collaboration-service" }, { crate: "automation-storage" }],
+    usedBy: [{ part: "N11" }, { crate: "collaboration-service" }],
     duplicateGroup: "schedule-definition-copies",
     disposition: "duplicate",
     fixedBy: "D2",
@@ -69,7 +65,7 @@ export const rows: InventoryRow[] = [
     kind: "rust-type",
     defines:
       "ExecutionDestination<TTarget, TEndpoint> (tag kind: unprepared, freshEachRunUnprepared, ownedThread {target, cwd}, freshEachRun {endpoint, cwd}): nested in ScheduleDefinition and the portable package; a separately written copy of collaboration-protocol ExecutionDestination (schedule_contract.rs:11, SessionRef/EndpointRef)",
-    usedBy: [{ part: "N11" }, { crate: "collaboration-service" }, { crate: "automation-storage" }],
+    usedBy: [{ part: "N11" }, { crate: "collaboration-service" }],
     duplicateGroup: "schedule-definition-copies",
     disposition: "duplicate",
     fixedBy: "D2",
@@ -81,7 +77,7 @@ export const rows: InventoryRow[] = [
     kind: "rust-type",
     defines:
       "TimingRule (tag kind: at {at: DateTime<Utc>}, after {seconds: u32}, interval {seconds: u32}, cron {expression, timezone}): nested in ScheduleDefinition and the portable package; a separately written copy of collaboration-protocol TimingRequest (automation_timing_contract.rs:42, ObservationTimestamp/PositiveSeconds), converted to it by serde_json at collaboration-service wakeup_projection.rs:48",
-    usedBy: [{ part: "N11" }, { crate: "collaboration-service" }, { crate: "automation-storage" }],
+    usedBy: [{ part: "N11" }, { crate: "collaboration-service" }],
     duplicateGroup: "wake-record-copies",
     disposition: "duplicate",
     fixedBy: "D2",
@@ -104,7 +100,7 @@ export const rows: InventoryRow[] = [
     kind: "rust-type",
     defines:
       "hand Deserialize of RouteEffectEvidence (L306): tagged form, or an untagged legacy bare NativeEffectEvidence read as codexAppServer, then rejects routerQueued outside providerAcp",
-    usedBy: [{ crate: "collaboration-protocol" }, { crate: "automation-storage" }],
+    usedBy: [{ crate: "collaboration-protocol" }],
     duplicateGroup: "legacy-stored-decoders",
     disposition: "boundary-encoding",
   },
@@ -127,7 +123,7 @@ export const rows: InventoryRow[] = [
     kind: "rust-type",
     defines:
       "deserialize_stored_source_reference: a stored bare turn id string (legacy) becomes SummarySourceReference::NativeTurn {turnId}; used by ContinuityInput, SummarySource and SummaryAttempt under the legacy alias sourceTurnId",
-    usedBy: [{ crate: "collaboration-protocol" }, { crate: "automation-storage" }],
+    usedBy: [{ crate: "collaboration-protocol" }],
     duplicateGroup: "legacy-stored-decoders",
     disposition: "boundary-encoding",
   },
@@ -138,7 +134,7 @@ export const rows: InventoryRow[] = [
     kind: "rust-type",
     defines:
       "RunExecutionEvidence route field accepts the legacy name native (alias L6, L16) and a hand Deserialize (L22) refuses timing or acceptance without a route",
-    usedBy: [{ crate: "collaboration-protocol" }, { crate: "automation-storage" }],
+    usedBy: [{ crate: "collaboration-protocol" }],
     duplicateGroup: "legacy-stored-decoders",
     disposition: "boundary-encoding",
   },

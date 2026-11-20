@@ -1,7 +1,7 @@
 //! Input options for an immediate message: target, sender, delivery and content.
 use clap::{Args, ValueEnum};
 use collaboration_client::protocol::{
-    MessageContent, MessageDelivery, MessageText, SavedMessage, SessionRef, UuidIdentity,
+    CodexGeneration, MessageContent, MessageDelivery, MessageText, SessionRef, UuidIdentity,
 };
 use serde_json::json;
 use std::{
@@ -157,7 +157,7 @@ pub(crate) struct PreparedMessage {
     pub(crate) target: crate::session_target_arguments::ParsedSessionTarget,
     content: PreparedMessageContent,
     pub(crate) delivery: MessageDelivery,
-    pub(crate) generation_guard: Option<collaboration_client::protocol::CodexGeneration>,
+    pub(crate) generation_guard: Option<CodexGeneration>,
 }
 enum PreparedMessageContent {
     HumanUser {
@@ -168,12 +168,19 @@ enum PreparedMessageContent {
         text: MessageText,
     },
 }
+/// A direct message with its target and sender resolved against this service, ready to send.
+pub(crate) struct ResolvedDirectMessage {
+    pub(crate) target: SessionRef,
+    pub(crate) content: MessageContent,
+    pub(crate) delivery: MessageDelivery,
+    pub(crate) generation_guard: Option<CodexGeneration>,
+}
 impl PreparedMessage {
     pub(crate) fn resolve_direct_message(
         self,
         service_id: &UuidIdentity,
-    ) -> Result<SavedMessage, String> {
-        Ok(SavedMessage {
+    ) -> Result<ResolvedDirectMessage, String> {
+        Ok(ResolvedDirectMessage {
             target: self.target.into_mail_recipient(service_id),
             content: self.content.resolve(service_id)?,
             delivery: self.delivery,

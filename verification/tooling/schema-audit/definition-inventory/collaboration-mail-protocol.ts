@@ -76,7 +76,7 @@ export const rows: InventoryRow[] = [
     owner: "router-vocabulary",
     kind: "rust-type",
     defines:
-      "RemoteWakeMutation (261 {wakeup, discardedDeliveryIds, dispatchedDeliveries}), a copy of collaboration-protocol WakeMutationResult (delivery_inspection_contract.rs:130) whose dispatchedDeliveries is Vec<serde_json::Value> (265) instead of Vec<DeliveryInspection>: collaboration-service remote_wakes.rs:428-439 converts the typed local result into it by serde_json round trip (convert, :25) and wake_operations/remote.rs:14-15,222 parses it back the same way",
+      "RemoteWakeMutation (261 {wakeup, discardedDeliveryIds, dispatchedDeliveries}), a copy of collaboration-protocol WakeMutationResult (removed in M2) whose dispatchedDeliveries is Vec<serde_json::Value> (265) instead of Vec<DeliveryInspection>: collaboration-service remote_wakes.rs:428-439 converts the typed local result into it by serde_json round trip (convert, :25) and wake_operations/remote.rs:14-15,222 parses it back the same way",
     usedBy: [
       {
         crate: "collaboration-service",
@@ -107,7 +107,7 @@ export const rows: InventoryRow[] = [
     owner: "router-vocabulary",
     kind: "rust-type",
     defines:
-      "RemoteWakeTiming {at,after,interval,cron} and RemoteWakeExpiry l139: a second copy of collaboration-protocol TimingRequest (automation_timing_contract.rs:42) carried in wake mail",
+      "RemoteWakeTiming {at,after,interval,cron} and RemoteWakeExpiry l139: a second copy of collaboration-protocol TimingRequest (removed in M2) carried in wake mail",
     usedBy: [
       {
         crate: "collaboration-service",
