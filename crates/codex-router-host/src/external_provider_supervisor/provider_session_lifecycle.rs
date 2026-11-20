@@ -1,6 +1,7 @@
 //! Durable provider resume and close operations.
 
 use super::provider_operation_admission::DispatchMark;
+use super::provider_operation_failure::restore_operation_failure;
 use super::{
     Arc, ConversationOperationFailureKind, ConversationOperationFailureStage,
     ConversationOperationSettlement, ConversationOperationSubmission, ExternalProviderSupervisor,
@@ -132,11 +133,9 @@ pub(super) fn resume(
                                 ))),
                             }
                         }
-                        Err(error) => ProviderOperationCompletion::Failure(runtime_failure(
-                            operation_id,
-                            Some(completion_target),
-                            error.into_error(),
-                        )),
+                        Err(error) => ProviderOperationCompletion::Failure(
+                            restore_operation_failure(operation_id, completion_target, error),
+                        ),
                     }
                 });
                 Ok(admitted_submission(snapshot))

@@ -28,6 +28,7 @@ use collaboration_protocol::{
     SessionId, SessionRef,
 };
 use serde_json::Value;
+use sqlx::{Connection as _, SqliteConnection, sqlite::SqliteConnectOptions};
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -284,6 +285,32 @@ impl CacheWarmHost {
             String::from(session.session_id.clone())
         );
         until(|| warm_prompts_to(&self.receipt, session) >= expected).await;
+    }
+
+    /// The supervisor records the held session's warm attempt even when ACP
+    /// refuses it before the wire. Its terminal row is the dispatch barrier.
+    pub(super) async fn until_terminal_prompts_to(&self, session: &SessionRef, expected: i64) {
+        let session_id = String::from(session.session_id.clone());
+        let mut store = SqliteConnection::connect_with(
+            &SqliteConnectOptions::new()
+                .filename(self.root.path().join("provider-operations.sqlite"))
+                .read_only(true),
+        )
+        .await
+        .expect("open operation receipts");
+        loop {
+            let count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM provider_operations WHERE target_session_id = ? AND operation_kind = 'conversationPrompt' AND stage = 'terminal'",
+            )
+            .bind(&session_id)
+            .fetch_one(&mut store)
+            .await
+            .expect("count terminal prompt operations");
+            if count >= expected {
+                return;
+            }
+            tokio::task::yield_now().await;
+        }
     }
 
     pub(super) fn working_directory(&self) -> ProviderWorkingDirectory {

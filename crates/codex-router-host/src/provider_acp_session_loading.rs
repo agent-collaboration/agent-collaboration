@@ -154,14 +154,14 @@ pub(crate) async fn ensure_provider_session_loaded(
         .await
     {
         Ok(()) => ProviderSessionLoadOutcome::Ready,
-        Err(error) => load_error_outcome(error),
+        Err(error) => load_error_outcome(&error),
     }
 }
 
 /// What a failed load means for the work that asked for it.
-fn load_error_outcome(failure: RestoreFailure) -> ProviderSessionLoadOutcome {
+fn load_error_outcome(failure: &RestoreFailure) -> ProviderSessionLoadOutcome {
     let phase = failure.phase;
-    match failure.into_error() {
+    match failure.error() {
         // A close won while this load was in flight: the connection
         // dropped the restored session.
         ExternalProviderRuntimeError::SessionReleased => {
@@ -183,7 +183,7 @@ fn load_error_outcome(failure: RestoreFailure) -> ProviderSessionLoadOutcome {
             ProviderSessionLoadOutcome::Rejected {
                 phase,
                 reason: ProviderSessionLoadRejection::SessionNotFound {
-                    code,
+                    code: *code,
                     correlation_id,
                 },
             }
@@ -212,7 +212,7 @@ fn load_error_outcome(failure: RestoreFailure) -> ProviderSessionLoadOutcome {
             ProviderSessionLoadOutcome::Rejected {
                 phase,
                 reason: ProviderSessionLoadRejection::ProviderRejected {
-                    code,
+                    code: *code,
                     correlation_id,
                 },
             }
@@ -223,8 +223,8 @@ fn load_error_outcome(failure: RestoreFailure) -> ProviderSessionLoadOutcome {
         } => coded_load_failure(
             phase,
             "provider resource was not found, so check the provider before retrying",
-            code,
-            correlation_id,
+            *code,
+            *correlation_id,
         ),
         ExternalProviderRuntimeError::RestoreFailed {
             code,
@@ -232,8 +232,8 @@ fn load_error_outcome(failure: RestoreFailure) -> ProviderSessionLoadOutcome {
         } => coded_load_failure(
             phase,
             "the provider failed while restoring this session, so retry it",
-            code,
-            correlation_id,
+            *code,
+            *correlation_id,
         ),
         ExternalProviderRuntimeError::UnsupportedMethod {
             code,
@@ -241,8 +241,8 @@ fn load_error_outcome(failure: RestoreFailure) -> ProviderSessionLoadOutcome {
         } => coded_load_failure(
             phase,
             "provider ACP method is unsupported, so check the provider's restore support before retrying",
-            code,
-            correlation_id,
+            *code,
+            *correlation_id,
         ),
         ExternalProviderRuntimeError::InvalidParams {
             code,
@@ -250,8 +250,8 @@ fn load_error_outcome(failure: RestoreFailure) -> ProviderSessionLoadOutcome {
         } => coded_load_failure(
             phase,
             "provider ACP parameters are invalid, so check the session setup before retrying",
-            code,
-            correlation_id,
+            *code,
+            *correlation_id,
         ),
         ExternalProviderRuntimeError::RequestCancelled {
             code,
@@ -259,11 +259,11 @@ fn load_error_outcome(failure: RestoreFailure) -> ProviderSessionLoadOutcome {
         } => coded_load_failure(
             phase,
             "provider ACP request was cancelled, so retry the restore when ready",
-            code,
-            correlation_id,
+            *code,
+            *correlation_id,
         ),
         error => {
-            let reason = match (&error, phase) {
+            let reason = match (error, phase) {
                 (ExternalProviderRuntimeError::SinkClosed | ExternalProviderRuntimeError::HistoryReplayUnavailable, RestorePhase::Attempted) =>
                     "the Router could not publish the restored session's replay or settings, so reconnect and retry this session".to_owned(),
                 (ExternalProviderRuntimeError::RestoreNoAnswer | ExternalProviderRuntimeError::RestoreDisconnected, _)
@@ -275,8 +275,8 @@ fn load_error_outcome(failure: RestoreFailure) -> ProviderSessionLoadOutcome {
     }
 }
 
-/// The reason a queued message ends not sent when its load failed.
-pub(crate) fn load_error_reason(error: RestoreFailure) -> String {
+/// Shared recovery wording for explicit restores and inputs waiting on a load.
+pub(crate) fn load_error_reason(error: &RestoreFailure) -> String {
     match load_error_outcome(error) {
         ProviderSessionLoadOutcome::Ready | ProviderSessionLoadOutcome::AlreadyLoaded => {
             "the session couldn't be loaded".to_owned()

@@ -282,6 +282,9 @@ async fn held_settings_and_unknown_outcome_get_no_warm_prompt() {
     // Act: all three warm prompts fall due in one step.
     host.advance(FIFTY_FIVE_MINUTES).await;
     host.until_warm_prompts_to(&witness, 1).await;
+    // The witness's timer runs independently. Keep the effort hold in place
+    // until the held session's real prompt and first warm attempt have settled.
+    host.until_terminal_prompts_to(&held, 2).await;
     host.until_warm_timer_armed().await;
     let held_while_held = warm_prompts_to(&host.receipt, &held);
     let unknown_after_due = warm_prompts_to(&host.receipt, &unknown);

@@ -33,6 +33,30 @@ impl ToolOwnership {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SessionlessCallbackOwner<'a, SessionId> {
+    NeverObserved,
+    OwnedBy(&'a SessionId),
+    Refused,
+}
+
+/// The connection retains one record per observing session. A callback
+/// without a session ID cannot select a surviving owner after a collision.
+#[must_use]
+pub fn sessionless_callback_owner<'a, SessionId: 'a>(
+    mut owners: impl Iterator<Item = (&'a SessionId, &'a ToolOwnership)>,
+) -> SessionlessCallbackOwner<'a, SessionId> {
+    match owners.next() {
+        None => SessionlessCallbackOwner::NeverObserved,
+        Some((session_id, owner))
+            if owners.next().is_none() && owner.owned_generation().is_some() =>
+        {
+            SessionlessCallbackOwner::OwnedBy(session_id)
+        }
+        Some(_) => SessionlessCallbackOwner::Refused,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ToolSessionPhase {
     Loading {
         generation: SessionGeneration,

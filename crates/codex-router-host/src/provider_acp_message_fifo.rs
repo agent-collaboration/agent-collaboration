@@ -375,10 +375,10 @@ impl ProviderAcpMessageFifo {
             {
                 return Ok(());
             }
-            Err(error) => return Err(QueueDoorRefusal::Refused(load_error_reason(error))),
+            Err(error) => return Err(QueueDoorRefusal::Refused(load_error_reason(&error))),
         };
         let load: SharedLoad = finish
-            .map(|result| result.map_err(load_error_reason))
+            .map(|result| result.map_err(|error| load_error_reason(&error)))
             .boxed()
             .shared();
         let load_id = line.loads.fetch_add(1, Ordering::SeqCst);

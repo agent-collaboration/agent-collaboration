@@ -10,8 +10,8 @@ use provider_session_machines::SessionGeneration;
 use provider_session_machines::session_lifecycle_machine::SessionLifecycle;
 use provider_session_machines::session_turn_machine::TurnId;
 use provider_session_machines::tool_ownership::{
-    ToolObservation, ToolOwnership, ToolOwnershipEffect, ToolOwnershipEvent, ToolSessionPhase,
-    reduce_tool_ownership,
+    SessionlessCallbackOwner, ToolObservation, ToolOwnership, ToolOwnershipEffect,
+    ToolOwnershipEvent, ToolSessionPhase, reduce_tool_ownership, sessionless_callback_owner,
 };
 
 use crate::session_cell_table::SessionCellTable;
@@ -87,12 +87,10 @@ impl RegistryState {
     }
 
     fn callback_candidate(&self, tool_id: &str) -> Option<&str> {
-        if let Some(owners) = self.tool_owners.get(tool_id) {
-            let mut candidates = owners.iter().filter_map(|(session_id, owner)| {
-                owner.owned_generation().map(|_| session_id.as_str())
-            });
-            let candidate = candidates.next()?;
-            return candidates.next().is_none().then_some(candidate);
+        match sessionless_callback_owner(self.tool_owners.get(tool_id).into_iter().flatten()) {
+            SessionlessCallbackOwner::OwnedBy(session_id) => return Some(session_id.as_str()),
+            SessionlessCallbackOwner::Refused => return None,
+            SessionlessCallbackOwner::NeverObserved => {}
         }
         let mut sessions = self.running_sessions.keys();
         let candidate = sessions.next()?;

@@ -269,7 +269,12 @@ impl ScriptedLineAgent {
         assert!(write_line(&writer, frame).await, "the client end is open");
     }
 
-    async fn request_callback(&self, request_id: &str, method: &str, params: Value) -> Value {
+    pub(super) async fn request_callback(
+        &self,
+        request_id: &str,
+        method: &str,
+        params: Value,
+    ) -> Value {
         self.send_frame(&json!({"jsonrpc":"2.0","id":request_id,"method":method,"params":params}))
             .await;
         loop {

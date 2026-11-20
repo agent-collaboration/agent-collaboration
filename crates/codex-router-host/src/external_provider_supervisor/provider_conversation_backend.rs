@@ -1,3 +1,4 @@
+use super::provider_operation_failure::restore_operation_failure;
 use super::{
     Arc, ConversationBindingIdentity, ConversationCancelRequest, ConversationCloseRequest,
     ConversationCreateRequest, ConversationLoadRequest, ConversationOperationFailureKind,
@@ -474,11 +475,9 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                     ))),
                                 }
                             }
-                            Err(error) => ProviderOperationCompletion::Failure(runtime_failure(
-                                operation_id,
-                                Some(completion_target),
-                                error.into_error(),
-                            )),
+                            Err(error) => ProviderOperationCompletion::Failure(
+                                restore_operation_failure(operation_id, completion_target, error),
+                            ),
                         }
                     });
                     Ok(admitted_submission(snapshot))
