@@ -310,19 +310,20 @@ async fn restart_discovers_unsent_dm_targets_and_preserves_owner_recovery_attemp
         )?,
     ];
     let mut settleable_attempted_ids = vec![attempted_id.clone()];
-    let mut owner_recovery_attempted_ids = Vec::new();
+    let mut excluded_attempt_ids = Vec::new();
     for draft in router_attempts {
         let push_id = draft.push_id.clone();
         let kind = draft.kind;
         store.insert_push_record(draft).await?;
         store.mark_push_attempted(&push_id).await?;
         match kind {
-            PushKind::Wake | PushKind::ScheduleRun => owner_recovery_attempted_ids.push(push_id),
-            PushKind::Approval
-            | PushKind::Question
+            PushKind::Wake
+            | PushKind::ScheduleRun
             | PushKind::SubscriptionActivity
-            | PushKind::SubscriptionExpiry
-            | PushKind::BoardNotification => settleable_attempted_ids.push(push_id),
+            | PushKind::BoardNotification => excluded_attempt_ids.push(push_id),
+            PushKind::Approval | PushKind::Question | PushKind::SubscriptionExpiry => {
+                settleable_attempted_ids.push(push_id);
+            }
             PushKind::DirectMessage => return Err("unexpected DM fixture kind".into()),
         }
     }
@@ -370,15 +371,15 @@ async fn restart_discovers_unsent_dm_targets_and_preserves_owner_recovery_attemp
             "attempted push was replayable",
         )?;
     }
-    for push_id in &owner_recovery_attempted_ids {
+    for push_id in &excluded_attempt_ids {
         let attempted = restored
             .get_push_record(push_id)
             .await?
-            .ok_or("owner-recovery push missing")?;
+            .ok_or("excluded push missing")?;
         ensure(
             attempted.delivery_state == PushDeliveryState::Attempted
                 && attempted.last_outcome.is_none(),
-            "owner-recovery push was settled before its worker could recover it",
+            "startup settled an excluded push",
         )?;
     }
     ensure(

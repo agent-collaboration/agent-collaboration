@@ -31,95 +31,24 @@ async fn dispatch_drops_an_arriving_board_notification_without_native_delivery()
         runtime.fixture.local_outcome(id).await,
         Some(RecipientOutcome::Dropped)
     );
+    let push_id = id.as_uuid().to_string().try_into().unwrap();
+    let push = runtime
+        .fixture
+        .owner
+        .get_push_record(&push_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(push.delivery_state, PushDeliveryState::Rejected);
+    assert!(matches!(
+        push.last_outcome.unwrap().outcome,
+        DeliveryOutcome::NotSubmitted {
+            retryable: false,
+            ..
+        }
+    ));
     assert_eq!(runtime.client.calls(id), 0);
     drop(mail);
-    runtime.close().await;
-}
-
-#[tokio::test]
-async fn startup_settles_a_stored_held_board_notification() {
-    use collaboration_mail_protocol::{FollowDeliveryPolicy, NotificationSource};
-    use fleet_sync_delivery::LocalOutcome;
-    use message_board::{BatchTiming, Identity, SubscriptionLifetime, SubscriptionMode, WhenIdle};
-    use tokio_util::sync::CancellationToken;
-
-    let runtime = Runtime::new().await;
-    let poll = follow(&runtime, 2, 10);
-    let mut poll_body = poll.body().clone();
-    let board_sync_protocol::BoardDeliveryBody::Notification(notification) = &mut poll_body else {
-        panic!("expected a notification fixture");
-    };
-    let NotificationSource::FollowBatch { policy, .. } = &mut notification.source else {
-        panic!("expected a follow fixture");
-    };
-    *policy = FollowDeliveryPolicy::new(
-        &Identity::Session {
-            session: poll.recipient().address.clone(),
-        },
-        SubscriptionMode::Poll,
-        WhenIdle::Hold,
-        BatchTiming::new(2, 10).unwrap(),
-        SubscriptionLifetime::new(600).unwrap(),
-    )
-    .unwrap();
-    let held = DeliveryItem::new(
-        poll.id(),
-        poll.sender().clone(),
-        poll.recipient().clone(),
-        None,
-        poll_body,
-    )
-    .unwrap();
-    let held_id = held.id();
-
-    // The old reader returned Held without a deadline. Real SDK custody and its
-    // pending poll projection persist that state across the owner reopen.
-    runtime.fixture.host.consumer.native.lock().unwrap().take();
-    runtime.fixture.receive_items(vec![held]).await.unwrap();
-    runtime.fixture.push_answer(
-        LocalOutcome::Held { until: None },
-        DeliveryReceipt {
-            outcome: DeliveryOutcome::NotSubmitted {
-                retryable: true,
-                reason: "no poll waiter".into(),
-            },
-            reachability: None,
-            client: None,
-        },
-    );
-    runtime.engine().drive_due().await.unwrap();
-    assert!(matches!(
-        runtime.fixture.local_outcome(held_id).await,
-        Some(RecipientOutcome::Held)
-    ));
-    let runtime = runtime.reopen().await;
-    let mail = runtime.local_mail_runtime();
-    let shutdown = CancellationToken::new();
-    let worker_stop = shutdown.clone();
-    let worker = tokio::spawn(async move { mail.run(worker_stop).await });
-    let outcomes = tokio::time::timeout(std::time::Duration::from_secs(10), async {
-        while !matches!(
-            runtime.fixture.local_outcome(held_id).await,
-            Some(RecipientOutcome::Dropped)
-        ) {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await;
-    shutdown.cancel();
-    worker.await.unwrap().unwrap();
-
-    outcomes.expect("the held board notification became terminal");
-    assert!(
-        runtime
-            .fixture
-            .owner
-            .pending_poll_item(held_id)
-            .await
-            .unwrap()
-            .is_none()
-    );
-    assert_eq!(runtime.client.calls(held_id), 0);
     runtime.close().await;
 }
 

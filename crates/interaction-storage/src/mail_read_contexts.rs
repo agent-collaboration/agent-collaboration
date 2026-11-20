@@ -1,16 +1,13 @@
 //! Immutable read authority accompanies mail; the SDK alone owns its status.
-use crate::{InteractionStore, StorageError, push_record_rows};
+use crate::{StorageError, push_record_rows};
+#[cfg(test)]
 use chrono::{DateTime, Utc};
-use collaboration_protocol::{MailItemId, MailReadContext, PushOrigin, SessionRef};
+use collaboration_protocol::{MailItemId, MailReadContext, PushOrigin};
+#[cfg(test)]
 use durable_steps::{Host, storage::TransactionScope, turso_store::TursoScope};
+#[cfg(test)]
 use sqlx_turso::TursoConnection;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct StoredMailReadContext {
-    pub item: MailItemId,
-    pub context: MailReadContext,
-    pub recorded_at: DateTime<Utc>,
-}
 #[derive(sqlx::FromRow)]
 struct ReadContextRow {
     item_id: String,
@@ -46,7 +43,7 @@ fn conversation_key(context: &MailReadContext) -> Result<Option<String>, Storage
     }
 }
 impl ReadContextRow {
-    fn decode(self) -> Result<StoredMailReadContext, StorageError> {
+    fn decode(self) -> Result<(MailItemId, MailReadContext), StorageError> {
         let item: MailItemId = self
             .item_id
             .try_into()
@@ -59,22 +56,20 @@ impl ReadContextRow {
         {
             return Err(StorageError::InvalidStoredRecord);
         }
-        Ok(StoredMailReadContext {
-            item,
-            context,
-            recorded_at: push_record_rows::decode_timestamp(self.recorded_at)
-                .map_err(|_| StorageError::InvalidStoredRecord)?,
-        })
+        push_record_rows::decode_timestamp(self.recorded_at)
+            .map_err(|_| StorageError::InvalidStoredRecord)?;
+        Ok((item, context))
     }
 }
+#[cfg(test)]
 async fn read_context(
     connection: &mut TursoConnection,
     item: &MailItemId,
-) -> Result<Option<StoredMailReadContext>, StorageError> {
+) -> Result<Option<(MailItemId, MailReadContext)>, StorageError> {
     sqlx_turso::query_as!(ReadContextRow, "SELECT item_id AS \"item_id!: String\",context_json AS \"context_json!: String\",conversation_key,recorded_at AS \"recorded_at!: String\" FROM mail_read_contexts WHERE item_id=?", item.as_str()).fetch_optional(connection).await?.map(ReadContextRow::decode).transpose()
 }
 
-// A read context goes once its item has no live push, scheduled retry, poll hand-off,
+// A read context goes once its item has no live push, scheduled retry, poll marker,
 // unanswered send or unsettled cancel.
 macro_rules! read_contexts_eligible {
     () => {
@@ -113,11 +108,11 @@ pub(crate) async fn prune_old_mail_read_contexts(
         .fetch_all(&mut **transaction).await?;
     let mut pruned = 0;
     for row in candidates {
-        let context = row.decode()?;
+        let (item, _) = row.decode()?;
         pruned += sqlx::query::<sqlx_turso::Turso>(
             "DELETE FROM mail_read_contexts WHERE item_id=? AND recorded_at<?",
         )
-        .bind(context.item.as_str())
+        .bind(item.as_str())
         .bind(cutoff)
         .execute(&mut **transaction)
         .await?
@@ -125,33 +120,8 @@ pub(crate) async fn prune_old_mail_read_contexts(
     }
     Ok(pruned)
 }
-impl InteractionStore {
-    pub async fn mail_read_context(
-        &self,
-        item: &MailItemId,
-    ) -> Result<Option<StoredMailReadContext>, StorageError> {
-        read_context(&mut *self.writer.lock().await, item).await
-    }
-    pub async fn direct_mail_read_contexts(
-        &self,
-        caller: &SessionRef,
-        other: &SessionRef,
-        limit: u32,
-    ) -> Result<Vec<StoredMailReadContext>, StorageError> {
-        if !(1..=100).contains(&limit) {
-            return Err(StorageError::InvalidRecord);
-        }
-        let key = conversation_key(&MailReadContext::Direct {
-            origin: PushOrigin::Session(caller.clone()),
-            recipient: other.clone(),
-        })?
-        .ok_or(StorageError::InvalidRecord)?;
-        let limit = i64::from(limit);
-        let rows = sqlx_turso::query_as!(ReadContextRow, "SELECT item_id AS \"item_id!: String\",context_json AS \"context_json!: String\",conversation_key,recorded_at AS \"recorded_at!: String\" FROM mail_read_contexts INDEXED BY mail_read_context_conversation WHERE conversation_key=? ORDER BY recorded_at DESC,item_id DESC LIMIT ?", key, limit).fetch_all(&mut *self.writer.lock().await).await?;
-        rows.into_iter().map(ReadContextRow::decode).collect()
-    }
-}
-pub async fn record_mail_read_context_in_scope<THost: Host>(
+#[cfg(test)]
+pub(crate) async fn record_mail_read_context_in_scope<THost: Host>(
     scope: &mut TursoScope<'_, THost>,
     item: &MailItemId,
     context: &MailReadContext,
@@ -162,8 +132,8 @@ pub async fn record_mail_read_context_in_scope<THost: Host>(
     {
         return Err(StorageError::InvalidRecord);
     }
-    if let Some(existing) = read_context(scope.executor(), item).await? {
-        return if existing.context == *context {
+    if let Some((_, existing)) = read_context(scope.executor(), item).await? {
+        return if existing == *context {
             Ok(())
         } else {
             Err(StorageError::InvalidStoredRecord)

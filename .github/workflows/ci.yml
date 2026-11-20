@@ -449,11 +449,10 @@ jobs:
       # Compile every test binary once and pack it as a nextest archive, so both
       # shards run the same binaries without contending for Cargo's build lock.
       # Keep each build selection and feature set identical to its run.
-      # Central integration cases require their test-support feature directly.
       - name: Build test binaries
         if: matrix.shard == 1
         run: |
-          cargo nextest archive --locked --workspace --features codex-router-cli/keychain-test-support,collaboration-central-tokio/test-support --exclude codex-router-quota-reset-test-harness --archive-file "$RUNNER_TEMP/workspace-tests.tar.zst"
+          cargo nextest archive --locked --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness --archive-file "$RUNNER_TEMP/workspace-tests.tar.zst"
           ls -l "$RUNNER_TEMP/workspace-tests.tar.zst"
           df -h /
       - name: Share test binaries with other shards
@@ -471,7 +470,7 @@ jobs:
         run: |
           # Exercise private fixture setup under the ordinary Unix mask.
           umask 022
-          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support,collaboration-central-tokio/test-support --exclude codex-router-quota-reset-test-harness -E "$WORKSPACE_TEST_FILTER" --partition count:1/4
+          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E "$WORKSPACE_TEST_FILTER" --partition count:1/4
       # Only shard 2 builds and runs the quota-reset harness and the default-port
       # cutover while shard 1 is still building. Each keeps its own package and
       # feature selection, and both finish before the archive lands in target/.

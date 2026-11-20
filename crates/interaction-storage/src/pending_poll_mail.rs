@@ -88,13 +88,6 @@ pub async fn insert_pending_poll_in_scope<THost: Host>(
     Ok(())
 }
 
-pub async fn read_pending_poll_in_scope<THost: Host>(
-    scope: &mut TursoScope<'_, THost>,
-    item: ItemId,
-) -> Result<Option<PendingPollMail>, StorageError> {
-    read_pending_poll(scope.executor(), item).await
-}
-
 pub async fn delete_pending_poll_in_scope<THost: Host>(
     scope: &mut TursoScope<'_, THost>,
     item: ItemId,

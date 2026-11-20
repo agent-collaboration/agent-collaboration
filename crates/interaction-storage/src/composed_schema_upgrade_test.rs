@@ -156,7 +156,7 @@ async fn twelve_migration_composed_file_preserves_history_and_sdk_custody_throug
         .await
         .unwrap();
 
-    // Act: today's public opener admits this exact file and runs the four newer migrations.
+    // Act: today's public opener admits this exact prefix and runs only its successors.
     for _ in 0..2 {
         let owner = Arc::new(
             InteractionStore::open(&path)
@@ -181,7 +181,7 @@ async fn twelve_migration_composed_file_preserves_history_and_sdk_custody_throug
                 .fetch_one(&mut *writer)
                 .await
                 .unwrap();
-            assert_eq!(migrations, 17);
+            assert_eq!(migrations, 18);
             let markers: i64 = sqlx::query_scalar("SELECT count(*) FROM sqlite_schema WHERE type='table' AND name='mail_removal_backfill'")
                 .fetch_one(&mut *writer)
                 .await

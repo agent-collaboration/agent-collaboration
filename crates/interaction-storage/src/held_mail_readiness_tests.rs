@@ -179,6 +179,7 @@ async fn readiness_covering_index_shape_and_ledger_are_checked_on_reopen() {
         "DROP INDEX router_pushes_held_mail_readiness",
         "DROP INDEX router_pushes_held_mail_readiness; CREATE INDEX router_pushes_held_mail_readiness ON router_pushes(push_id)",
         "DELETE FROM _sqlx_migrations WHERE version=202610210002",
+        "DELETE FROM _sqlx_migrations WHERE version=202611200001",
         "DROP INDEX local_delivery_retries_readiness",
         "DROP INDEX local_delivery_retries_readiness; CREATE INDEX local_delivery_retries_readiness ON local_delivery_retries(item_id)",
         "DELETE FROM _sqlx_migrations WHERE version=202610210003",

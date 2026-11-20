@@ -869,11 +869,9 @@ dependencies = [
 name = "board-sync-protocol"
 version = "0.1.156"
 dependencies = [
- "chrono",
  "collaboration-mail-protocol",
  "fleet-sync-protocol",
  "message-board",
- "schemars 1.2.2",
  "serde",
  "serde_json",
 ]
@@ -1740,6 +1738,7 @@ dependencies = [
  "chrono",
  "collaboration-central-conformance",
  "collaboration-central-core",
+ "collaboration-central-tokio",
  "fleet-identity-protocol",
  "futures-util",
  "hegeltest",

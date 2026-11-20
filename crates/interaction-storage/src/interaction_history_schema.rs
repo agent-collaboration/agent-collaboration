@@ -49,6 +49,7 @@ const SETTLED_ANSWER_RETENTION_VERSION: i64 = 202610310001;
 const APPROVAL_ROUTES_VERSION: i64 = 202610310002;
 const MAIL_REMOVAL_BACKFILL_VERSION: i64 = 202611030001;
 const SDK_BACKFILL_OWNERSHIP_VERSION: i64 = 202611030002;
+const DIRECT_MESSAGE_READINESS_VERSION: i64 = 202611200001;
 
 fn expected_table_sql(
     table_name: &str,
@@ -149,6 +150,9 @@ pub(super) async fn inspect_schema(
     let has_held_readiness = migrations
         .iter()
         .any(|row| row.version == HELD_MAIL_READINESS_VERSION);
+    let has_direct_message_readiness = migrations
+        .iter()
+        .any(|row| row.version == DIRECT_MESSAGE_READINESS_VERSION);
     let has_scheduled_readiness = migrations
         .iter()
         .any(|row| row.version == SCHEDULED_RETRY_READINESS_VERSION);
@@ -376,11 +380,23 @@ pub(super) async fn inspect_schema(
             })
             .and_then(|object| object.sql.as_deref())
             .ok_or(StorageError::InvalidSchema)?;
+        let version = if has_direct_message_readiness {
+            DIRECT_MESSAGE_READINESS_VERSION
+        } else {
+            HELD_MAIL_READINESS_VERSION
+        };
         let expected = MIGRATOR
             .iter()
-            .find(|migration| migration.version == HELD_MAIL_READINESS_VERSION)
+            .find(|migration| migration.version == version)
+            .into_iter()
+            .flat_map(|migration| migration.sql.as_str().split(';'))
+            .find(|statement| {
+                statement
+                    .trim_start()
+                    .starts_with("CREATE INDEX router_pushes_held_mail_readiness ")
+            })
             .ok_or(StorageError::InvalidSchema)?;
-        if normalize_schema_sql(index) != normalize_schema_sql(expected.sql.as_str()) {
+        if normalize_schema_sql(index) != normalize_schema_sql(expected) {
             return Err(StorageError::InvalidSchema);
         }
     }
@@ -506,6 +522,7 @@ pub(super) async fn inspect_schema(
             - usize::from(!has_approval_routes)
             - usize::from(!has_mail_removal_backfill)
             - usize::from(!has_sdk_backfill_ownership)
+            - usize::from(!has_direct_message_readiness)
     } else {
         1
     };

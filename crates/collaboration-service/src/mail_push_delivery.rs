@@ -32,7 +32,6 @@ impl MailPushDelivery {
     }
 
     /// Delivers the frozen push through its reader's native actor; the caller persists custody.
-    /// Poll returns None for the caller's separate waiter handoff, with no native call.
     pub async fn deliver_push(
         &self,
         item: &DeliveryItem<RouterDeliveryTypes>,
@@ -82,10 +81,6 @@ impl MailPushDelivery {
         let delivery = match preparation {
             MailPushPreparation::Hold { receipt } => LocalDelivery {
                 outcome: LocalOutcome::Held { until: None },
-                observation: receipt.into(),
-            },
-            MailPushPreparation::Drop { receipt } => LocalDelivery {
-                outcome: LocalOutcome::Dropped,
                 observation: receipt.into(),
             },
             MailPushPreparation::Refuse { delivery } => {

@@ -171,6 +171,12 @@ priority = 50
 filter = "package(=collaboration-central-tokio) & binary(=integration) & test(=process_restart::retirement::retirement_resumes_its_stored_step_after_the_server_process_dies)"
 priority = 50
 
+# Each modern Worker case owns an isolated workerd child and private SQLite state.
+[[profile.default.overrides]]
+filter = "package(=collaboration-central-cloudflare) & binary(=integration)"
+test-group = "process-runtime"
+threads-required = "num-test-threads"
+
 [[profile.ci.overrides]]
 filter = "package(=collaboration-central-cloudflare) & binary(=integration)"
 test-group = "process-runtime"

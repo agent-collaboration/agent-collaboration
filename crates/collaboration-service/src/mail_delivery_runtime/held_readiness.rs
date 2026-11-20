@@ -3,39 +3,8 @@ use super::{
     Arc, AtomicStore, Inbox, ItemId, LocalMailTask, MailDeliveryRuntime, RouterDeliveryTypes,
     StoreError, SyncTime, WakeScheduler,
 };
-use runtime_primitives::Clock;
 
 impl MailDeliveryRuntime {
-    pub(super) async fn release_retired_notifications(&self) -> Result<(), StoreError> {
-        let items = self
-            .owner
-            .retired_notification_items()
-            .await
-            .map_err(StoreError::backend)?;
-        let config = self.config;
-        let binding = self.binding.clone();
-        let now = self.host.now();
-        self.store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    let mut inbox = Inbox::<_, RouterDeliveryTypes, _>::new(
-                        scope,
-                        config.owner,
-                        config.limits,
-                        binding.as_ref(),
-                    );
-                    for item in items {
-                        inbox
-                            .release_held::<LocalMailTask>(item, now)
-                            .await
-                            .map_err(fleet_sync_delivery::delivery_rollback)?;
-                    }
-                    Ok(())
-                })
-            })
-            .await
-    }
-
     pub fn attach_reader_readiness(self: &Arc<Self>) -> Result<(), String> {
         self.reader_actors.attach_native_mail(Arc::downgrade(self))
     }

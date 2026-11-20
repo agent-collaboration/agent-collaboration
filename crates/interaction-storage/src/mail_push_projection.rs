@@ -51,7 +51,7 @@ pub async fn mark_released_mail_pending_in_scope<THost: Host>(
     push_id: &PushId,
 ) -> Result<bool, StorageError> {
     let changed = sqlx_turso::query!(
-        "UPDATE router_pushes SET delivery_state='pending',last_outcome_json=NULL,settled_at=NULL WHERE push_id=? AND retention='mailTerminalAge' AND delivery_state='held' AND NOT EXISTS (SELECT 1 FROM local_delivery_retries r WHERE r.item_id=router_pushes.push_id AND r.scheduled_retry_at IS NOT NULL)",
+        "UPDATE router_pushes SET delivery_state='pending',last_outcome_json=NULL,settled_at=NULL WHERE push_id=? AND retention='mailTerminalAge' AND delivery_state='held' AND kind='direct-message' AND NOT EXISTS (SELECT 1 FROM local_delivery_retries r WHERE r.item_id=router_pushes.push_id AND r.scheduled_retry_at IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM pending_poll_mail poll WHERE poll.item_id=router_pushes.push_id)",
         push_id.as_str()
     ).execute(scope.executor()).await?;
     Ok(changed.rows_affected() == 1)

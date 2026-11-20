@@ -6,13 +6,7 @@ Run the package with its workspace CI features:
 cargo nextest run --locked --profile ci -p board-sync-protocol
 ```
 
-`integration/main.rs` gathers 10 former external test roots.
-Cases cover fleet reads, peer pages, claims, notices, and wire contracts. Library unit tests remain colocated with their implementations.
-
-Each aggregate declares shared helper implementations once. Existing fixture
-directories remain in place. Only nonempty test categories are declared in
-Cargo.toml; CI selects no separate e2e category for this package.
-
-A former binary `<root>` and test `<case>` becomes its category binary and
-test `<root>::<case>`. Library test identities do not change. Nextest preserves
-one process per case and the existing scheduling and deadline rules.
+`integration/main.rs` checks the frozen local SDK mail contract. It covers
+message, notification and wake body encoding and wire budgets for addresses,
+senders, routes and acceptance evidence. Library unit tests stay colocated with
+the delivery types.

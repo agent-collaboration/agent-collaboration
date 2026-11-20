@@ -76,31 +76,10 @@ impl CallRouter for MailCallRouter {
             Ok(resolved) => resolved,
             Err(error) => return Err(Self::binding_call_failure(error)),
         };
-        let item = resolved.item();
-        let delivery = if let board_sync_protocol::BoardDeliveryBody::Wake(body) = item.body() {
-            self.consumer.deliver_wake(item, body)
-        } else if matches!(
-            item.body(),
-            board_sync_protocol::BoardDeliveryBody::Notification(_)
-        ) {
-            super::LocalDelivery {
-                outcome: fleet_sync_delivery::LocalOutcome::Dropped,
-                observation: super::DeliveryReceipt {
-                    outcome: collaboration_protocol::DeliveryOutcome::NotSubmitted {
-                        retryable: false,
-                        reason: "Board notification delivery is not available in this build"
-                            .to_owned(),
-                    },
-                    reachability: None,
-                    client: None,
-                }
-                .into(),
-            }
-        } else {
-            self.consumer
-                .deliver_with_load_policy(item, envelope.call, direct_load_policy)
-                .await
-        };
+        let delivery = self
+            .consumer
+            .dispatch_frozen_body(resolved.item(), envelope.call, direct_load_policy)
+            .await;
         serde_json::to_value(resolved.validated_answer(delivery))
             .map_err(|_| CallFailure::AnswerLost)
     }
@@ -118,6 +97,36 @@ impl MailCallRouter {
                 },
             },
             _ => CallFailure::AnswerLost,
+        }
+    }
+}
+
+impl super::MailConsumer {
+    pub(super) async fn dispatch_frozen_body(
+        &self,
+        item: &super::DeliveryItem<RouterDeliveryTypes>,
+        call: super::CallId,
+        load_policy: LoadPolicy,
+    ) -> super::LocalDelivery<RouterDeliveryTypes> {
+        use board_sync_protocol::BoardDeliveryBody;
+        match item.body() {
+            BoardDeliveryBody::Message(_) => {
+                self.deliver_with_load_policy(item, call, load_policy).await
+            }
+            BoardDeliveryBody::Wake(body) => self.deliver_wake(item, body),
+            BoardDeliveryBody::Notification(_) => super::LocalDelivery {
+                outcome: fleet_sync_delivery::LocalOutcome::Dropped,
+                observation: super::DeliveryReceipt {
+                    outcome: collaboration_protocol::DeliveryOutcome::NotSubmitted {
+                        retryable: false,
+                        reason: "Board notification delivery is not available in this build"
+                            .to_owned(),
+                    },
+                    reachability: None,
+                    client: None,
+                }
+                .into(),
+            },
         }
     }
 }

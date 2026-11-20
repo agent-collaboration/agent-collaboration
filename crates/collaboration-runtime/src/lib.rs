@@ -115,7 +115,7 @@ pub use received_mail_push::received_mail_push;
 mod outgoing_mail_message;
 pub use outgoing_mail_message::outgoing_mail_message;
 pub mod mail_push_preparation;
-pub use mail_push_preparation::{MailPushPreparation, prepare_mail_push};
+pub use mail_push_preparation::MailPushPreparation;
 mod mail_delivery_projection;
 pub use mail_delivery_projection::{
     project_cancelled_after_delivery, project_mail_cancel_outcome, project_mail_outcome,

@@ -807,3 +807,90 @@ fn native_control_errors_keep_service_detail_and_only_uncertain_effects_are_unkn
         "collaboration API protocol violation: connection closed after dispatch"
     );
 }
+
+#[tokio::test]
+async fn local_message_history_uses_creation_order_before_applying_the_limit() {
+    use collaboration_protocol::{
+        MessageDelivery, MessageHistoryEntry, MessageHistoryResult, PushHeaderFacts, PushKind,
+        PushOrigin, PushRecordDraft,
+    };
+
+    let temporary = tempfile::tempdir().unwrap();
+    let (server, owner, native) = message_server(temporary.path()).await;
+    let caller: collaboration_protocol::SessionRef =
+        serde_json::from_value(fixture_session("codex-local", "history-caller")).unwrap();
+    let other: collaboration_protocol::SessionRef =
+        serde_json::from_value(fixture_session("claude-local", "history-other")).unwrap();
+    let older_id: collaboration_protocol::PushId = "019f0000-0000-7000-8000-000000000002"
+        .to_owned()
+        .try_into()
+        .unwrap();
+    let newer_id: collaboration_protocol::PushId = "019f0000-0000-7000-8000-000000000001"
+        .to_owned()
+        .try_into()
+        .unwrap();
+    for (id, sender, target, created_at) in [
+        (
+            older_id.clone(),
+            caller.clone(),
+            other.clone(),
+            "2026-11-19T00:00:00Z",
+        ),
+        (
+            newer_id.clone(),
+            other.clone(),
+            caller.clone(),
+            "2026-11-19T00:00:01Z",
+        ),
+    ] {
+        native
+            .interactions
+            .insert_push_record(PushRecordDraft {
+                push_id: id,
+                target,
+                kind: PushKind::DirectMessage,
+                origin: PushOrigin::Session(sender),
+                origin_router_ref: None,
+                mode: Some(MessageDelivery::Auto),
+                guard: None,
+                reply_to_push_id: None,
+                header_facts: PushHeaderFacts::DirectMessage {
+                    sender_display_name: None,
+                },
+                body: Some("stored local history fixture".to_owned()),
+                activity: None,
+                created_at: created_at.parse().unwrap(),
+            })
+            .await
+            .unwrap();
+    }
+
+    for (limit, expected) in [(2, vec![newer_id.clone(), older_id]), (1, vec![newer_id])] {
+        let result = server
+            .message_history(super::super::Parameters(
+                collaboration_protocol::PushRecordHistoryParams {
+                    caller: caller.clone(),
+                    with: other.clone(),
+                    limit,
+                },
+            ))
+            .await;
+        let history: MessageHistoryResult =
+            serde_json::from_value(result.structured_content.unwrap()).unwrap();
+        let ids: Vec<_> = history
+            .records
+            .into_iter()
+            .map(|entry| {
+                let MessageHistoryEntry::Local(entry) = entry else {
+                    panic!("expected a local history entry");
+                };
+                entry.push_id
+            })
+            .collect();
+        assert_eq!(ids, expected);
+    }
+    drop(server);
+    owner.shutdown().await;
+    drop(owner);
+    native.close().await.unwrap();
+}

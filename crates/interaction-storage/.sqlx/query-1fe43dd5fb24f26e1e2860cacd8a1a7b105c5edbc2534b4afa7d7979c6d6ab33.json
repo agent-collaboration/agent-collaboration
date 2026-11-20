@@ -1,6 +1,6 @@
 {
   "db_name": "Turso",
-  "query": "SELECT DISTINCT target_service_id AS \"service!: String\",target_endpoint_id AS \"endpoint!: String\",target_session_id AS \"session!: String\" FROM router_pushes WHERE retention='mailTerminalAge' AND delivery_state='held' ORDER BY target_service_id,target_endpoint_id,target_session_id",
+  "query": "SELECT DISTINCT target_service_id AS \"service!: String\",target_endpoint_id AS \"endpoint!: String\",target_session_id AS \"session!: String\" FROM router_pushes WHERE retention='mailTerminalAge' AND delivery_state='held' AND kind='direct-message' ORDER BY target_service_id,target_endpoint_id,target_session_id",
   "describe": {
     "columns": [
       {
@@ -32,5 +32,5 @@
       null
     ]
   },
-  "hash": "d6dbcbf6c51cfdb5f365c20bb7c74f2e475083fb6c4c2675ec31e99bd746bee8"
+  "hash": "1fe43dd5fb24f26e1e2860cacd8a1a7b105c5edbc2534b4afa7d7979c6d6ab33"
 }

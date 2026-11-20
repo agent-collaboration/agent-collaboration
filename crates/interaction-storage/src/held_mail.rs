@@ -1,25 +1,8 @@
 //! Native held-mail discovery for the reader readiness coordinator.
 use crate::{InteractionStore, StorageError, push_record_rows};
 use collaboration_protocol::{PushId, PushRecord, SessionRef};
-use fleet_sync_protocol::ItemId;
 
 impl InteractionStore {
-    /// Items left waiting for a board notification consumer that this build removed.
-    pub async fn retired_notification_items(&self) -> Result<Vec<ItemId>, StorageError> {
-        let mut connection = self.writer.lock().await;
-        let rows = sqlx_turso::query!(
-            r#"SELECT push_id AS "item_id!: String" FROM router_pushes
-               WHERE retention='mailTerminalAge' AND delivery_state='held'
-                 AND kind IN ('boardNotification', 'subscriptionActivity')
-               UNION SELECT item_id FROM pending_poll_mail"#,
-        )
-        .fetch_all(&mut *connection)
-        .await?;
-        rows.into_iter()
-            .map(|row| ItemId::try_from(row.item_id).map_err(|_| StorageError::InvalidStoredRecord))
-            .collect()
-    }
-
     /// Readiness needs unscheduled Held identities; the SDK owns scheduled backoff retries.
     pub async fn held_mail_push_ids(
         &self,
@@ -41,7 +24,7 @@ impl InteractionStore {
     pub async fn held_mail_targets(&self) -> Result<Vec<SessionRef>, StorageError> {
         let mut connection = self.writer.lock().await;
         let rows = sqlx_turso::query!(
-            "SELECT DISTINCT target_service_id AS \"service!: String\",target_endpoint_id AS \"endpoint!: String\",target_session_id AS \"session!: String\" FROM router_pushes WHERE retention='mailTerminalAge' AND delivery_state='held' ORDER BY target_service_id,target_endpoint_id,target_session_id"
+            "SELECT DISTINCT target_service_id AS \"service!: String\",target_endpoint_id AS \"endpoint!: String\",target_session_id AS \"session!: String\" FROM router_pushes WHERE retention='mailTerminalAge' AND delivery_state='held' AND kind='direct-message' ORDER BY target_service_id,target_endpoint_id,target_session_id"
         ).fetch_all(&mut *connection).await?;
         rows.into_iter()
             .map(|row| push_record_rows::session_from_parts(row.service, row.endpoint, row.session))

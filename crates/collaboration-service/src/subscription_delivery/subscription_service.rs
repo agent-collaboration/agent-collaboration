@@ -197,10 +197,7 @@ impl SubscriptionDeliveryService {
         let unavailable = UnsentCause::Holdable {
             otherwise: NativeRefusalCode::CarrierUnavailable,
         };
-        if !matches!(
-            kind,
-            PushKind::DirectMessage | PushKind::BoardNotification | PushKind::SubscriptionActivity
-        ) {
+        if kind != PushKind::DirectMessage {
             return not_started(false, "invalid native mail kind", UnsentCause::InvalidInput);
         }
         if &request.target.endpoint.service_id != self.inner.push.machine.service_id() {

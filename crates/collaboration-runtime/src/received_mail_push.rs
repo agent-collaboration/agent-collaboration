@@ -9,40 +9,10 @@ use collaboration_protocol::{
 use fleet_sync_delivery::DeliveryError;
 use fleet_sync_protocol::DeliveryItem;
 
-/// Poll batches are handed to a waiter and have no native push.
+/// Poll batches have a custody marker rather than a native push.
 pub fn received_mail_push(
     item: &DeliveryItem<RouterDeliveryTypes>,
     received_at: DateTime<Utc>,
-) -> Result<Option<PushRecordDraft>, DeliveryError> {
-    received_mail_push_for(item, received_at, MailPushPurpose::Receive)
-}
-
-pub fn received_poll_mail_push(
-    item: &DeliveryItem<RouterDeliveryTypes>,
-    received_at: DateTime<Utc>,
-) -> Result<PushRecordDraft, DeliveryError> {
-    if !is_poll_mail(item) {
-        return Err(invalid_projection());
-    }
-    received_mail_push_for(item, received_at, MailPushPurpose::PollHandover)?
-        .ok_or_else(invalid_projection)
-}
-
-pub fn is_poll_mail(item: &DeliveryItem<RouterDeliveryTypes>) -> bool {
-    matches!(item.body(), board_sync_protocol::BoardDeliveryBody::Notification(body)
-        if matches!(&body.source, NotificationSource::FollowBatch { policy, .. }
-            if policy.mode() == message_board::SubscriptionMode::Poll))
-}
-
-enum MailPushPurpose {
-    Receive,
-    PollHandover,
-}
-
-fn received_mail_push_for(
-    item: &DeliveryItem<RouterDeliveryTypes>,
-    received_at: DateTime<Utc>,
-    purpose: MailPushPurpose,
 ) -> Result<Option<PushRecordDraft>, DeliveryError> {
     item.body()
         .validate_sender(item.sender())
@@ -128,9 +98,7 @@ fn received_mail_push_for(
                         if roots.len() != 1 {
                             return Err(invalid_projection());
                         }
-                        if matches!(purpose, MailPushPurpose::Receive) {
-                            return Ok(None);
-                        }
+                        return Ok(None);
                     }
                     let message_count = roots
                         .iter()
@@ -199,7 +167,7 @@ fn received_mail_push_for(
     Ok(Some(draft))
 }
 
-pub const fn board_notification_summary(cause: message_board::RecordKind) -> &'static str {
+const fn board_notification_summary(cause: message_board::RecordKind) -> &'static str {
     match cause {
         message_board::RecordKind::Post => "New thread post",
         message_board::RecordKind::RoleAssignment => "Role assignment changed",
@@ -216,3 +184,9 @@ fn invalid_projection() -> DeliveryError {
 #[cfg(test)]
 #[path = "received_mail_push_tests.rs"]
 mod tests;
+
+pub fn is_poll_mail(item: &DeliveryItem<RouterDeliveryTypes>) -> bool {
+    matches!(item.body(), board_sync_protocol::BoardDeliveryBody::Notification(body)
+        if matches!(&body.source, NotificationSource::FollowBatch { policy, .. }
+            if policy.mode() == message_board::SubscriptionMode::Poll))
+}

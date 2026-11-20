@@ -2,7 +2,7 @@
 #[path = "stuck_sent_mail_test.rs"]
 mod stuck_sent_mail;
 use crate::{InteractionAtomicStore, InteractionStore, push_records};
-use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
+use board_sync_protocol::BoardDeliveryTypes;
 use collaboration_protocol::{PushHeaderFacts, PushId, PushKind, PushOrigin, PushRecordDraft};
 use durable_steps::{
     AtomicStore, CallFailure, CallId, CallTarget, Host, NotSentReason, StoreError,
@@ -48,9 +48,20 @@ impl Host for NoDispatchHost {
     }
 }
 
+struct FixtureDeliveryProtocol;
+impl fleet_sync_protocol::ConsumerProtocol for FixtureDeliveryProtocol {
+    type Delivery = BoardDeliveryTypes;
+    type Request = ();
+    type Answer = ();
+    type ServerRequest = ();
+    type ClientAnswer = ();
+    type Notice = ();
+    type Annotation = ();
+}
+
 struct NoDeliveryConsumer;
 impl<TScope: TransactionScope> DeliveryConsumer<TScope> for NoDeliveryConsumer {
-    type Protocol = BoardConsumerProtocol;
+    type Protocol = FixtureDeliveryProtocol;
     async fn release_gate(
         &self,
         _: &mut TScope,

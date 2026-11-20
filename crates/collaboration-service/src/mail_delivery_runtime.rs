@@ -322,7 +322,6 @@ impl MailDeliveryRuntime {
             result = async {
                 let admitted = self.initialize_record_removals().await?;
                 self.initialize_submitter_bindings().await?;
-                self.release_retired_notifications().await?;
                 Ok::<_, StoreError>(admitted)
             } => result?,
             () = shutdown.cancelled() => return Ok(()),
@@ -396,6 +395,7 @@ impl DeliveryConsumer<TursoScope<'_, MailHost>> for MailConsumer {
                 outcome,
                 RecipientOutcome::Held | RecipientOutcome::Prevented { .. }
             ) && let Some(record) = &record
+                && record.kind == collaboration_protocol::PushKind::DirectMessage
             {
                 self.reader_actors
                     .prompt_native_mail_outcome(record.target.clone());
@@ -426,7 +426,7 @@ impl DeliveryConsumer<TursoScope<'_, MailHost>> for MailConsumer {
         item: &DeliveryItem<RouterDeliveryTypes>,
         call: CallId,
     ) -> LocalDelivery<RouterDeliveryTypes> {
-        self.deliver_with_load_policy(item, call, LoadPolicy::LoadedOnly)
+        self.dispatch_frozen_body(item, call, LoadPolicy::LoadedOnly)
             .await
     }
     fn may_cancel(&self, sender: &MailSender, item: &DeliveryHeader<RouterDeliveryTypes>) -> bool {
@@ -447,19 +447,7 @@ impl MailConsumer {
             .await
         {
             Ok(Some(answer)) => answer,
-            Ok(None) => LocalDelivery {
-                outcome: fleet_sync_delivery::LocalOutcome::Held { until: None },
-                observation: DeliveryReceipt {
-                    outcome: collaboration_protocol::DeliveryOutcome::NotSubmitted {
-                        retryable: true,
-                        reason: "Poll item waits for a matching waiter".to_owned(),
-                    },
-                    reachability: None,
-                    client: None,
-                }
-                .into(),
-            },
-            Err(_) => LocalDelivery {
+            Ok(None) | Err(_) => LocalDelivery {
                 outcome: fleet_sync_delivery::LocalOutcome::Uncertain,
                 observation: DeliveryReceipt {
                     outcome: collaboration_protocol::DeliveryOutcome::Unknown,
