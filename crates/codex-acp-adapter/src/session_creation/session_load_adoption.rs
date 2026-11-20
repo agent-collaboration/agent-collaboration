@@ -47,28 +47,6 @@ impl AcpSessionBinding {
         generation: &CodexGeneration,
         params: &Value,
     ) -> Result<Value, SessionSetupError> {
-        self.resume_binding(catalog, generation, params, true).await
-    }
-
-    pub(crate) async fn resume_held_binding(
-        &mut self,
-        catalog: &mut AcpSchemaCatalog,
-        generation: &CodexGeneration,
-        params: &Value,
-    ) -> Result<Value, SessionSetupError> {
-        // This live binding keeps its original native settings. A config
-        // override on resume can make Codex rebuild a loaded idle thread.
-        self.resume_binding(catalog, generation, params, false)
-            .await
-    }
-
-    async fn resume_binding(
-        &mut self,
-        catalog: &mut AcpSchemaCatalog,
-        generation: &CodexGeneration,
-        params: &Value,
-        reapply_profile: bool,
-    ) -> Result<Value, SessionSetupError> {
         if !catalog
             .validate("LoadSessionRequest", params)
             .map_err(|_| SessionSetupError::SchemaUnavailable)?
@@ -111,7 +89,7 @@ impl AcpSessionBinding {
             .request_validated(
                 &self.schemas,
                 NativeOperation::ResumeThread,
-                resume_parameters(session_id, profile.as_ref().filter(|_| reapply_profile)),
+                resume_parameters(session_id, profile.as_ref()),
             )
             .await
             .map_err(map_native_failure)?;

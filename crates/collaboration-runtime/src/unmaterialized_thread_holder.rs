@@ -1,4 +1,4 @@
-//! Host-lifetime ownership of retained Codex bindings and detached prompt drains.
+//! Host-lifetime ownership of unfinished Codex creates and detached prompt drains.
 use codex_acp_adapter::{AcpSessionBinding, HeldBindingCheckout, UnmaterializedBindingStore};
 use std::{collections::BTreeMap, sync::Mutex};
 
@@ -30,36 +30,6 @@ impl UnmaterializedThreadHolder {
     pub async fn drain_host_tasks(&self) {
         self.host_tasks.close();
         self.host_tasks.wait().await;
-    }
-
-    pub(crate) fn checkout_for_delivery(&self, session_id: &str) -> HeldBindingCheckout {
-        // Delivery has a loaded-thread path. Only unmaterialized creates
-        // need its special held-connection path and idle assumption.
-        self.checkout_matching(session_id, AcpSessionBinding::is_unmaterialized)
-    }
-
-    fn checkout_matching(
-        &self,
-        session_id: &str,
-        matches: impl FnOnce(&AcpSessionBinding) -> bool,
-    ) -> HeldBindingCheckout {
-        let mut threads = self
-            .threads
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        match threads.get_mut(session_id) {
-            Some(slot @ HeldThread::Ready(_)) => {
-                if matches!(slot, HeldThread::Ready(binding) if matches(binding))
-                    && let HeldThread::Ready(binding) = std::mem::replace(slot, HeldThread::Busy)
-                {
-                    HeldBindingCheckout::Ready(binding)
-                } else {
-                    HeldBindingCheckout::Missing
-                }
-            }
-            Some(HeldThread::Busy) => HeldBindingCheckout::Busy,
-            None => HeldBindingCheckout::Missing,
-        }
     }
 }
 
@@ -99,7 +69,7 @@ impl Drop for HeldBindingCleanup<'_> {
 
 impl UnmaterializedBindingStore for UnmaterializedThreadHolder {
     fn hold(&self, binding: AcpSessionBinding) {
-        if !binding.has_scratch_lease() {
+        if !binding.is_unmaterialized() {
             return;
         }
         self.threads
@@ -112,7 +82,18 @@ impl UnmaterializedBindingStore for UnmaterializedThreadHolder {
     }
 
     fn checkout(&self, session_id: &str) -> HeldBindingCheckout {
-        self.checkout_matching(session_id, |_| true)
+        let mut threads = self
+            .threads
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match threads.insert(session_id.to_owned(), HeldThread::Busy) {
+            Some(HeldThread::Ready(binding)) => HeldBindingCheckout::Ready(binding),
+            Some(HeldThread::Busy) => HeldBindingCheckout::Busy,
+            None => {
+                threads.remove(session_id);
+                HeldBindingCheckout::Missing
+            }
+        }
     }
 
     fn restore(&self, binding: AcpSessionBinding) {

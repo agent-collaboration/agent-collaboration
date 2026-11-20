@@ -10,7 +10,7 @@ use std::{path::PathBuf, sync::Arc};
 
 pub(crate) struct SetupTaskInputs {
     pub known_session: Option<AcpSessionBinding>,
-    pub checked_out_held: bool,
+    pub adopt_unmaterialized: bool,
     pub backend_path: PathBuf,
     pub schemas: Arc<NativePayloadSchemas>,
     pub generation: CodexGeneration,
@@ -36,7 +36,7 @@ pub(crate) async fn run_session_setup(inputs: SetupTaskInputs) -> SetupTaskOutpu
         }
     };
     if let Some(mut session) = inputs.known_session {
-        if inputs.checked_out_held && session.is_unmaterialized() {
+        if inputs.adopt_unmaterialized {
             let outcome = session
                 .adopt_unmaterialized(&mut catalog, &inputs.generation, &inputs.params)
                 .await
@@ -46,16 +46,10 @@ pub(crate) async fn run_session_setup(inputs: SetupTaskInputs) -> SetupTaskOutpu
                 outcome,
             };
         }
-        let resumed = if inputs.checked_out_held {
-            session
-                .resume_held_binding(&mut catalog, &inputs.generation, &inputs.params)
-                .await
-        } else {
-            session
-                .resume_with_receipt(&mut catalog, &inputs.generation, &inputs.params)
-                .await
-        };
-        let outcome = match resumed {
+        let outcome = match session
+            .resume_with_receipt(&mut catalog, &inputs.generation, &inputs.params)
+            .await
+        {
             Ok(response)
                 if crate::session_creation::native_thread_activity(&response)
                     == crate::session_creation::NativeThreadActivity::Active =>
@@ -91,11 +85,11 @@ pub(crate) async fn run_session_setup(inputs: SetupTaskInputs) -> SetupTaskOutpu
         };
         let detached = matches!(
             &outcome,
-            Err(SessionSetupError::NativeThreadStatusUnavailable
+            Err(SessionSetupError::Busy
+                | SessionSetupError::NativeThreadStatusUnavailable
                 | SessionSetupError::OutcomeUnknown
                 | SessionSetupError::Unavailable)
-        ) || (!inputs.checked_out_held
-            && matches!(&outcome, Err(SessionSetupError::Busy)));
+        );
         return SetupTaskOutput {
             binding: if detached { None } else { Some(session) },
             outcome,
@@ -365,7 +359,7 @@ mod tests {
         let resumed = run_session_setup(SetupTaskInputs {
             scratch_scopes: Arc::new(IgnoredScratchScopes),
             known_session: Some(binding),
-            checked_out_held: false,
+            adopt_unmaterialized: false,
             backend_path: PathBuf::new(),
             schemas: Arc::clone(&schemas),
             generation: generation.clone(),
@@ -389,7 +383,7 @@ mod tests {
         let adopted = run_session_setup(SetupTaskInputs {
             scratch_scopes: Arc::new(IgnoredScratchScopes),
             known_session: Some(binding),
-            checked_out_held: true,
+            adopt_unmaterialized: true,
             backend_path: PathBuf::new(),
             schemas,
             generation,

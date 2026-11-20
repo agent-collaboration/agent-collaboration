@@ -274,6 +274,19 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderFormElicitationHa
             responder.respond(json!({"action":"cancel"}))?;
             return Ok(Handled::Yes);
         };
+        let port = Arc::clone(&self.interaction_port);
+        if let Some(refusal) = port.managed_refusal() {
+            let response_guard = context.responses.track();
+            connection.spawn(async move {
+                let queued = responder.respond(refusal.acp_form());
+                drop(response_guard);
+                context
+                    .cancel_after_refusal(port, session_id, refusal)
+                    .await;
+                queued
+            })?;
+            return Ok(Handled::Yes);
+        }
         let canonical = match Self::question_from_form(&session_id, responder.id(), request) {
             Ok(question) => question,
             Err(error) => {
@@ -282,18 +295,9 @@ impl<P: InteractionPort> HandleDispatchFrom<Agent> for ProviderFormElicitationHa
             }
         };
         let fields = canonical.fields.clone();
-        let port = Arc::clone(&self.interaction_port);
         let request_cancellation = responder.cancellation();
         let response_guard = context.responses.track();
         connection.spawn(async move {
-            if let Some(refusal) = port.managed_refusal() {
-                let queued = responder.respond(refusal.acp_form());
-                drop(response_guard);
-                context
-                    .cancel_after_refusal(port, session_id, refusal)
-                    .await;
-                return queued;
-            }
             let agent_cancellation = CancellationToken::new();
             let answer = port.request_question(
                 context.approval,

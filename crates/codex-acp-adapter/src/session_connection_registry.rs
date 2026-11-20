@@ -20,7 +20,7 @@ pub enum HeldBindingCheckout {
     Missing,
 }
 
-/// Host-owned bindings survive frontend disconnect while they hold a scratch lease.
+/// Host-owned bindings survive an ACP frontend connection until the first turn starts.
 pub trait UnmaterializedBindingStore: Send + Sync {
     fn hold(&self, binding: AcpSessionBinding);
     fn checkout(&self, session_id: &str) -> HeldBindingCheckout;
@@ -223,7 +223,7 @@ impl AcpSessionRegistry {
             while let Some(completed) = prompts.join_next().await {
                 if let Ok(completed) = completed
                     && let Some(binding) = completed.1.binding
-                    && binding.has_scratch_lease()
+                    && binding.is_unmaterialized()
                 {
                     holder.hold(binding);
                 }
@@ -232,7 +232,7 @@ impl AcpSessionRegistry {
         });
         for (_, slot) in self.sessions {
             if let SessionSlot::Ready(binding) = slot
-                && binding.has_scratch_lease()
+                && binding.is_unmaterialized()
             {
                 self.holder.hold(*binding);
             }

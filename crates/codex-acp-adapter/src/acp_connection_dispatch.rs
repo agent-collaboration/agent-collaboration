@@ -164,11 +164,6 @@ pub(crate) async fn route_codex_sessions(
                     let mut adopted_held = false;
                     if known_session.is_none() && let Some(session_id) = requested_session.as_ref() {
                         match inputs.holder.checkout(session_id) {
-                            HeldBindingCheckout::Ready(binding)
-                                if !binding.is_unmaterialized() && binding.generation() != &inputs.generation =>
-                            {
-                                inputs.holder.finish(session_id);
-                            }
                             HeldBindingCheckout::Ready(binding) => {
                                 known_session = Some(*binding);
                                 adopted_held = true;
@@ -182,7 +177,7 @@ pub(crate) async fn route_codex_sessions(
                         }
                     }
                     let cancellation_barrier=requested_session.as_ref().and_then(|session| sessions.cancellation_barrier(session));
-                    let setup=SetupTaskInputs { cancellation_barrier, known_session, checked_out_held:adopted_held, backend_path:inputs.backend_path.clone(), schemas:Arc::clone(&inputs.schemas), generation:inputs.generation.clone(), params, create_new, operation_id, recorder:Arc::clone(&inputs.recorder), scratch_scopes:Arc::clone(&inputs.scratch_scopes) };
+                    let setup=SetupTaskInputs { cancellation_barrier, known_session, adopt_unmaterialized:adopted_held, backend_path:inputs.backend_path.clone(), schemas:Arc::clone(&inputs.schemas), generation:inputs.generation.clone(), params, create_new, operation_id, recorder:Arc::clone(&inputs.recorder), scratch_scopes:Arc::clone(&inputs.scratch_scopes) };
                     let holder=Arc::clone(&inputs.holder);
                     if create_new {
                         let (result_sender,result_receiver)=tokio::sync::oneshot::channel();
