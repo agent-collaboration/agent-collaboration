@@ -30,11 +30,11 @@ const objectSchema = z.strictObject({
 });
 const referenceSchema = z.strictObject({ $ref: definitionRef });
 const composedReference = z.strictObject({ allOf: z.tuple([referenceSchema]) });
+const emptySchema = z.strictObject({});
 const stringSchema = z.strictObject({ type: z.literal("string") });
 const nonEmptyStringSchema = stringSchema.extend({ minLength: z.literal(1) });
 const enumSchema = stringSchema.extend({ enum: z.array(enumValue).min(1) });
-const enumBranchSchema = stringSchema.extend({
-  enum: z.tuple([enumValue]),
+const enumBranchSchema = enumSchema.extend({
   description: z.string().optional(),
 });
 const enumUnionSchema = z.strictObject({ oneOf: z.array(enumBranchSchema).min(1) });
@@ -150,7 +150,7 @@ export function definitionName(pointer: string): string {
 }
 
 function parseValue(schema: unknown, path: string): ValueShape {
-  if (schema === true) return { kind: "opaque" };
+  if (schema === true || emptySchema.safeParse(schema).success) return { kind: "opaque" };
   const reference = referenceSchema.safeParse(schema);
   if (reference.success) return { kind: "reference", pointer: reference.data.$ref };
   const composed = composedReference.safeParse(schema);
@@ -373,9 +373,12 @@ function parseDefinition(schema: unknown, pointer: string): NamedDefinition {
   const variants = enumeration.success
     ? enumeration.data.enum
     : union.success
-      ? union.data.oneOf.map((branch) => branch.enum[0])
+      ? union.data.oneOf.flatMap((branch) => branch.enum)
       : undefined;
-  if (variants !== undefined && new Set(variants).size === variants.length) {
+  if (variants !== undefined) {
+    if (new Set(variants).size !== variants.length) {
+      throw new Error(`${pointer}: overlapping string enum tags`);
+    }
     return { name, description, definition: { kind: "enum", variants } };
   }
   const unionDefinition = parseTagged(shape, pointer) ?? parseWrapped(shape, pointer);

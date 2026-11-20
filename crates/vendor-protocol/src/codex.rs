@@ -1,7 +1,7 @@
 //! Codex app-server wire bindings from the pinned experimental schema and pairing.
 //!
 //! A plain JSON-RPC envelope can retain its `result` field as a
-//! [`RawValue`](serde_json::value::RawValue). After selecting and correlating the reply,
+//! [`RawValue`]. After selecting and correlating the reply,
 //! pass that field's JSON bytes to [`CodexRequest::decode_response`].
 //! Decode request bodies directly from JSON text or bytes with Serde.
 //!

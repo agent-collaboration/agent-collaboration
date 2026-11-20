@@ -17,7 +17,7 @@ const repository = fileURLToPath(new URL("../../../", import.meta.url));
 const schemaDirectory = join(repository, "verification/schemas");
 const committedBindings = join(repository, "crates/vendor-protocol/src/codex/generated.rs");
 const generatorCommand = "pnpm --dir verification run codex:generate";
-const selectedMethods = ["model/list", "thread/read", "thread/resume"];
+const selectedMethods = ["model/list", "thread/read", "thread/resume", "turn/start"];
 
 const pinSchema = z.object({
   protocol: z.string(),

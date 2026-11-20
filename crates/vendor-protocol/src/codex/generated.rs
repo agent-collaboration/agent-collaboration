@@ -34,6 +34,49 @@ impl ActivePermissionProfile {
     }
 }
 
+// #/definitions/v2/AdditionalContextEntry
+codex_object! {
+    AdditionalContextEntry {
+        #[serde(rename = "kind")]
+        kind: AdditionalContextKind,
+        /// Optional name for untrusted context, used to label its tool output.
+        #[serde(
+            rename = "name",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        name: Option<Option<String>>,
+        #[serde(rename = "value")]
+        value: String,
+    }
+}
+
+// #/definitions/v2/AdditionalContextKind
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum AdditionalContextKind {
+    #[serde(rename = "untrusted")]
+    Untrusted,
+    #[serde(rename = "application")]
+    Application,
+}
+
+impl<'de> Deserialize<'de> for AdditionalContextKind {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "untrusted" => Ok(Self::Untrusted),
+            "application" => Ok(Self::Application),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["untrusted", "application"],
+            )),
+        }
+    }
+}
+
 // #/definitions/v2/AgentMessageDelivery
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub enum AgentMessageDelivery {
@@ -2095,6 +2138,38 @@ codex_object! {
 codex_tagged_object! {
     ReasoningItemReasoningSummary {
         "summary_text" => SummaryText(SummaryTextReasoningItemReasoningSummary),
+    }
+}
+
+// #/definitions/v2/ReasoningSummary
+/// A summary of the reasoning performed by the model. This can be useful for debugging and understanding the model's reasoning process. See <https://platform.openai.com/docs/guides/reasoning?api-mode=responses#reasoning-summaries>
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum ReasoningSummary {
+    #[serde(rename = "auto")]
+    Auto,
+    #[serde(rename = "concise")]
+    Concise,
+    #[serde(rename = "detailed")]
+    Detailed,
+    #[serde(rename = "none")]
+    None,
+}
+
+impl<'de> Deserialize<'de> for ReasoningSummary {
+    fn deserialize<Decoder: serde::Deserializer<'de>>(
+        decoder: Decoder,
+    ) -> Result<Self, Decoder::Error> {
+        let tag = String::deserialize(decoder)?;
+        match tag.as_str() {
+            "auto" => Ok(Self::Auto),
+            "concise" => Ok(Self::Concise),
+            "detailed" => Ok(Self::Detailed),
+            "none" => Ok(Self::None),
+            _ => Err(serde::de::Error::unknown_variant(
+                &tag,
+                &["auto", "concise", "detailed", "none"],
+            )),
+        }
     }
 }
 
@@ -5217,6 +5292,24 @@ impl Turn {
     }
 }
 
+// #/definitions/v2/TurnEnvironmentParams
+codex_object! {
+    TurnEnvironmentParams {
+        #[serde(rename = "cwd")]
+        cwd: LegacyAppPathString,
+        #[serde(rename = "environmentId")]
+        environment_id: String,
+        /// Environment-native runtime workspace roots. Omitted defaults to `cwd`.
+        #[serde(
+            rename = "runtimeWorkspaceRoots",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        runtime_workspace_roots: Option<Option<Vec<LegacyAppPathString>>>,
+    }
+}
+
 // #/definitions/v2/TurnError
 codex_object! {
     TurnError {
@@ -5289,6 +5382,242 @@ impl<'de> Deserialize<'de> for TurnItemsView {
     }
 }
 
+// #/definitions/v2/TurnStartParams
+codex_object! {
+    TurnStartParams {
+        /// Optional client-provided context fragments keyed by an opaque source identifier.
+        #[serde(
+            rename = "additionalContext",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        additional_context: Option<Option<std::collections::BTreeMap<String, AdditionalContextEntry>>>,
+        /// Override the approval policy for this turn and subsequent turns.
+        #[serde(
+            rename = "approvalPolicy",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        approval_policy: Option<Option<AskForApproval>>,
+        /// Override where approval requests are routed for review on this turn and subsequent turns.
+        #[serde(
+            rename = "approvalsReviewer",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        approvals_reviewer: Option<Option<ApprovalsReviewer>>,
+        #[serde(
+            rename = "clientUserMessageId",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        client_user_message_id: Option<Option<String>>,
+        /// EXPERIMENTAL - Set a pre-set collaboration mode. Takes precedence over model, reasoning_effort, and developer instructions if set.
+        ///
+        /// For `collaboration_mode.settings.developer_instructions`, `null` means "use the built-in instructions for the selected mode".
+        #[serde(
+            rename = "collaborationMode",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        collaboration_mode: Option<Option<CollaborationMode>>,
+        /// Override the working directory for this turn and subsequent turns.
+        #[serde(
+            rename = "cwd",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        cwd: Option<Option<String>>,
+        /// EXPERIMENTAL - Request an authorized cyber program for this turn. Omission preserves automatic behavior. This does not grant access.
+        #[serde(
+            rename = "cyberAccessProgram",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        cyber_access_program: Option<Option<CyberAccessProgram>>,
+        /// Replace this thread's disabled plugin IDs. Omitted/null preserves the list; [] clears it.
+        #[serde(
+            rename = "disabledPluginIds",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        disabled_plugin_ids: Option<Option<Vec<String>>>,
+        /// Override the reasoning effort for this turn and subsequent turns.
+        #[serde(
+            rename = "effort",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        effort: Option<Option<ReasoningEffort>>,
+        /// Optional environments for this turn and subsequent turns.
+        ///
+        /// Omitted uses the thread sticky environments. Empty disables environment access for this turn. Non-empty selects the first environment as the current turn environment for this turn.
+        #[serde(
+            rename = "environments",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        environments: Option<Option<Vec<TurnEnvironmentParams>>>,
+        #[serde(rename = "input")]
+        input: Vec<UserInput>,
+        /// Override the model for this turn and subsequent turns.
+        #[serde(
+            rename = "model",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        model: Option<Option<String>>,
+        /// @deprecated Ignored. Use `effort: "ultra"` for proactive multi-agent behavior.
+        #[serde(
+            rename = "multiAgentMode",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        multi_agent_mode: Option<Option<MultiAgentMode>>,
+        /// Optional JSON Schema used to constrain the final assistant message for this turn.
+        #[serde(
+            rename = "outputSchema",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        output_schema: Option<super::OpaqueJson>,
+        /// ID of the turn that caused this new turn to start.
+        ///
+        /// Set this when starting work on behalf of another turn, such as delegated work in a different thread. Leave unset for work started directly by the user. Ignored when this request adds input to an active turn.
+        #[serde(
+            rename = "parentTurnId",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        parent_turn_id: Option<Option<String>>,
+        /// Select a named permissions profile id for this turn and subsequent turns. Cannot be combined with `sandboxPolicy`.
+        #[serde(
+            rename = "permissions",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        permissions: Option<Option<String>>,
+        /// @deprecated `friendly` and `pragmatic` no longer select a style. Changing this does not rewrite the thread's existing instructions.
+        #[serde(
+            rename = "personality",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        personality: Option<Option<Personality>>,
+        /// Optional metadata to enrich Codex's ResponsesAPI turn metadata. Replaces unprotected client-provided entries when supplied; an empty map clears them.
+        ///
+        /// Entries are flattened into the JSON string sent as `client_metadata["x-codex-turn-metadata"]` on ResponsesAPI HTTP and websocket requests.
+        ///
+        /// They are not sent as top-level ResponsesAPI `client_metadata` keys, and reserved keys such as `session_id`, `thread_id`, `turn_id`, and `window_id` cannot be overridden.
+        #[serde(
+            rename = "responsesapiClientMetadata",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        responsesapi_client_metadata: Option<Option<std::collections::BTreeMap<String, String>>>,
+        /// Merge entries into the ResponsesAPI turn metadata without removing existing entries. Applied after `responsesapiClientMetadata` if both are provided; reserved keys remain protected.
+        #[serde(
+            rename = "responsesapiClientMetadataPatch",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        responsesapi_client_metadata_patch: Option<Option<std::collections::BTreeMap<String, String>>>,
+        /// ID of the first turn in the chain of work that led to this new turn.
+        ///
+        /// When setting `parentTurnId`, set this to the parent turn's `rootTurnId` when known. This keeps descendant work attributed to the original turn. If omitted, the new turn becomes its own root. Ignored when this request adds input to an active turn.
+        #[serde(
+            rename = "rootTurnId",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        root_turn_id: Option<Option<String>>,
+        /// Replace the thread's runtime workspace roots for this turn and subsequent turns. Paths must be absolute.
+        #[serde(
+            rename = "runtimeWorkspaceRoots",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        runtime_workspace_roots: Option<Option<Vec<AbsolutePathBuf>>>,
+        /// Override the sandbox policy for this turn and subsequent turns.
+        #[serde(
+            rename = "sandboxPolicy",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        sandbox_policy: Option<Option<SandboxPolicy>>,
+        /// Override the service tier for this turn and subsequent turns.
+        #[serde(
+            rename = "serviceTier",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        service_tier: Option<Option<String>>,
+        /// Override the service tier only when this request starts a new turn. Use "default" for standard speed. Omitted or null inherits the thread's tier. Does not change the thread's tier or a turn being steered.
+        #[serde(
+            rename = "serviceTierForTurn",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        service_tier_for_turn: Option<Option<String>>,
+        /// Override the reasoning summary for this turn and subsequent turns.
+        #[serde(
+            rename = "summary",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        summary: Option<Option<ReasoningSummary>>,
+        #[serde(rename = "threadId")]
+        thread_id: String,
+        #[serde(
+            rename = "toolOutput",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        tool_output: Option<Option<TurnToolOutput>>,
+        /// Optional source classification for the caller that starts this turn. Ignored when this request steers an already-active turn.
+        #[serde(
+            rename = "turnTrigger",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        turn_trigger: Option<Option<String>>,
+    }
+}
+
+// #/definitions/v2/TurnStartResponse
+codex_object! {
+    TurnStartResponse {
+        #[serde(rename = "turn")]
+        turn: Turn,
+    }
+}
+
 // #/definitions/v2/TurnStatus
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub enum TurnStatus {
@@ -5317,6 +5646,31 @@ impl<'de> Deserialize<'de> for TurnStatus {
                 &["completed", "interrupted", "failed", "inProgress"],
             )),
         }
+    }
+}
+
+// #/definitions/v2/TurnToolOutput
+codex_object! {
+    TurnToolOutput {
+        #[serde(rename = "name")]
+        name: String,
+        #[serde(
+            rename = "namespace",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        namespace: Option<Option<String>>,
+        #[serde(rename = "output")]
+        output: FunctionCallOutputBody,
+        /// Requests retention of this output in the thread's model history.
+        #[serde(
+            rename = "retain",
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "super::deserialize_present",
+        )]
+        retain: Option<bool>,
     }
 }
 
@@ -5551,4 +5905,11 @@ impl super::sealed::Sealed for ThreadResumeParams {}
 impl super::CodexRequest for ThreadResumeParams {
     const METHOD: &'static str = "thread/resume";
     type Response = ThreadResumeResponse;
+}
+
+impl super::sealed::Sealed for TurnStartParams {}
+
+impl super::CodexRequest for TurnStartParams {
+    const METHOD: &'static str = "turn/start";
+    type Response = TurnStartResponse;
 }

@@ -25,10 +25,9 @@ test("two offline generations match the committed shared binding closure", (): v
   const generated = renderCodexBindings(schema, pairing);
   assert.equal(renderCodexBindings(schema, pairing), generated);
   const definitions = generated.match(/^\/\/ #\/definitions\/v2\/\w+$/gm);
-  // The 90 thread definitions and the 12 model/list definitions share ReasoningEffort.
-  assert.equal(definitions?.length, 101);
-  assert.equal(new Set(definitions).size, 101);
-  assert.equal(generated.match(/impl super::CodexRequest for /g)?.length, 3);
+  assert.equal(definitions?.length, 108);
+  assert.equal(new Set(definitions).size, 108);
+  assert.equal(generated.match(/impl super::CodexRequest for /g)?.length, 4);
   checkCodexBindings(committed, generated);
 });
 
@@ -89,6 +88,81 @@ test("semantic validation refuses unsupported constraints and unresolved payload
 
 const definitionFields = z.looseObject({ properties: z.record(z.string(), z.unknown()) });
 const taggedBranches = z.looseObject({ oneOf: z.array(definitionFields) });
+
+test("turn generation rejects overlapping enum branches and unsupported output constraints", (): void => {
+  const bundle = codexBundleSchema.parse(JSON.parse(schema));
+  const summary = bundle.definitions.v2.ReasoningSummary;
+  bundle.definitions.v2.ReasoningSummary = {
+    oneOf: [
+      { type: "string", enum: ["auto", "concise", "detailed"] },
+      { type: "string", enum: ["none", "auto"] },
+    ],
+  };
+  assert.throws(
+    () => renderCodexBindings(JSON.stringify(bundle), pairing),
+    /ReasoningSummary: overlapping string enum tags/,
+  );
+  bundle.definitions.v2.ReasoningSummary = summary;
+  const request = definitionFields.parse(bundle.definitions.v2.TurnStartParams);
+  bundle.definitions.v2.TurnStartParams = {
+    ...request,
+    properties: {
+      ...request.properties,
+      outputSchema: { minProperties: 1 },
+    },
+  };
+  assert.throws(
+    () => renderCodexBindings(JSON.stringify(bundle), pairing),
+    /TurnStartParams\/properties\/outputSchema: unsupported wire value/,
+  );
+});
+
+test("buffered union generation accepts the pinned granular approval branch", (): void => {
+  const generated = renderCodexBindings(schema, pairing);
+  assert.match(
+    generated,
+    /#\[serde\(untagged\)\]\npub enum AskForApproval \{\s+Known\(AskForApprovalTag\),\s+Granular\(GranularAskForApproval\),/,
+  );
+});
+
+for (const [label, futurePayload, path] of [
+  ["direct", true, "futurePayload"],
+  [
+    "transitive",
+    { type: "array", items: { $ref: "#/definitions/v2/ThreadStatus" } },
+    "futurePayload/items -> #/definitions/v2/ThreadStatus",
+  ],
+] as const) {
+  test(`buffered union generation refuses a ${label} raw JSON decoder`, (): void => {
+    const bundle = codexBundleSchema.parse(JSON.parse(schema));
+    const approval = z
+      .looseObject({ oneOf: z.tuple([z.unknown(), definitionFields]) })
+      .parse(bundle.definitions.v2.AskForApproval);
+    const [tags, branch] = approval.oneOf;
+    const granular = definitionFields.parse(branch.properties.granular);
+    bundle.definitions.v2.AskForApproval = {
+      ...approval,
+      oneOf: [
+        tags,
+        {
+          ...branch,
+          properties: {
+            ...branch.properties,
+            granular: {
+              ...granular,
+              properties: { ...granular.properties, futurePayload },
+            },
+          },
+        },
+      ],
+    };
+    assert.throws(() => renderCodexBindings(JSON.stringify(bundle), pairing), {
+      message:
+        `#/definitions/v2/AskForApproval/oneOf/1/properties/granular/properties/${path}: ` +
+        "raw JSON decoder cannot run inside a buffered union",
+    });
+  });
+}
 
 test("thread binding generation refuses unknown composition and constraints at the affected field", (): void => {
   const bundle = codexBundleSchema.parse(JSON.parse(schema));

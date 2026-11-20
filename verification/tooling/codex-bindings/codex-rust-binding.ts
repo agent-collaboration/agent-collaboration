@@ -57,7 +57,12 @@ function rustType(shape: ValueShape): string {
 }
 
 function rustDocs(description: string | undefined): string[] {
-  return description?.split(/\r?\n/).map((line) => `/// ${line}`.trimEnd()) ?? [];
+  return (
+    description?.split(/\r?\n/).map((line) => {
+      const markdown = line.trimEnd().replace(/(^|\s)(https?:\/\/[^\s<>`]+)$/, "$1<$2>");
+      return `/// ${markdown}`.trimEnd();
+    }) ?? []
+  );
 }
 
 function renderField(field: StructField): string[] {
@@ -253,11 +258,65 @@ function renderTagged(
   ].join("\n");
 }
 
+function rawJsonDecoderPath(
+  shape: Definition | ValueShape,
+  definitions: ReadonlyMap<string, NamedDefinition>,
+  path: string,
+): string | undefined {
+  switch (shape.kind) {
+    case "opaque":
+    case "branchString":
+    case "tagged":
+    case "textOrSequence":
+      return path;
+    case "wrapped":
+      if (shape.open) return path;
+      for (const [index, branch] of shape.branches.entries()) {
+        const branchPath = `${path}/oneOf/${index + 1}/properties/${branch.key}`;
+        const rawPath = rawJsonDecoderPath(branch.value, definitions, branchPath);
+        if (rawPath !== undefined) return rawPath;
+      }
+      return undefined;
+    case "object":
+      for (const field of shape.fields) {
+        const rawPath = rawJsonDecoderPath(
+          field.shape,
+          definitions,
+          `${path}/properties/${field.name}`,
+        );
+        if (rawPath !== undefined) return rawPath;
+      }
+      return undefined;
+    case "reference": {
+      const target = definitions.get(shape.pointer);
+      if (target === undefined) throw new Error(`${path}: unresolved definition ${shape.pointer}`);
+      return rawJsonDecoderPath(target.definition, definitions, `${path} -> ${shape.pointer}`);
+    }
+    case "sequence":
+      return rawJsonDecoderPath(shape.item, definitions, `${path}/items`);
+    case "map":
+      return rawJsonDecoderPath(shape.value, definitions, `${path}/additionalProperties`);
+    case "alias":
+      return rawJsonDecoderPath(shape.shape, definitions, path);
+    case "scalar":
+    case "enum":
+    case "nonEmptyString":
+      return undefined;
+  }
+}
+
 function renderWrapped(
   context: DefaultContext,
   wrapped: Extract<Definition, { kind: "wrapped" }>,
 ): string {
   const { name, description } = context.definition;
+  // Derived untagged decoding materializes Serde content before any variant sees it.
+  if (!wrapped.open) {
+    const rawPath = rawJsonDecoderPath(wrapped, context.definitions, `#/definitions/v2/${name}`);
+    if (rawPath !== undefined) {
+      throw new Error(`${rawPath}: raw JSON decoder cannot run inside a buffered union`);
+    }
+  }
   const tagName = `${name}Tag`;
   const wrappers = wrapped.branches.flatMap((branch) => {
     const valueName = `${branch.name}Payload`;
