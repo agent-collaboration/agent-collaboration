@@ -1,4 +1,5 @@
 //! The organization turn owns read-only connection admission and restoration.
+use crate::ValidatedMachineConnection;
 use crate::{
     WorkspaceRuntime,
     machine_connection::{Admission, validate_live, validate_shape},
@@ -7,7 +8,6 @@ use crate::{
 use central_storage::StoreFailure;
 use fleet_contracts::{
     LiveMachineConnection, MachineConnectionAttachment, MachineConnectionRefusal,
-    ValidatedMachineConnection,
 };
 use fleet_identity_protocol::EnrollmentId;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};

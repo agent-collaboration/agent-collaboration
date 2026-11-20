@@ -112,7 +112,7 @@ async fn non_agent_addressees_are_counted_as_skipped_and_change_remains_in_works
     let posted_position: m::ChangePosition =
         u64::try_from(position.get()).unwrap().try_into().unwrap();
     let mut person_caller = f.caller.clone();
-    person_caller = fleet_contracts::WorkspaceCaller::new(
+    person_caller = collaboration_central_core::WorkspaceCaller::new(
         person_caller.connection().clone(),
         m::Caller::Person {
             machine_id: f.caller.caller().machine_id().clone(),

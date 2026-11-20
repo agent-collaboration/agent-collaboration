@@ -32,7 +32,7 @@ pub struct WorkspaceRows {
     pub high_water: workspace_model::ChangePosition,
     /// The page a list read selected, each with its position in the list.
     pub listed: Vec<ListedItem>,
-    pub created_positions:
+    created_positions:
         std::collections::BTreeMap<workspace_model::ItemRef, workspace_model::ChangePosition>,
 }
 impl WorkspaceRows {

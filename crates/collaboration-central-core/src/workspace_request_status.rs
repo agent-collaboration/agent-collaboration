@@ -1,10 +1,10 @@
 //! Read a retained decision from the ledger that owned the original write.
+use crate::WorkspaceCaller;
 use crate::{WorkspaceRuntime, organization_admin_contract::OrganizationAdminResult};
 use central_link_protocol::{
     ReplyPayload, RequestRefusal, RequestScope, RequestStatusAnswer, RequestStatusQuery,
 };
 use central_storage::{ReadOutcome, StoreFailure};
-use fleet_contracts::WorkspaceCaller;
 use fleet_runtime::workspace_request_log::{RequestLogStore, lookup};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_runtime_ports::{
@@ -63,7 +63,12 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         };
         if self
             .access()
-            .admit_workspace(self, caller, scope_workspace)
+            .admit_workspace(
+                self,
+                caller.caller(),
+                caller.connection().attachment_ref(),
+                scope_workspace,
+            )
             .await?
             .is_err()
         {

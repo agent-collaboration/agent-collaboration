@@ -1,6 +1,6 @@
 //! R34 through admitted requests, owning storage and the host's actual alarm driver.
 use super::super::{Statement, support::*};
-use fleet_contracts::WorkspaceCaller;
+use collaboration_central_core::WorkspaceCaller;
 
 use router_clock::RuntimeClock;
 use workspace_model as m;
@@ -90,7 +90,7 @@ fn body() -> m::PostText {
 
 pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     let mut person = f.caller.clone();
-    person = fleet_contracts::WorkspaceCaller::new(
+    person = collaboration_central_core::WorkspaceCaller::new(
         person.connection().clone(),
         m::Caller::Person {
             machine_id: f.caller.caller().machine_id().clone(),
@@ -114,7 +114,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     let mut target_caller = f.caller.clone();
     let mut target = session(&f.caller);
     target.session_id = "timing-direct-target".to_owned().try_into().unwrap();
-    target_caller = fleet_contracts::WorkspaceCaller::new(
+    target_caller = collaboration_central_core::WorkspaceCaller::new(
         target_caller.connection().clone(),
         m::Caller::Session(target.clone()),
     )
@@ -309,7 +309,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     let mut second_caller = f.caller.clone();
     let mut second_target = session(&f.caller);
     second_target.session_id = "timing-second-target".to_owned().try_into().unwrap();
-    second_caller = fleet_contracts::WorkspaceCaller::new(
+    second_caller = collaboration_central_core::WorkspaceCaller::new(
         second_caller.connection().clone(),
         m::Caller::Session(second_target.clone()),
     )

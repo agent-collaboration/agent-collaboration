@@ -186,7 +186,8 @@ async fn admission_checks_real_rows_and_orgs_keep_distinct_central_databases() {
         .unwrap()
         .unwrap();
     let second =
-        fleet_contracts::WorkspaceCaller::new(connection, f.caller.caller().clone()).unwrap();
+        collaboration_central_core::WorkspaceCaller::new(connection, f.caller.caller().clone())
+            .unwrap();
     assert!(matches!(
         call(
             &f.host,

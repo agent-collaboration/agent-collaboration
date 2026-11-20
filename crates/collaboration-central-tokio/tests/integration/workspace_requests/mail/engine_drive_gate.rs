@@ -3,7 +3,7 @@
 //! publishes on the other.
 use super::super::support::*;
 use super::engine_probe_support::*;
-use fleet_contracts::WorkspaceCaller;
+use collaboration_central_core::WorkspaceCaller;
 
 use fleet_runtime::PausePoint;
 use router_clock::RuntimeClock;

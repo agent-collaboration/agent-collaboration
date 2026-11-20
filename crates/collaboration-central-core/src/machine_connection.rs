@@ -4,11 +4,46 @@ use crate::{
     organization_authority::machine_login::{EnrollmentFacts, MachineState, StoredEnrollmentState},
 };
 use central_storage::StoreFailure;
-use fleet_contracts::{
-    ClientId, MachineConnectionAttachment, MachineConnectionRefusal, ValidatedMachineConnection,
-};
-use fleet_identity_protocol::{EnrollmentId, OrganizationId};
+use fleet_contracts::{ClientId, MachineConnectionAttachment, MachineConnectionRefusal};
+use fleet_identity_protocol::{EnrollmentId, OrganizationId, UnixSeconds};
 use fleet_runtime_ports::workspace_decode_error::corrupt;
+use workspace_ids::MachineId;
+
+/// Core-created connection provenance. It carries no cached workspace permissions.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ValidatedMachineConnection {
+    attachment: MachineConnectionAttachment,
+}
+impl ValidatedMachineConnection {
+    #[must_use]
+    pub fn organization_id(&self) -> &OrganizationId {
+        self.attachment.organization_id()
+    }
+    #[must_use]
+    pub fn machine_id(&self) -> &MachineId {
+        self.attachment.machine_id()
+    }
+    #[must_use]
+    pub fn enrollment_id(&self) -> &EnrollmentId {
+        self.attachment.enrollment_id()
+    }
+    #[must_use]
+    pub fn client_id(&self) -> &ClientId {
+        self.attachment.client_id()
+    }
+    #[must_use]
+    pub fn effective_expires_at(&self) -> UnixSeconds {
+        self.attachment.effective_expires_at()
+    }
+    #[must_use]
+    pub fn attachment(&self) -> MachineConnectionAttachment {
+        self.attachment.clone()
+    }
+
+    pub(crate) fn attachment_ref(&self) -> &MachineConnectionAttachment {
+        &self.attachment
+    }
+}
 
 pub(crate) type Admission =
     Result<Result<ValidatedMachineConnection, MachineConnectionRefusal>, StoreFailure>;
@@ -82,9 +117,9 @@ pub(crate) fn validate_live(
             return Ok(Err(MachineConnectionRefusal::EnrollmentNotActive {}));
         }
     }
-    Ok(Ok(ValidatedMachineConnection::from_live_admission(
-        attachment.clone(),
-    )))
+    Ok(Ok(ValidatedMachineConnection {
+        attachment: attachment.clone(),
+    }))
 }
 
 #[cfg(test)]

@@ -7,7 +7,8 @@ use fleet_runtime_ports::stored_values::{json, string};
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model::{
-    ActorIdentity, ActorIdentityId, ActorRef, ActorView, Identity, RefusalReason,
+    ActorIdentity, ActorIdentityId, ActorRef, ActorView, Identity, RefusalReason, Timestamp,
+    central_mail::NoticeCadence,
 };
 
 fn text(value: impl ToString) -> SqlValue {
@@ -234,12 +235,15 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceAccess<'_, Host, Stor
 /// Plans the guarded write of an admitted session's notice cadence.
 pub fn plan_notice_cadence(
     actor: &ActorIdentityId,
-    cadence: &str,
-    updated_at: String,
-) -> central_storage::GuardedStatement {
+    cadence: NoticeCadence,
+    updated_at: Timestamp,
+) -> Result<GuardedStatement, StoreFailure> {
     use fleet_runtime_ports::guarded_statements::{exact, text};
-    exact(
+    let encoded = serde_json::to_value(cadence).map_err(|_| corrupt("notice cadence"))?;
+    let cadence_text = encoded.as_str().ok_or_else(|| corrupt("notice cadence"))?;
+    let updated_at = updated_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    Ok(exact(
         "UPDATE access_actor_identities SET notice_cadence=?,updated_at=? WHERE actor_identity_id=?",
-        vec![text(cadence), text(updated_at), text(actor)],
-    )
+        vec![text(cadence_text), text(updated_at), text(actor)],
+    ))
 }

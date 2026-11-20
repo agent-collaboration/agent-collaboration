@@ -12,10 +12,12 @@ workspace = true
 
 [dependencies]
 central-storage.workspace = true
+chrono = { version = "0.4.45", default-features = false, features = ["alloc"] }
 fleet-contracts.workspace = true
 fleet-runtime.workspace = true
 fleet-runtime-ports.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_json_canonicalizer.workspace = true
+workspace-ids.workspace = true
 workspace-model.workspace = true

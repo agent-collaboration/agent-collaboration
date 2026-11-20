@@ -7,7 +7,7 @@ use workspace_model::central_mail::{
 
 async fn request(
     fixture: &Fixture,
-    caller: &fleet_contracts::WorkspaceCaller,
+    caller: &collaboration_central_core::WorkspaceCaller,
     number: u32,
     operation: Operation,
 ) -> Result {

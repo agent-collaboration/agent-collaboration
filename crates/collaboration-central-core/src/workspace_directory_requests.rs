@@ -1,10 +1,10 @@
 //! The organization's workspace directory over the machine request path:
 //! create, rename, archive, show and list. The directory is central's own
 //! `workspaces` table, not a workspace store.
+use crate::WorkspaceCaller;
 use crate::WorkspaceRuntime;
 use crate::workspace_request_gate::{reply, store_result};
 use central_storage::{AlarmUpdate, StatementBatch, StoreFailure};
-use fleet_contracts::WorkspaceCaller;
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_model as m;
@@ -92,7 +92,12 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
             let _central = runtime.execution.take_central_turn().await;
             if let Err(refusal) = runtime
                 .access()
-                .admit_workspace(runtime, caller, Some(workspace_id))
+                .admit_workspace(
+                    runtime,
+                    caller.caller(),
+                    caller.connection().attachment_ref(),
+                    Some(workspace_id),
+                )
                 .await?
             {
                 return Ok(reply(m::WorkspaceResult::Refused(refusal)));
@@ -115,7 +120,12 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
             let _central = runtime.execution.take_central_turn().await;
             if let Err(refusal) = runtime
                 .access()
-                .admit_workspace(runtime, caller, None)
+                .admit_workspace(
+                    runtime,
+                    caller.caller(),
+                    caller.connection().attachment_ref(),
+                    None,
+                )
                 .await?
             {
                 return Ok(reply(m::WorkspaceResult::Refused(refusal)));
@@ -126,7 +136,10 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
                     .into_iter()
                     .map(Into::into)
                     .collect();
-            let allowed = runtime.access().allowed_workspaces(caller).await?;
+            let allowed = runtime
+                .access()
+                .allowed_workspaces(caller.connection().machine_id())
+                .await?;
             Ok(reply(
                 match workspace_rules::workspace_list_answer(
                     query,
@@ -170,7 +183,12 @@ async fn write<Host: CentralStore, Stores: WorkspaceStores>(
     let _turn = runtime.execution.take_central_turn().await;
     if let Err(refusal) = runtime
         .access()
-        .admit_workspace(runtime, caller, None)
+        .admit_workspace(
+            runtime,
+            caller.caller(),
+            caller.connection().attachment_ref(),
+            None,
+        )
         .await?
     {
         return Ok(reply(m::WorkspaceResult::Refused(refusal)));
@@ -234,7 +252,12 @@ async fn write<Host: CentralStore, Stores: WorkspaceStores>(
         } => {
             if let Err(refusal) = runtime
                 .access()
-                .admit_workspace(runtime, caller, Some(workspace_id))
+                .admit_workspace(
+                    runtime,
+                    caller.caller(),
+                    caller.connection().attachment_ref(),
+                    Some(workspace_id),
+                )
                 .await?
             {
                 return Ok(reply(m::WorkspaceResult::Refused(refusal)));

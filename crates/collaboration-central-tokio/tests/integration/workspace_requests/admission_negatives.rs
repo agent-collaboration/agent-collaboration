@@ -60,7 +60,7 @@ async fn live_admission_refuses_revoked_expired_wrong_credential_and_archived_di
     let mut mismatched = session(&f.caller);
     mismatched.machine_id = id(999);
     assert!(
-        fleet_contracts::WorkspaceCaller::new(
+        collaboration_central_core::WorkspaceCaller::new(
             f.caller.connection().clone(),
             m::Caller::Session(mismatched)
         )

@@ -2450,12 +2450,14 @@ name = "fleet-workspace-access"
 version = "0.1.156"
 dependencies = [
  "central-storage",
+ "chrono",
  "fleet-contracts",
  "fleet-runtime",
  "fleet-runtime-ports",
  "serde",
  "serde_json",
  "serde_json_canonicalizer",
+ "workspace-ids",
  "workspace-model",
 ]
 

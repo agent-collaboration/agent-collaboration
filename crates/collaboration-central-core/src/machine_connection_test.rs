@@ -1,8 +1,8 @@
 use super::*;
+use crate::WorkspaceCaller;
 use crate::organization_authority::machine_login::{
     EnrollmentGeneration, MachineRow, StoredEnrollment,
 };
-use fleet_contracts::WorkspaceCaller;
 use fleet_identity_protocol::UnixSeconds;
 use workspace_model::Caller;
 

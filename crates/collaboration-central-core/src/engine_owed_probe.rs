@@ -55,7 +55,7 @@ impl<Host: fleet_runtime_ports::CentralStore, Stores: fleet_runtime_ports::Works
 
     pub async fn request_owed_reply(
         &self,
-        caller: &fleet_contracts::WorkspaceCaller,
+        caller: &crate::WorkspaceCaller,
         request: OwedReplyRequest,
     ) -> Result<EngineRequestOutcome<OwedState, OwedReplyRefusal>, central_storage::StoreFailure>
     {
@@ -64,7 +64,16 @@ impl<Host: fleet_runtime_ports::CentralStore, Stores: fleet_runtime_ports::Works
                 "signin_organization_identity.id",
             ));
         }
-        if let Err(reason) = self.access().admit_workspace(self, caller, None).await? {
+        if let Err(reason) = self
+            .access()
+            .admit_workspace(
+                self,
+                caller.caller(),
+                caller.connection().attachment_ref(),
+                None,
+            )
+            .await?
+        {
             return Ok(EngineRequestOutcome::NotPermitted { reason });
         }
         let identity = match caller.caller() {

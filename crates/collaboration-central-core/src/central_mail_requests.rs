@@ -1,7 +1,7 @@
 //! Central-only admitted request ledger; cached answers precede mutable decisions.
+use crate::WorkspaceCaller;
 use crate::{WorkspaceRuntime, central_mail_store};
 use central_storage::{BatchOutcome, StatementBatch, StoreFailure};
-use fleet_contracts::WorkspaceCaller;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_runtime_ports::{
     stored_values::{json, string},
@@ -34,7 +34,16 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
     ) -> Result<mail::CentralMailResult, StoreFailure> {
         use mail::{CentralMailRefusal as Refusal, CentralMailResult as Result};
         let _turn = self.execution.take_central_turn().await;
-        if let Err(reason) = self.access().admit_workspace(self, caller, None).await? {
+        if let Err(reason) = self
+            .access()
+            .admit_workspace(
+                self,
+                caller.caller(),
+                caller.connection().attachment_ref(),
+                None,
+            )
+            .await?
+        {
             return Ok(Result::Refused(Refusal::Workspace(reason)));
         }
         let identity = match caller.caller() {
@@ -109,14 +118,9 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             if !matches!(caller.caller(), m::Caller::Session(_)) {
                 Err(Refusal::NotSession)
             } else {
-                let encoded =
-                    serde_json::to_value(cadence).map_err(|_| corrupt("notice cadence"))?;
-                let cadence_text = encoded.as_str().ok_or_else(|| corrupt("notice cadence"))?;
                 let mut statements = vec![fleet_workspace_access::plan_notice_cadence(
-                    &actor,
-                    cadence_text,
-                    central_mail_store::timestamp(now),
-                )];
+                    &actor, *cadence, now,
+                )?];
                 // Recompute the pending deadline from now on the new epoch cadence;
                 // the actual policy and deadline writes share this request's ledger batch.
                 for window in self

@@ -125,7 +125,7 @@ pub(super) async fn open_notice_window(fixture: &Fixture, first_request: u32) {
     let mut observer = fixture.caller.clone();
     let mut address = session(&observer);
     address.session_id = "event-observer".to_owned().try_into().unwrap();
-    observer = fleet_contracts::WorkspaceCaller::new(
+    observer = collaboration_central_core::WorkspaceCaller::new(
         observer.connection().clone(),
         m::Caller::Session(address),
     )

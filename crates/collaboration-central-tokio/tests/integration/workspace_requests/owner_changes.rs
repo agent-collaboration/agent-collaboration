@@ -269,7 +269,7 @@ async fn r32_self_join_roles_and_promotion_allow_posts_but_adding_others_names_c
     let mut other = f.caller.clone();
     let mut address = session(&other);
     address.session_id = "owner-change-self-join".to_owned().try_into().unwrap();
-    other = fleet_contracts::WorkspaceCaller::new(
+    other = collaboration_central_core::WorkspaceCaller::new(
         other.connection().clone(),
         m::Caller::Session(address),
     )
@@ -375,7 +375,7 @@ async fn r32_self_join_roles_and_promotion_allow_posts_but_adding_others_names_c
     let mut fresh = other.clone();
     let mut address = session(&fresh);
     address.session_id = "fresh-self-participant".to_owned().try_into().unwrap();
-    fresh = fleet_contracts::WorkspaceCaller::new(
+    fresh = collaboration_central_core::WorkspaceCaller::new(
         fresh.connection().clone(),
         m::Caller::Session(address),
     )

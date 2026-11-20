@@ -20,6 +20,7 @@ pub mod signin_test_observation;
 pub mod storage_conformance;
 
 mod machine_connection;
+pub use machine_connection::ValidatedMachineConnection;
 mod machine_connection_admission;
 mod machine_login_plans;
 mod machine_login_reads;
@@ -29,6 +30,8 @@ mod machine_login_rows;
 mod machine_login_test_control;
 mod machine_login_writes;
 pub use machine_connection_admission::{MachineLinkRequestAuthority, MachineTokenRenewalRefusal};
+mod workspace_caller;
+pub use workspace_caller::WorkspaceCaller;
 mod workspace_runtime;
 #[cfg(feature = "test-support")]
 pub use machine_login_test_control::{MachineLoginControl, machine_login_control};

@@ -23,7 +23,7 @@ pub(crate) struct Controls {
     next_engine_hold: std::cell::Cell<u64>,
     /// A probe caller admitted once, ahead of a held turn, so a request can
     /// run without its own admission.
-    admitted_probe_caller: RefCell<Option<fleet_contracts::WorkspaceCaller>>,
+    admitted_probe_caller: RefCell<Option<collaboration_central_core::WorkspaceCaller>>,
     alarm_waiters: RefCell<Vec<futures_channel::oneshot::Sender<()>>>,
 }
 #[derive(Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd)]

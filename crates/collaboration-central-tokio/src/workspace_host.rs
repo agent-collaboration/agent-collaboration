@@ -3,7 +3,7 @@ use crate::{
     machine_push_registry::MachinePushRegistry, object_storage::ObjectStorage,
     sign_in_trust::NativeSignInTrust,
 };
-use fleet_contracts::WorkspaceCaller;
+use collaboration_central_core::WorkspaceCaller;
 #[path = "workspace_alarm_owner.rs"]
 mod workspace_alarm_owner;
 use central_storage::{

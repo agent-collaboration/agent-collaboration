@@ -1,4 +1,4 @@
 [workspace]
 resolver = "3"
-members = ["fleet-contracts", "fleet-runtime-ports"]
+members = ["fleet-contracts", "fleet-runtime-ports", "fleet-workspace-access"]
 exclude = ["clock-data", "worker"]

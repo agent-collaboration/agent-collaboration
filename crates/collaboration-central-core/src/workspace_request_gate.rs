@@ -1,8 +1,8 @@
 //! Replay precedes mutable rule decisions; the durable answer shares the effect batch.
 
+use crate::WorkspaceCaller;
 use crate::WorkspaceRuntime;
 use central_storage::{AlarmUpdate, BatchOutcome, StatementBatch, StoreFailure};
-use fleet_contracts::WorkspaceCaller;
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_workspace_access::workspace_row_codec::WorkspaceRows;
@@ -78,7 +78,12 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
         let _central = runtime.execution.take_central_turn().await;
         if let Err(refusal) = runtime
             .access()
-            .admit_workspace(runtime, caller, request.workspace_id.as_ref())
+            .admit_workspace(
+                runtime,
+                caller.caller(),
+                caller.connection().attachment_ref(),
+                request.workspace_id.as_ref(),
+            )
             .await?
         {
             return Ok(reply(m::WorkspaceResult::Refused(refusal)));
@@ -96,7 +101,12 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
         let _turn = runtime.execution.take_central_turn().await;
         if let Err(refusal) = runtime
             .access()
-            .admit_workspace(runtime, caller, request.workspace_id.as_ref())
+            .admit_workspace(
+                runtime,
+                caller.caller(),
+                caller.connection().attachment_ref(),
+                request.workspace_id.as_ref(),
+            )
             .await?
         {
             return Ok(reply(m::WorkspaceResult::Refused(refusal)));
@@ -116,7 +126,12 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
     let admission_turn = runtime.execution.take_central_turn().await;
     if let Err(refusal) = runtime
         .access()
-        .admit_workspace(runtime, caller, Some(workspace))
+        .admit_workspace(
+            runtime,
+            caller.caller(),
+            caller.connection().attachment_ref(),
+            Some(workspace),
+        )
         .await?
     {
         return Ok(reply(m::WorkspaceResult::Refused(refusal)));
@@ -244,7 +259,12 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
         let _central = runtime.execution.take_central_turn().await;
         if let Err(refusal) = runtime
             .access()
-            .admit_workspace(runtime, caller, Some(workspace))
+            .admit_workspace(
+                runtime,
+                caller.caller(),
+                caller.connection().attachment_ref(),
+                Some(workspace),
+            )
             .await?
         {
             return Ok(reply(m::WorkspaceResult::Refused(refusal)));

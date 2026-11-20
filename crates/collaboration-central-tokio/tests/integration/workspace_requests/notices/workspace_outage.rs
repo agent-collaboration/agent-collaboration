@@ -109,7 +109,7 @@ async fn unavailable_workspace_does_not_block_wakes_and_recovers_without_duplica
         let mut observer = f.caller.clone();
         let mut address = session(&observer);
         address.session_id = suffix.to_owned().try_into().unwrap();
-        observer = fleet_contracts::WorkspaceCaller::new(
+        observer = collaboration_central_core::WorkspaceCaller::new(
             observer.connection().clone(),
             m::Caller::Session(address),
         )
