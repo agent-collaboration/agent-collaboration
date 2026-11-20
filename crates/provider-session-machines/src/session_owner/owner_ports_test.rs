@@ -350,6 +350,58 @@ fn t5_terminal_store_expiry_returns_observation_without_a_reread() {
 }
 
 #[test]
+fn t5_terminal_store_settlement_survives_connection_reattachment() {
+    let mut state = fresh();
+    let live = restore_live(&mut state, 1);
+    let closing = start_close(&mut state, live.generation, 2);
+    let effects = apply_pending(&mut state, close_reply(closing, WireOutcome::Confirmed(())));
+    let write = effects
+        .iter()
+        .find_map(|effect| match effect {
+            OwnerEffect::Store(SessionStoreRequest::RecordTerminal { write, reply })
+                if matches!(reply.as_ref(), SessionOwnerReply::CloseFinished { .. }) =>
+            {
+                Some(*write)
+            }
+            _ => None,
+        })
+        .expect("close terminal write");
+    let old_address = state.snapshot().owner;
+    apply(&mut state, OwnerEvent::ConnectionLost);
+    let new_address = OwnerAddress {
+        connection_epoch: ConnectionEpoch(uuid(3)),
+        ..old_address
+    };
+    state = state
+        .decide(OwnerMailboxEvent {
+            owner: new_address,
+            event: OwnerEvent::ConnectionAttached,
+        })
+        .expect("replacement connection")
+        .next;
+    let deadline = OwnerDeadline::TerminalStore(write);
+    assert!(state.has_pending_deadline(&deadline));
+    let settled = state
+        .decide(OwnerMailboxEvent {
+            owner: old_address,
+            event: OwnerEvent::Store(SessionStoreResult::Terminal {
+                write,
+                outcome: EffectOutcome::Applied,
+            }),
+        })
+        .expect("same-incarnation terminal write can settle after reattachment");
+    assert_eq!(settled.effects.owner, new_address);
+    assert_eq!(
+        settled.effects.effects,
+        vec![OwnerEffect::Reply(SessionOwnerReply::CloseFinished {
+            run: closing,
+            outcome: CloseOutcome::Confirmed,
+        })]
+    );
+    assert!(!settled.next.has_pending_deadline(&deadline));
+}
+
+#[test]
 fn t6_refused_terminal_batch_rebases_without_a_later_business_event() {
     let mut state = fresh();
     let run = restore_live(&mut state, 1);

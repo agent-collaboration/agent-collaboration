@@ -33,9 +33,11 @@
 //! ```
 
 mod acp_protocol_version;
+pub mod acp_transport;
 mod agent_session_client;
 mod approval_presentation;
 mod approval_turn_cancellation;
+mod callback_router;
 mod external_permission_options;
 mod in_folder_allowance;
 mod interaction_port;
@@ -68,6 +70,7 @@ mod run_owned_state;
 mod session_cell_bookkeeping;
 mod session_cell_table;
 mod session_event_sink;
+pub mod session_owner_task;
 mod session_runs;
 mod session_start_folders;
 #[cfg(feature = "test-support")]

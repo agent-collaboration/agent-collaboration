@@ -2,7 +2,7 @@ use super::{OwnerRejection, OwnerResult, OwnerTransition};
 use crate::session_lifecycle_machine::RestoreVia;
 use crate::session_owner::{
     AuthorizationStatus, AuthorizedWork, BatchId, HistoryAvailability, InputWait, ObservedSetting,
-    OwnerDeadline, OwnerEffect, PublicationBatch, PublicationFact, PublicationGap,
+    OwnerDeadline, OwnerEffect, OwnerInput, PublicationBatch, PublicationFact, PublicationGap,
     PublicationResult, PublicationStatus, QueueEntrySnapshot, RestoreWait, RevokeReason,
     SessionDeadline, SessionOwnerState, SessionPublication, SessionSnapshot, SettingWait,
 };
@@ -13,6 +13,71 @@ pub(super) const LOCAL_BUDGET: Duration = Duration::from_secs(10);
 pub(super) const WIRE_BUDGET: Duration = Duration::from_secs(30);
 
 impl SessionOwnerState {
+    /// Task timers can be dropped as soon as their stamped work settles.
+    #[must_use]
+    pub fn has_pending_deadline(&self, deadline: &OwnerDeadline) -> bool {
+        match deadline {
+            OwnerDeadline::ReadSetup(run) => self.waiting_for_restore(*run, RestoreWait::Setup),
+            OwnerDeadline::RestoreWire(run) => self.waiting_for_restore(*run, RestoreWait::Wire),
+            OwnerDeadline::RestoreMode(run) => self.waiting_for_restore(*run, RestoreWait::Mode),
+            OwnerDeadline::RestoreFastOff(run) => {
+                self.waiting_for_restore(*run, RestoreWait::FastOff)
+            }
+            OwnerDeadline::HostPrepare(run) => {
+                self.waiting_for_restore(*run, RestoreWait::Preparation)
+            }
+            OwnerDeadline::DispatchMark { input } => {
+                self.waiting_for_input(input, InputWait::DispatchStore)
+            }
+            OwnerDeadline::UndoStore { input } => {
+                self.ports.unsent_prompts.contains_key(input)
+                    || self.waiting_for_input(input, InputWait::UndoStore)
+            }
+            OwnerDeadline::Close(run) => matches!(
+                self.lifecycle(),
+                super::super::SessionLifecycle::Closing { generation, attempt, .. }
+                    if generation == run.generation && attempt == run.attempt
+            ),
+            OwnerDeadline::SettingWire(setting) => {
+                self.setting == Some((*setting, SettingWait::Wire))
+            }
+            OwnerDeadline::SettingStore(setting) => {
+                self.setting == Some((*setting, SettingWait::Store))
+            }
+            OwnerDeadline::TerminalStore(write) => self.ports.pending_terminal.contains_key(write),
+            OwnerDeadline::Enqueue(key) => self
+                .ports
+                .authorizations
+                .get(key)
+                .is_some_and(|pending| pending.status == AuthorizationStatus::Offered),
+            OwnerDeadline::SteerResult(key) => {
+                self.ports.authorizations.get(key).is_some_and(|pending| {
+                    pending.status == AuthorizationStatus::Taken
+                        && matches!(pending.work, AuthorizedWork::Steer(_))
+                })
+            }
+            OwnerDeadline::Publication(id) => self.ports.awaiting_apply.contains(id),
+            OwnerDeadline::Rebase(id) => self.ports.rebase == Some(*id),
+            OwnerDeadline::Create(operation) => self.ports.create == Some(*operation),
+        }
+    }
+
+    fn waiting_for_input(&self, input: &OwnerInput, wait: InputWait) -> bool {
+        self.prompts
+            .values()
+            .chain(self.steer.iter())
+            .any(|pending| &pending.input == input && pending.wait == wait)
+    }
+
+    fn waiting_for_restore(
+        &self,
+        run: super::super::RunAttempt<crate::session_lifecycle_machine::LoadAttempt>,
+        wait: RestoreWait,
+    ) -> bool {
+        self.restore
+            .is_some_and(|pending| pending.run() == run && pending.wait() == wait)
+    }
+
     /// A projection of committed owner facts for readers outside the mailbox.
     #[must_use]
     pub fn snapshot(&self) -> SessionSnapshot {

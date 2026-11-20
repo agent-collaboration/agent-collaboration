@@ -24,7 +24,14 @@ impl SessionOwnerState {
             && !self.ports.connection_alive
             && event.owner.incarnation == self.ports.address.incarnation
             && event.owner.connection_epoch != self.ports.address.connection_epoch;
-        if event.owner != self.ports.address && !attaching {
+        // Store, publication and timers belong to the incarnation, even
+        // when the ACP connection epoch changes while a result is pending.
+        let incarnation_local = event.owner.incarnation == self.ports.address.incarnation
+            && matches!(
+                &event.event,
+                OwnerEvent::Store(_) | OwnerEvent::Publication(_) | OwnerEvent::Deadline(_)
+            );
+        if event.owner != self.ports.address && !attaching && !incarnation_local {
             return Err(OwnerRejection::IgnoredLate);
         }
         let mut transition = OwnerTransition {
@@ -40,10 +47,11 @@ impl SessionOwnerState {
         } else {
             transition.apply(event.event)?;
         }
+        let owner = transition.next.ports.address;
         Ok(SessionOwnerCommit {
             next: transition.next,
             effects: OwnerOutbox {
-                owner: event.owner,
+                owner,
                 effects: transition.effects,
             },
         })
