@@ -9,6 +9,7 @@ use collaboration_protocol::{
     ProviderSettingsSetRequest, SessionRef,
 };
 use collaboration_runtime::ProviderSessionRecord;
+use provider_session_machines::session_lifecycle_answers::state_answer;
 
 #[expect(
     clippy::result_large_err,
@@ -113,11 +114,12 @@ pub(super) async fn apply(
             "provider connection is unavailable",
         )
     })?;
-    let SessionLifecycle::Live { generation } = owner.snapshots().borrow().lifecycle else {
+    let lifecycle = owner.snapshots().borrow().lifecycle;
+    let SessionLifecycle::Live { generation } = lifecycle else {
         return Err(failure(
             ProviderSettingsFailureKind::NotFound,
             &request.target,
-            "load the session before changing its settings",
+            &state_answer(&lifecycle),
         )
         .into());
     };
@@ -195,7 +197,11 @@ pub(super) async fn apply(
             other => failure(
                 ProviderSettingsFailureKind::Busy,
                 &request.target,
-                &other.to_string(),
+                &super::provider_owner_operations::derived_owner_refusal(
+                    &owner.snapshots().borrow(),
+                    &other,
+                )
+                .unwrap_or_else(|| other.to_string()),
             )
             .into(),
         })?;
@@ -302,11 +308,12 @@ pub(super) async fn accept(
             "provider connection is unavailable",
         )
     })?;
-    let SessionLifecycle::Live { generation } = owner.snapshots().borrow().lifecycle else {
+    let lifecycle = owner.snapshots().borrow().lifecycle;
+    let SessionLifecycle::Live { generation } = lifecycle else {
         return Err(failure(
             ProviderSettingsFailureKind::NotFound,
             &request.target,
-            "the session is not loaded",
+            &state_answer(&lifecycle),
         ));
     };
     owner

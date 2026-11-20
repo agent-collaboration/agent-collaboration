@@ -335,3 +335,21 @@ fn lifecycle_steps_are_the_moves_the_reducer_allows(case: hegel::TestCase) {
         "{state:?}"
     );
 }
+#[test]
+fn setting_in_flight_without_caller_moves_derives_a_wait_observation() {
+    let setting = SessionSetting::Changing {
+        to: SettingValueId("plan".into()),
+        application: SettingApplication(uuid::Uuid::now_v7()),
+        observed: SettingValueId("ask".into()),
+        prior_outcome_unknown: false,
+    };
+    assert!(hold_steps(&setting).is_empty());
+    assert_eq!(
+        setting_in_progress_answer(Some(&setting), |_| true, SettingWaitObservation::Change),
+        "a setting change is in progress; wait for it"
+    );
+    assert_eq!(
+        setting_in_progress_answer(None, |_| false, SettingWaitObservation::EarlierWriteReply),
+        "a setting change is in progress; wait for the earlier write's reply"
+    );
+}

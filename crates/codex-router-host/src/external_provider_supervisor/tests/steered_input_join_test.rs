@@ -89,6 +89,21 @@ async fn steering_session_on(
     session_id: &str,
     arguments: impl FnOnce(&std::path::Path) -> Vec<String>,
 ) -> SteeringSession {
+    steering_session_on_clock(
+        program,
+        session_id,
+        arguments,
+        Arc::new(router_clock::SystemRuntimeClock::new()),
+    )
+    .await
+}
+
+async fn steering_session_on_clock(
+    program: &str,
+    session_id: &str,
+    arguments: impl FnOnce(&std::path::Path) -> Vec<String>,
+    clock: Arc<dyn router_clock::RuntimeClock>,
+) -> SteeringSession {
     let root = tempfile::tempdir().expect("fixture root");
     let receipt = root.path().join("wire.json");
     let target = SessionRef {
@@ -117,7 +132,7 @@ async fn steering_session_on(
         Arc::clone(&hub),
         hub_target.endpoint.clone(),
         Arc::new(acp_provider_adapters::StandardAcpBehavior),
-        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
+        clock,
     )
     .await
     .expect("fixture provider");
@@ -142,6 +157,174 @@ async fn steering_session_on(
         hub_target,
         supervisor,
     }
+}
+
+fn send_race_arguments(receipt: &std::path::Path, behavior: &str) -> Vec<String> {
+    vec![
+        "send-race".into(),
+        receipt.display().to_string(),
+        behavior.into(),
+    ]
+}
+
+#[tokio::test]
+async fn busy_with_steering_uses_the_running_owner_answer() {
+    use provider_session_machines::session_refusal_answers::session_busy_answer;
+
+    let rig = steering_session_on_clock(
+        "provider-steering-agent.ts",
+        "fixture-session",
+        |receipt| send_race_arguments(receipt, "first-turn-ends-max-tokens"),
+        Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
+    )
+    .await;
+    let prompt = |text: &str| ConversationPromptRequest {
+        delivery: collaboration_protocol::MessageDelivery::Auto,
+        operation_id: OperationId::generate(),
+        input_id: None,
+        target: rig.target.clone(),
+        generation: None,
+        requested_by: rig.target.clone().into(),
+        approver: rig.target.clone().into(),
+        prompt: collaboration_protocol::MessageContent::HumanUser {
+            text: MessageText::try_from(text.to_owned()).expect("prompt text"),
+        },
+    };
+    rig.supervisor
+        .prompt(prompt("held foreground"))
+        .await
+        .expect("foreground admitted");
+    while recorded_requests(&rig.receipt, "session/prompt") == 0 {
+        tokio::task::yield_now().await;
+    }
+    let snapshot = rig
+        .supervisor
+        .owner_session_snapshot(&rig.target)
+        .expect("live snapshot");
+    let steer = snapshot
+        .projection
+        .capabilities
+        .as_ref()
+        .is_some_and(|report| report.steer);
+    assert!(steer, "fixture advertises steering");
+    let mut direct =
+        super::provider_prompt_contents::ProviderPromptContentsRequest::from_prompt_request(
+            prompt("direct request"),
+        )
+        .expect("input");
+    direct.busy = super::provider_prompt_contents::PromptBusyPolicy::RefuseBusy;
+    let operation = direct.operation_id.clone();
+    let failure = match rig.supervisor.prompt_contents(direct).await {
+        Ok(_) => rig
+            .supervisor
+            .wait(ConversationOperationWaitRequest {
+                operation_id: operation,
+                timeout_seconds: PositiveSeconds::try_from(5).expect("wait budget"),
+            })
+            .await
+            .expect_err("direct prompt can't take the running turn"),
+        Err(failure) => failure,
+    };
+    let answer = String::from(failure.message);
+    assert_eq!(
+        answer,
+        "a turn is running; steer it, queue the message or cancel the turn"
+    );
+    assert_eq!(
+        answer,
+        session_busy_answer(&snapshot.lifecycle, snapshot.turn, steer)
+    );
+    node_test_fixture::release_fixture(&rig.receipt, ".release").expect("release foreground");
+    rig.supervisor.shutdown().await.expect("shutdown");
+}
+
+#[tokio::test]
+async fn a_fenced_setting_uses_the_setting_in_progress_answer() {
+    use collaboration_protocol::{
+        ProviderSettingName, ProviderSettingsAcceptRequest, ProviderSettingsFailureKind,
+        ProviderSettingsSetRequest,
+    };
+    use provider_session_machines::{
+        session_refusal_answers::{SettingWaitObservation, setting_in_progress_answer},
+        session_setting_machine::{SessionSetting, SettingValueId, UnresolvedCause},
+    };
+    use router_clock::RuntimeClock as _;
+
+    let clock = Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
+    let rig = steering_session_on_clock(
+        "provider-steering-agent.ts",
+        "fixture-session",
+        |receipt| send_race_arguments(receipt, "hold-effort-change"),
+        clock.clone(),
+    )
+    .await;
+    let request = ProviderSettingsSetRequest {
+        target: rig.target.clone(),
+        actor: requester().into(),
+        setting: ProviderSettingName::Effort,
+        value: "high".into(),
+    };
+    let first = rig.supervisor.settings_set(request.clone());
+    tokio::pin!(first);
+    tokio::select! {
+        () = async {
+            while recorded_requests(&rig.receipt, "session/set_config_option") == 0 {
+                tokio::task::yield_now().await;
+            }
+        } => {}
+        result = &mut first => panic!("the first setting must wait for its held reply: {result:?}"),
+    }
+    let budget = std::time::Duration::from_secs(30);
+    clock
+        .not_due_check_now(clock.monotonic_now().after(budget))
+        .await;
+    clock
+        .advance(budget)
+        .expect("expire the first setting reply");
+    assert_eq!(
+        first
+            .await
+            .expect_err("the setting outcome is unknown")
+            .kind,
+        ProviderSettingsFailureKind::OutcomeUnknown
+    );
+    let failure = rig
+        .supervisor
+        .settings_set(request)
+        .await
+        .expect_err("the same kind is still fenced");
+    assert_eq!(failure.kind, ProviderSettingsFailureKind::Busy);
+    assert_eq!(
+        failure.message,
+        "a setting change is in progress; wait for the earlier write's reply"
+    );
+    assert_eq!(
+        failure.message,
+        setting_in_progress_answer(
+            Some(&SessionSetting::Unresolved {
+                cause: UnresolvedCause::OutcomeUnknown,
+                observed: SettingValueId("medium".into()),
+            }),
+            |_| false,
+            SettingWaitObservation::EarlierWriteReply,
+        )
+    );
+    let accept = rig
+        .supervisor
+        .settings_accept(ProviderSettingsAcceptRequest {
+            target: rig.target.clone(),
+            actor: requester().into(),
+        })
+        .await
+        .expect_err("the unknown outcome also prevents accepting settings");
+    assert_eq!(accept.kind, ProviderSettingsFailureKind::OutcomeUnknown);
+    assert_eq!(
+        recorded_requests(&rig.receipt, "session/set_config_option"),
+        1
+    );
+    node_test_fixture::release_fixture(&rig.receipt, ".setting-release")
+        .expect("release first reply");
+    rig.supervisor.shutdown().await.expect("shutdown");
 }
 
 /// Oracle: D1 spec R12 and V22, "the operation's input ID equals the input ID

@@ -1,7 +1,9 @@
 //! Nonblocking publication boundary for Router-owned Session events.
 
 use provider_session_machines::SessionGeneration;
-use std::{future::Future, pin::Pin, sync::Arc};
+#[cfg(test)]
+use std::sync::Arc;
+use std::{future::Future, pin::Pin};
 
 use session_event_model::SessionEvent;
 
@@ -37,11 +39,6 @@ pub trait SessionEventSink: Send + Sync + 'static {
     /// Without a generation: for connection-wide publishers only (auth
     /// status, provider exit), which speak for whatever run is current.
     fn publish(&self, session_id: &str, event: SessionEvent) -> Result<(), EventSinkClosed>;
-
-    /// The connection's session cells, which own every run: a sink checks
-    /// each publication's claim against them (D1 step 6). Called once the
-    /// connection exists, before any session runs.
-    fn attach_session_runs(&self, _runs: Arc<dyn crate::SessionRuns>) {}
 
     /// The session's generation now, for a callback starting work on it.
     fn current_generation(&self, _session_id: &str) -> SessionGeneration {

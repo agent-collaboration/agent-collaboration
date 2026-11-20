@@ -353,9 +353,9 @@ async fn prompt_to_a_busy_non_steering_agent_says_cannot_steer_or_queues_when_as
         collaboration_protocol::ProviderOperationEffect::None
     );
     let message = String::from(failure.message);
-    assert!(
-        message.contains("delivery queue") && message.contains("conversation cancel"),
-        "it names both choices: {message}"
+    assert_eq!(
+        message,
+        "a turn is running; queue the message or cancel the turn"
     );
     assert_eq!(prompts_after_auto, 1, "nothing was sent on auto");
     match &queued {
@@ -725,7 +725,7 @@ async fn an_explicit_steer_starts_a_prompt_when_idle_and_refuses_an_unsupported_
         refusal(&to_non_steering),
         Some((
             collaboration_protocol::ConversationOperationFailureKind::UnsupportedCapability,
-            "steer unsupported by provider".to_owned()
+            "this harness can't take a steer mid-turn; a turn is running; queue the message or cancel the turn".to_owned()
         )),
         "{to_non_steering:?}"
     );

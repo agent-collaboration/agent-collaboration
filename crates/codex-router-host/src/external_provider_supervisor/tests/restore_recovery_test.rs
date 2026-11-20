@@ -3,6 +3,9 @@
 #[path = "restore_recovery/cancel_confirmation_test.rs"]
 mod cancel_confirmation_tests;
 
+#[path = "restore_recovery/refusal_answers_test.rs"]
+mod refusal_answers_tests;
+
 use super::*;
 use collaboration_contracts::{
     DeliveryPrecondition, LoadPolicy, SessionDeliveryRoute, UnstoredAttemptEvidenceSink,

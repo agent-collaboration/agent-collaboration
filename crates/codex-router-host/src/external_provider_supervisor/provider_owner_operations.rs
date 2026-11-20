@@ -13,11 +13,18 @@ use collaboration_protocol::{
 use collaboration_runtime::ProviderSessionRecord;
 use provider_session_machines::{
     ProviderSettingKind,
-    session_lifecycle_machine::RestoreVia,
+    session_lifecycle_answers::refusal_answer,
+    session_lifecycle_machine::{RestoreVia, SessionLifecycleRefusal},
     session_owner::{
         ObservedSetting, RemoteEffect, RestoreDisposition, RestoreFailure, RestorePhase,
-        SessionOwnerReply,
+        SessionOwnerRefusal, SessionOwnerRejection, SessionOwnerReply, SessionSnapshot,
+        SettingEffectInProgress,
     },
+    session_refusal_answers::{
+        RefusalStep, SettingWaitObservation, session_busy_answer, setting_in_progress_answer,
+        settings_hold_answer,
+    },
+    session_setting_machine::UnresolvedCause,
 };
 
 pub(super) async fn restore(
@@ -28,21 +35,26 @@ pub(super) async fn restore(
 ) -> ProviderOperationCompletion {
     let target = record.target.clone();
     let policy = record.requested_policy.clone();
-    let result = match supervisor.session_owner_for(&target) {
-        Ok(owner) => {
-            let Ok(correlation) = uuid::Uuid::parse_str(operation.as_str()) else {
-                return ProviderOperationCompletion::Failure(failure(
-                    ConversationOperationFailureKind::InvalidRequest,
-                    ConversationOperationFailureStage::Admission,
-                    ProviderOperationEffect::None,
-                    "invalid operation identity",
-                    operation,
-                    Some(target),
-                ));
-            };
-            owner.restore_explicit(correlation, via, record).await
+    let owner = match supervisor.session_owner_for(&target) {
+        Ok(owner) => owner,
+        Err(error) => {
+            return ProviderOperationCompletion::Failure(owner_unavailable(
+                operation, target, error,
+            ));
         }
-        Err(error) => Err(error),
+    };
+    let result = {
+        let Ok(correlation) = uuid::Uuid::parse_str(operation.as_str()) else {
+            return ProviderOperationCompletion::Failure(failure(
+                ConversationOperationFailureKind::InvalidRequest,
+                ConversationOperationFailureStage::Admission,
+                ProviderOperationEffect::None,
+                "invalid operation identity",
+                operation,
+                Some(target),
+            ));
+        };
+        owner.restore_explicit(correlation, via, record).await
     };
     let settled = match result {
         Ok(settled) => settled,
@@ -51,7 +63,8 @@ pub(super) async fn restore(
                 ConversationOperationFailureKind::Busy,
                 ConversationOperationFailureStage::Admission,
                 ProviderOperationEffect::None,
-                &error.to_string(),
+                &derived_owner_refusal(&owner.snapshots().borrow(), &error)
+                    .unwrap_or_else(|| error.to_string()),
                 operation,
                 Some(target),
             ));
@@ -163,43 +176,115 @@ pub(super) fn owner_unavailable(
     target: SessionRef,
     error: OwnerDoorError,
 ) -> ConversationOperationFailure {
-    use provider_session_machines::session_owner::{SessionOwnerRefusal, SessionOwnerRejection};
+    owner_failure(operation, target, error, None)
+}
+
+pub(super) fn owner_refused(
+    operation: OperationId,
+    target: SessionRef,
+    error: OwnerDoorError,
+    snapshot: &SessionSnapshot,
+) -> ConversationOperationFailure {
+    owner_failure(operation, target, error, Some(snapshot))
+}
+
+pub(super) fn derived_owner_refusal(
+    snapshot: &SessionSnapshot,
+    error: &OwnerDoorError,
+) -> Option<String> {
+    let OwnerDoorError::Refused(SessionOwnerRejection::Refused(refusal)) = error else {
+        return None;
+    };
+    let busy = || {
+        session_busy_answer(
+            &snapshot.lifecycle,
+            snapshot.turn,
+            snapshot
+                .projection
+                .capabilities
+                .as_ref()
+                .is_some_and(|report| report.steer),
+        )
+    };
+    match refusal {
+        SessionOwnerRefusal::EffectInProgress
+        | SessionOwnerRefusal::CannotSteer
+        | SessionOwnerRefusal::SettingEffectInProgress(SettingEffectInProgress::PromptInProgress) => {
+            Some(busy())
+        }
+        SessionOwnerRefusal::SettingsUnresolved => {
+            Some(settings_hold_answer(UnresolvedCause::OutcomeUnknown))
+        }
+        SessionOwnerRefusal::SettingEffectInProgress(SettingEffectInProgress::SettingInFlight(
+            state,
+        )) => Some(setting_in_progress_answer(
+            state.as_ref(),
+            |step| step != RefusalStep::Accept || !snapshot.settings_block_input,
+            SettingWaitObservation::Change,
+        )),
+        SessionOwnerRefusal::SettingEffectInProgress(SettingEffectInProgress::FencedSetting(
+            state,
+        )) => Some(setting_in_progress_answer(
+            state.as_ref(),
+            |step| match step {
+                RefusalStep::Set => false,
+                // AcceptSettings checks the session-wide unknown-outcome hold;
+                // unlike Set, it does not issue a write through the fence.
+                RefusalStep::Accept => !snapshot.settings_block_input,
+                _ => true,
+            },
+            SettingWaitObservation::EarlierWriteReply,
+        )),
+        _ => refusal
+            .lifecycle_refusal()
+            .map(|refusal| refusal_answer(&snapshot.lifecycle, refusal)),
+    }
+}
+
+fn owner_failure(
+    operation: OperationId,
+    target: SessionRef,
+    error: OwnerDoorError,
+    snapshot: Option<&SessionSnapshot>,
+) -> ConversationOperationFailure {
     let refusal = match &error {
         OwnerDoorError::Refused(SessionOwnerRejection::Refused(refusal)) => Some(refusal),
         _ => None,
     };
     let public = match refusal {
-        Some(SessionOwnerRefusal::EffectInProgress) => Some((
-            ConversationOperationFailureKind::Busy,
-            "the session is busy; send again",
+        Some(
+            SessionOwnerRefusal::EffectInProgress | SessionOwnerRefusal::SettingEffectInProgress(_),
+        ) => Some((ConversationOperationFailureKind::Busy, None)),
+        Some(SessionOwnerRefusal::QueueFull) => Some((
+            ConversationOperationFailureKind::Overloaded,
+            Some("queue full"),
         )),
-        Some(SessionOwnerRefusal::QueueFull) => {
-            Some((ConversationOperationFailureKind::Overloaded, "queue full"))
-        }
         Some(SessionOwnerRefusal::SkillSelectionChanged) => Some((
             ConversationOperationFailureKind::InvalidRequest,
-            "invalid or stale skill selection",
+            Some("invalid or stale skill selection"),
         )),
-        Some(SessionOwnerRefusal::CannotSteer) => Some((
-            ConversationOperationFailureKind::CannotSteer,
-            "cannot steer: use --delivery queue, or run conversation cancel before sending again",
-        )),
-        Some(SessionOwnerRefusal::SettingsUnresolved) => Some((
-            ConversationOperationFailureKind::SettingsUnresolved,
-            "settings-uncertain: run conversation settings set to resolve the unknown provider setting outcome",
-        )),
+        Some(SessionOwnerRefusal::CannotSteer) => {
+            Some((ConversationOperationFailureKind::CannotSteer, None))
+        }
+        Some(SessionOwnerRefusal::SettingsUnresolved) => {
+            Some((ConversationOperationFailureKind::SettingsUnresolved, None))
+        }
         Some(SessionOwnerRefusal::GenerationChanged) => Some((
             ConversationOperationFailureKind::StaleGeneration,
-            "the session was restored again; send again if still needed",
+            refusal.and_then(SessionOwnerRefusal::retry_advice),
         )),
         _ => None,
     };
     if let Some((kind, message)) = public {
+        let message = message
+            .map(str::to_owned)
+            .or_else(|| snapshot.and_then(|snapshot| derived_owner_refusal(snapshot, &error)))
+            .unwrap_or_else(|| error.to_string());
         return failure(
             kind,
             ConversationOperationFailureStage::Admission,
             ProviderOperationEffect::None,
-            message,
+            &message,
             operation,
             Some(target),
         );
@@ -213,7 +298,9 @@ pub(super) fn owner_unavailable(
         ConversationOperationFailureKind::Unavailable,
         ConversationOperationFailureStage::Admission,
         effect,
-        &error.to_string(),
+        &snapshot
+            .and_then(|snapshot| derived_owner_refusal(snapshot, &error))
+            .unwrap_or_else(|| error.to_string()),
         operation,
         Some(target),
     )
@@ -237,7 +324,8 @@ pub(super) async fn close(
             ));
         }
     };
-    let generation = match owner.snapshots().borrow().lifecycle {
+    let lifecycle = owner.snapshots().borrow().lifecycle;
+    let generation = match lifecycle {
         SessionLifecycle::Live { generation } | SessionLifecycle::Loading { generation, .. } => {
             generation
         }
@@ -246,7 +334,7 @@ pub(super) async fn close(
                 ConversationOperationFailureKind::Busy,
                 ConversationOperationFailureStage::Admission,
                 ProviderOperationEffect::None,
-                "the session is already closing",
+                &refusal_answer(&lifecycle, SessionLifecycleRefusal::CloseInProgress),
                 operation,
                 Some(target),
             ));
@@ -256,7 +344,7 @@ pub(super) async fn close(
                 ConversationOperationFailureKind::NotFound,
                 ConversationOperationFailureStage::Admission,
                 ProviderOperationEffect::None,
-                "session is not loaded; nothing to close; load it or resume it",
+                &refusal_answer(&lifecycle, SessionLifecycleRefusal::NothingToClose),
                 operation,
                 Some(target),
             ));
@@ -287,8 +375,11 @@ pub(super) async fn close(
     let settled = match settled {
         Ok(settled) => settled,
         Err(error) => {
-            return ProviderOperationCompletion::Failure(owner_unavailable(
-                operation, target, error,
+            return ProviderOperationCompletion::Failure(owner_refused(
+                operation,
+                target,
+                error,
+                &owner.snapshots().borrow(),
             ));
         }
     };
@@ -400,8 +491,11 @@ pub(super) async fn cancel(
             operation,
             Some(target),
         )),
-        Err(error) => {
-            ProviderOperationCompletion::Failure(owner_unavailable(operation, target, error))
-        }
+        Err(error) => ProviderOperationCompletion::Failure(owner_refused(
+            operation,
+            target,
+            error,
+            &owner.snapshots().borrow(),
+        )),
     }
 }

@@ -7,7 +7,7 @@ use super::{
     ProviderOperationKind, SessionRef, admitted_submission, existing_submission, failure,
     optional_message_text,
     provider_operation_admission::DispatchMark,
-    provider_owner_operations::owner_unavailable,
+    provider_owner_operations::{owner_refused, owner_unavailable},
     provider_prompt_contents::{PromptBusyPolicy, ProviderPromptContentsRequest},
     retain_operation, runtime_failure,
 };
@@ -22,8 +22,13 @@ use collaboration_protocol::{
 };
 use provider_session_machines::{
     SessionGeneration,
+    session_lifecycle_answers::state_answer,
     session_lifecycle_machine::SessionLifecycle,
-    session_owner::{OwnerAddress, OwnerInput, PromptAdmission, RemoteEffect, SessionOwnerReply},
+    session_owner::{
+        OwnerAddress, OwnerInput, PromptAdmission, RemoteEffect, RevokeReason, SessionOwnerReply,
+    },
+    session_refusal_answers::settings_hold_answer,
+    session_setting_machine::UnresolvedCause,
     session_turn_machine::{SessionTurn, TurnId},
 };
 use uuid::Uuid;
@@ -199,8 +204,7 @@ impl ExternalProviderSupervisor {
                     ConversationOperationFailureKind::Unavailable,
                     ConversationOperationFailureStage::Admission,
                     ProviderOperationEffect::None,
-                    provider_session_machines::session_owner::RevokeReason::NotLoaded
-                        .human_phrase(),
+                    &state_answer(&snapshot.lifecycle),
                     operation,
                     Some(target),
                 ));
@@ -275,7 +279,12 @@ impl ExternalProviderSupervisor {
             .start_delivery(input, content, command)
             .await
             .map_err(|error| {
-                let refusal = owner_unavailable(operation.clone(), target.clone(), error);
+                let refusal = owner_refused(
+                    operation.clone(),
+                    target.clone(),
+                    error,
+                    &owner.snapshots().borrow(),
+                );
                 if matches!(request.busy, PromptBusyPolicy::Send(MessageDelivery::Steer))
                     && refusal.kind == ConversationOperationFailureKind::CannotSteer
                 {
@@ -283,7 +292,10 @@ impl ExternalProviderSupervisor {
                         ConversationOperationFailureKind::UnsupportedCapability,
                         ConversationOperationFailureStage::Admission,
                         ProviderOperationEffect::None,
-                        "steer unsupported by provider",
+                        &format!(
+                            "this harness can't take a steer mid-turn; {}",
+                            String::from(refusal.message)
+                        ),
                         operation,
                         Some(target),
                     )
@@ -413,7 +425,11 @@ fn retained_prompt(
             },
             ConversationOperationFailureStage::Dispatch,
             ProviderOperationEffect::None,
-            &reason.display_detail(),
+            &if reason == RevokeReason::SettingsUnresolved {
+                settings_hold_answer(UnresolvedCause::OutcomeUnknown)
+            } else {
+                reason.display_detail().into_owned()
+            },
             operation,
             Some(target.clone()),
         )),
@@ -798,7 +814,12 @@ impl ExternalProviderSupervisor {
                     self.drop_reservation(&operation, &live, false);
                     return Ok(InputAcceptance::QueuePlanChanged);
                 }
-                let refusal = owner_unavailable(operation.clone(), target.clone(), error);
+                let refusal = owner_refused(
+                    operation.clone(),
+                    target.clone(),
+                    error,
+                    &owner.snapshots().borrow(),
+                );
                 if refusal.effect == ProviderOperationEffect::None {
                     self.queued_operation_registry()
                         .mark_not_submitted(&operation, String::from(refusal.message.clone()));

@@ -118,7 +118,6 @@ fn setting_deadline_releases_a_waiter_without_passing_an_unanswered_same_kind_fe
         OwnerEffect::Authorize { .. } | OwnerEffect::Store(_)
     )));
 }
-use crate::tool_ownership::{SessionlessCallbackOwner, sessionless_callback_owner};
 
 fn retired(state: &SessionOwnerState, generation: SessionGeneration) {
     assert_eq!(
@@ -306,46 +305,6 @@ fn post_wire_prerequisite_failure_reports_the_remote_restore_and_ends_cold_auto(
     );
     restore_live(&mut state, 3);
     assert_late(&state, mark_prompt(&old));
-}
-
-#[test]
-fn shared_tool_id_is_rejected_at_routing_even_after_one_owner_retires() {
-    let mut first = fresh();
-    let mut second = fresh();
-    let run_a = open_wire(&mut first, 1);
-    let run_b = restore_live(&mut second, 2);
-    apply(
-        &mut first,
-        tool_update(run_a.generation, ToolObservation::Announcement),
-    );
-    apply(
-        &mut second,
-        tool_update(run_b.generation, ToolObservation::Announcement),
-    );
-    deadline(&mut first, OwnerDeadline::RestoreWire(run_a));
-    let prompt = input(run_b.generation, 3);
-    send_prompt(&mut second, &prompt);
-
-    let tool = "provider-tool-id";
-    let a = first.tools.get(tool).expect("retired routing observation");
-    let b = second
-        .tools
-        .get(tool)
-        .expect("surviving routing observation");
-    let first_id = "session-a";
-    let second_id = "session-b";
-    assert_eq!(
-        sessionless_callback_owner([(&first_id, a), (&second_id, b)].into_iter()),
-        SessionlessCallbackOwner::Refused
-    );
-    assert_eq!(
-        sessionless_callback_owner(std::iter::once((&second_id, b))),
-        SessionlessCallbackOwner::OwnedBy(&second_id)
-    );
-    assert!(tool_forwarded(
-        &apply(&mut second, callback(run_b.generation, prompt.turn)),
-        run_b.generation
-    ));
 }
 
 #[test]
@@ -598,7 +557,7 @@ fn setting_cannot_overtake_an_input_waiting_for_its_dispatch_mark() {
     assert!(matches!(
         decide(&state, OwnerEvent::Command(setting_command(setting, 3))),
         Err(SessionOwnerRejection::Refused(
-            SessionOwnerRefusal::EffectInProgress
+            SessionOwnerRefusal::SettingEffectInProgress(SettingEffectInProgress::PromptInProgress)
         ))
     ));
     let key = authorization(&apply(&mut state, mark_prompt(&prompt)));

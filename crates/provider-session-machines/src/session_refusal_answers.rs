@@ -167,6 +167,32 @@ pub fn settings_hold_answer(cause: UnresolvedCause) -> String {
     format!("{state}; {}", joined(&hold_steps(&held)))
 }
 
+/// What the caller can observe when no setting move is currently eligible.
+pub enum SettingWaitObservation {
+    Change,
+    EarlierWriteReply,
+}
+
+/// The pending setting write and the eligible caller moves from its actual state.
+pub fn setting_in_progress_answer(
+    setting: Option<&SessionSetting>,
+    eligible: impl Fn(RefusalStep) -> bool,
+    wait: SettingWaitObservation,
+) -> String {
+    let mut steps = setting.map_or_else(Vec::new, hold_steps);
+    steps.retain(|step| eligible(*step));
+    let next = if steps.is_empty() {
+        match wait {
+            SettingWaitObservation::Change => RefusalStep::Wait.phrase(),
+            SettingWaitObservation::EarlierWriteReply => "wait for the earlier write's reply",
+        }
+        .to_owned()
+    } else {
+        joined(&steps)
+    };
+    format!("a setting change is in progress; {next}")
+}
+
 #[cfg(test)]
 #[path = "session_refusal_answers_test.rs"]
 mod tests;

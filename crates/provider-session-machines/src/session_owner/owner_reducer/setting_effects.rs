@@ -6,8 +6,8 @@ use crate::session_owner::{
     AuthorizationStatus, AuthorizedWork, EffectOutcome, FastReadback, ModelFastOutcome,
     ObservationCause, ObservedSetting, OwnerEffect, OwnerSetting, QueuedSetting, RemoteEffect,
     RevokeReason, SessionDeadline, SessionOwnerEffect, SessionOwnerRefusal, SessionOwnerReply,
-    SessionPublication, SessionStoreRequest, SettingEvidence, SettingObservation, SettingReadback,
-    SettingWait,
+    SessionPublication, SessionStoreRequest, SettingEffectInProgress, SettingEvidence,
+    SettingObservation, SettingReadback, SettingWait,
 };
 use crate::session_setting_machine::{SessionSettingEvent, SettingValueId};
 use session_event_model::InputId;
@@ -79,11 +79,22 @@ impl OwnerTransition {
             ));
             return Ok(());
         }
-        if self.next.setting.is_some()
-            || self.prompt_in_progress()
-            || self.setting_fenced(setting.kind)
-        {
-            return Err(SessionOwnerRefusal::EffectInProgress.into());
+        // Admission queues an incoming setting behind one already in flight.
+        let blocked = if let Some((in_flight, _)) = self.next.setting {
+            Some(SettingEffectInProgress::SettingInFlight(
+                self.next.cell.settings.get(&in_flight.kind).cloned(),
+            ))
+        } else if self.prompt_in_progress() {
+            Some(SettingEffectInProgress::PromptInProgress)
+        } else if self.setting_fenced(setting.kind) {
+            Some(SettingEffectInProgress::FencedSetting(
+                self.next.cell.settings.get(&setting.kind).cloned(),
+            ))
+        } else {
+            None
+        };
+        if let Some(blocked) = blocked {
+            return Err(SessionOwnerRefusal::SettingEffectInProgress(blocked).into());
         }
         if setting.kind == ProviderSettingKind::Fast && value.0 == "off" {
             self.cell_move(SessionCellEvent::KeepFastOff(true))?;

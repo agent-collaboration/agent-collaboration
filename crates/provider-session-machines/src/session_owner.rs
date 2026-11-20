@@ -525,6 +525,13 @@ pub(in crate::session_owner) enum SessionOwnerEffect {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SettingEffectInProgress {
+    SettingInFlight(Option<crate::session_setting_machine::SessionSetting>),
+    PromptInProgress,
+    FencedSetting(Option<crate::session_setting_machine::SessionSetting>),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SessionOwnerRefusal {
     Cell(state_machine_core::TransitionError<SessionCellRefusal>),
     GenerationChanged,
@@ -532,12 +539,25 @@ pub enum SessionOwnerRefusal {
     SettingContextChanged,
     InputAlreadyAdmitted,
     EffectInProgress,
+    SettingEffectInProgress(SettingEffectInProgress),
     QueueFull,
     CannotSteer,
     SkillSelectionChanged,
 }
 
 impl SessionOwnerRefusal {
+    #[must_use]
+    pub const fn lifecycle_refusal(
+        &self,
+    ) -> Option<crate::session_lifecycle_machine::SessionLifecycleRefusal> {
+        match self {
+            Self::Cell(state_machine_core::TransitionError::Domain(
+                SessionCellRefusal::Lifecycle(refusal),
+            )) => Some(*refusal),
+            _ => None,
+        }
+    }
+
     #[must_use]
     pub const fn retry_advice(&self) -> Option<&'static str> {
         match self {

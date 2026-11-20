@@ -39,6 +39,10 @@ use collaboration_protocol::{
 };
 use collaboration_runtime::EndpointDirectory;
 use collaboration_runtime::ProviderOperationStore;
+use provider_session_machines::{
+    session_lifecycle_answers::state_answer, session_owner::RevokeReason,
+    session_refusal_answers::settings_hold_answer, session_setting_machine::UnresolvedCause,
+};
 use std::{collections::HashSet, sync::Arc};
 use tokio::sync::Mutex;
 
@@ -456,13 +460,19 @@ impl ProviderAcpDeliveryRoute {
                 ));
             }
             Ok(InputAcceptance::Unsent { reason }) => {
+                let answer = match reason {
+                    Some(RevokeReason::SettingsUnresolved) => settings_hold_answer(UnresolvedCause::OutcomeUnknown),
+                    Some(RevokeReason::NotLoaded) => self.supervisor.owner_session_snapshot(&request.target)
+                        .map_or_else(|| RevokeReason::NotLoaded.display_detail().into_owned(), |snapshot| state_answer(&snapshot.lifecycle)),
+                    Some(reason) => reason.display_detail().into_owned(),
+                    None => "provider prompt was not sent".into(),
+                };
                 return self
                     .finish_known_none(
                         &request,
                         sink,
                         &mut effect,
-                        reason.map_or_else(|| "provider prompt was not sent".into(),
-                            provider_session_machines::session_owner::RevokeReason::display_detail),
+                        answer,
                         false,
                         UnsentCause::Refused(NativeRefusalCode::ProviderNotSubmitted),
                     )

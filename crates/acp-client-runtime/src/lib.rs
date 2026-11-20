@@ -73,11 +73,9 @@ mod provider_transport_diagnostics;
 mod provider_update_kind;
 mod session_event_sink;
 pub mod session_owner_task;
-mod session_runs;
 mod session_start_folders;
 #[cfg(feature = "test-support")]
 pub mod sim_points;
-pub use session_runs::SessionRuns;
 mod transport_run;
 
 #[cfg(test)]
