@@ -139,7 +139,10 @@ async fn unconfirmed_cancel_hold_ends_at_new_host_epoch() {
     assert_eq!(unknown.effect, ProviderOperationEffect::Unknown);
     assert_eq!(
         String::from(unknown.message),
-        "the harness didn't stop the turn; close the session to recover"
+        format!(
+            "the harness didn't stop the turn, so its outcome is unknown; close the session, then check it and run operation reconcile for {}",
+            foreground.as_str(),
+        ),
     );
 
     let close = OperationId::generate();
