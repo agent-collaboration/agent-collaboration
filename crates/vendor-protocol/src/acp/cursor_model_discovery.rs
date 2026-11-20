@@ -139,6 +139,7 @@ fn describe_reasoning(options: &[CursorConfigOption]) -> CursorModelReasoning {
             if !matches!(option.kind, CursorOptionKind::Select) {
                 return None;
             }
+            // Only session settings fall back to a bare `thought_level` ID.
             match classify_advertised_effort(option.category.as_ref(), option.id.0.as_ref()) {
                 role @ (AdvertisedEffort::Explicit | AdvertisedEffort::Categorized) => {
                     Some((role, option))

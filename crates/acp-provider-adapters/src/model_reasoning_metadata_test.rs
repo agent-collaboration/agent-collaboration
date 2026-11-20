@@ -100,6 +100,45 @@ fn cursor_discovery_preserves_eligibility_preference_and_duplicate_id_scope() {
 }
 
 #[test]
+fn cursor_discovery_excludes_thinking_from_effort_candidates() {
+    let thinking = json!({
+        "id": "thinking", "category": "thought_level", "type": "select",
+        "currentValue": "true", "options": [{"value": "true", "name": "On"}]
+    });
+    let reasoning = json!({
+        "id": "reasoning", "category": "thought_level", "type": "select",
+        "currentValue": "high", "options": [{"value": "high", "name": "High"}]
+    });
+    let response = json!({"models": [
+        {"value": "thinking-only", "name": "Thinking only", "configOptions": [thinking]},
+        {"value": "both-controls", "name": "Both controls", "configOptions": [thinking, reasoning]}
+    ]});
+    let expected_reasoning = ModelReasoningSelect::try_new(
+        "reasoning".into(),
+        vec![ProviderSettingChoice {
+            value: "high".into(),
+            label: "High".into(),
+        }],
+        "high".into(),
+    )
+    .expect("valid reasoning control");
+
+    let metadata = decode_cursor_models(&response);
+
+    assert_eq!(
+        [
+            metadata.for_model("thinking-only"),
+            metadata.for_model("both-controls")
+        ],
+        [
+            ModelReasoning::Unknown(ModelReasoningUnknown::Unavailable),
+            ModelReasoning::Select(expected_reasoning)
+        ],
+        "thinking must neither qualify on its own nor compete with the offered effort"
+    );
+}
+
+#[test]
 fn cursor_discovery_keeps_row_errors_distinct_from_a_malformed_response() {
     let mut response = json!({"models": [
         {"value": "valid", "name": "Valid", "configOptions": [
