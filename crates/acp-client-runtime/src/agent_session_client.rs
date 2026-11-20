@@ -17,6 +17,8 @@ mod provider_model_discovery;
 mod provider_prompt_cancellation;
 mod provider_prompt_dispatch;
 mod provider_request_fallback;
+mod provider_restore_activation;
+pub use provider_restore_activation::PreparedProviderRestore;
 mod provider_session_admission;
 mod provider_session_queue;
 mod provider_session_restore;
@@ -80,7 +82,7 @@ use provider_session_admission::{
     run_create_admission,
 };
 pub use provider_session_queue::{
-    QueueCancel, QueueMarkStep, QueueRefusal, QueueTicket, QueueTurn, SessionLoadStarted,
+    QueueCancel, QueueMarkStep, QueueRefusal, QueueTicket, QueueTurn, SessionRestoreStarted,
 };
 use session_event_model::InputId;
 use std::collections::HashMap;
@@ -137,6 +139,7 @@ enum ProviderCommand<P: InteractionPort> {
         admitted:
             Option<tokio::sync::oneshot::Sender<provider_session_machines::SessionGeneration>>,
         dispatch: crate::provider_restore_failure::RestoreDispatch,
+        publication: provider_restore_activation::RestorePublicationReceiver,
         reply:
             tokio::sync::oneshot::Sender<Result<RestoredSessionAdmission, crate::RestoreFailure>>,
     },
@@ -220,10 +223,17 @@ enum PendingSessionAdmission<P: InteractionPort> {
         attempt: provider_session_machines::session_lifecycle_machine::LoadAttempt,
         result: Box<Result<RestoredProviderSession, crate::RestoreFailure>>,
         dispatch: crate::provider_restore_failure::RestoreDispatch,
+        publication: provider_restore_activation::RestorePublicationReceiver,
         /// The session's in-folder roots, granted once the restore registers.
         in_folder: Option<crate::in_folder_allowance::InFolderGrant>,
         reply:
             tokio::sync::oneshot::Sender<Result<RestoredSessionAdmission, crate::RestoreFailure>>,
+    },
+    RestorePublication {
+        provider_session_id: String,
+        generation: provider_session_machines::SessionGeneration,
+        decision: provider_restore_activation::RestorePublication,
+        settled: tokio::sync::oneshot::Sender<Result<(), ExternalProviderRuntimeError>>,
     },
     Close {
         provider_session_id: String,
@@ -289,6 +299,7 @@ pub struct AgentSessionClient<P: InteractionPort> {
     session_settings: Arc<crate::run_owned_state::RunOwnedMap<crate::ProviderSettingsCatalog>>,
     /// Each provider session's typed lifecycle, shared with the connection.
     session_cells: Arc<crate::session_cell_table::SessionCellTable>,
+    clock: Arc<dyn router_clock::RuntimeClock>,
     shutdown: CancellationToken,
     /// A locally requested stop, distinct from transport failure breaking the task.
     local_shutdown: CancellationToken,

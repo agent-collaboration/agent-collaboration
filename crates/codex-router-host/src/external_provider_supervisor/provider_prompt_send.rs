@@ -14,7 +14,7 @@ use super::{
     ConversationOperationSnapshot, ConversationOperationSubmission, ExternalProviderSupervisor,
     LiveOperation, OperationId, PreparedOperation, ProviderConversationFuture,
     ProviderOperationCompletion, ProviderOperationEffect, ProviderOperationKind,
-    admitted_submission, existing_submission, failure, retain_operation,
+    admitted_submission, existing_submission, failure, retain_operation, runtime_failure,
 };
 use collaboration_protocol::MessageDelivery;
 
@@ -186,6 +186,16 @@ impl ExternalProviderSupervisor {
                 PreparedOperation::Admitted { snapshot, live } => (snapshot, live),
             };
             let provider_session_id = String::from(target.session_id.clone());
+            if delivery == MessageDelivery::Auto
+                && let Err(error) = runtime.wait_for_restore_input(&provider_session_id).await
+            {
+                let refused = runtime_failure(request.operation_id.clone(), Some(target), error);
+                let settled = refused.clone();
+                backend.spawn_operation(request.operation_id, live, async move {
+                    ProviderOperationCompletion::Failure(settled)
+                });
+                return Err(refused);
+            }
             let mut route = Self::send_route(&runtime, &provider_session_id, delivery).await;
             // One re-decision when the session changed between the look and
             // the send; a second change takes the settled route (C4, step 6).

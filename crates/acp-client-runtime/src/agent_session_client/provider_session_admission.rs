@@ -382,6 +382,9 @@ pub(super) fn fail_pending_session_admission<P: InteractionPort>(
             });
             let _result = reply.send(Err(failure));
         }
+        PendingSessionAdmission::RestorePublication { settled, .. } => {
+            let _result = settled.send(Err(ExternalProviderRuntimeError::TransportFailure));
+        }
         PendingSessionAdmission::Close { reply, .. } => {
             let _result = reply.send(Err(ExternalProviderRuntimeError::TransportFailure));
         }

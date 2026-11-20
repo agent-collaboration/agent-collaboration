@@ -6,13 +6,13 @@ use collaboration_contracts::{
     layer_zero::{DeliveryRequest, PreparedPush},
 };
 use collaboration_protocol::{
-    AttemptId, ChannelDescription, ConversationLoadRequest, ConversationOperationShowRequest,
-    ConversationPromptRequest, ConversationResumeRequest, DeliveryCorrelationId, DeliveryOutcome,
-    EndpointAvailability, EndpointDescription, MessageContent, MessageDelivery,
-    ObservationTimestamp,
+    AttemptId, ChannelDescription, ConversationCloseRequest, ConversationLoadRequest,
+    ConversationOperationShowRequest, ConversationPromptRequest, ConversationResumeRequest,
+    DeliveryCorrelationId, DeliveryOutcome, EndpointAvailability, EndpointDescription,
+    MessageContent, MessageDelivery, ObservationTimestamp,
 };
 use collaboration_runtime::{EndpointDirectory, ProviderSessionEventHub, ProviderSessionRecord};
-use router_clock::{ClockInstant, ManualClock};
+use router_clock::{ClockInstant, ManualClock, RuntimeClock as _};
 
 struct RestoreRig {
     root: tempfile::TempDir,
@@ -60,6 +60,10 @@ impl RestoreRig {
     }
 
     async fn open_host(&self, behavior: &str) -> ExternalProviderSupervisor {
+        self.open_host_with(&[behavior]).await
+    }
+
+    async fn open_host_with(&self, behaviors: &[&str]) -> ExternalProviderSupervisor {
         let store = Arc::new(Mutex::new(self.store().await));
         let hub = Arc::new(ProviderSessionEventHub::new(store.clone()));
         let target: message_board::SessionRef =
@@ -74,8 +78,10 @@ impl RestoreRig {
                     "no-directories".into(),
                     "advertise-restore".into(),
                     "plain-prompts".into(),
-                    behavior.into(),
-                ],
+                ]
+                .into_iter()
+                .chain(behaviors.iter().map(|behavior| (*behavior).to_owned()))
+                .collect(),
             ),
             acp_client_runtime::ProviderModelPicker::Standard,
             "fixture",
@@ -163,6 +169,32 @@ impl RestoreRig {
             &std::fs::read(self.root.path().join("wire.json")).expect("wire receipt"),
         )
         .expect("wire JSON")
+    }
+
+    async fn until_wire_request(&self, method: &str) {
+        while !std::fs::read(self.root.path().join("wire.json"))
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+            .and_then(|wire| wire[method].as_array().map(|rows| !rows.is_empty()))
+            .unwrap_or(false)
+        {
+            tokio::task::yield_now().await;
+        }
+    }
+
+    fn prompt_request(&self, id: OperationId, text: &str) -> ConversationPromptRequest {
+        ConversationPromptRequest {
+            delivery: MessageDelivery::Auto,
+            input_id: None,
+            operation_id: id,
+            target: self.target.clone(),
+            generation: Some(generation()),
+            requested_by: self.target.clone().into(),
+            approver: self.target.clone().into(),
+            prompt: MessageContent::HumanUser {
+                text: MessageText::try_from(text.to_owned()).expect("prompt text"),
+            },
+        }
     }
 
     async fn assert_loads(&self, host: &ExternalProviderSupervisor) {
@@ -459,11 +491,11 @@ async fn a_failed_host_activation_retires_only_its_restore_and_never_sends_the_o
             }
         };
         let fault = async {
-            reached.await.expect("ACP registered the restored actor");
+            reached.await.expect("ACP prepared the restored actor");
             assert!(
                 matches!(
                     runtime.session_activity(session_id.clone()).await,
-                    Ok(crate::ProviderSessionActivity::Idle)
+                    Ok(crate::ProviderSessionActivity::NotLoaded)
                 ),
                 "{path:?}"
             );
@@ -525,6 +557,176 @@ async fn a_failed_host_activation_retires_only_its_restore_and_never_sends_the_o
         route.shutdown_queue().await;
         host.shutdown().await.expect("stop Host");
     }
+}
+
+#[tokio::test]
+async fn a_competing_refused_close_cannot_reopen_a_failed_host_restore() {
+    let rig = RestoreRig::new();
+    rig.seed_session().await;
+    let host = rig
+        .open_host_with(&["restored-in-auto", "advertise-close", "hold-close-refusal"])
+        .await;
+    let runtime = host.runtime_for(&rig.target.endpoint).expect("runtime");
+    let (reached, release) = runtime.pause_next_activation();
+    let restoring = OperationId::generate();
+    host.load(rig.load_request(restoring.clone()))
+        .await
+        .expect("restore admitted");
+    reached.await.expect("ACP prepared its route");
+    let closing = OperationId::generate();
+    host.close(ConversationCloseRequest {
+        operation_id: closing.clone(),
+        target: rig.target.clone(),
+        generation: Some(generation()),
+        requested_by: rig.target.clone().into(),
+        approver: rig.target.clone().into(),
+    })
+    .await
+    .expect("competing close admitted");
+    rig.until_wire_request("closes").await;
+    runtime
+        .event_sink_for_test()
+        .expect("event sink")
+        .reject_next_activation_for_test();
+    release.send(()).expect("continue Host activation");
+    let restore_failure = host
+        .wait(wait_request(restoring))
+        .await
+        .expect_err("the Host activation failed while the close was still withheld");
+    assert_eq!(restore_failure.effect, ProviderOperationEffect::Unknown);
+    node_test_fixture::release_fixture(&rig.root.path().join("wire.json"), ".release-close")
+        .expect("let ACP refuse close");
+    let close_failure = host
+        .wait(wait_request(closing))
+        .await
+        .expect_err("close refused by ACP");
+    assert_eq!(close_failure.effect, ProviderOperationEffect::None);
+    assert!(
+        matches!(
+            runtime
+                .session_activity(String::from(rig.target.session_id.clone()))
+                .await,
+            Ok(crate::ProviderSessionActivity::NotLoaded)
+        ),
+        "refused competing close reopened the failed restore"
+    );
+    assert_eq!(rig.wire_receipt()["prompts"], serde_json::json!([]));
+
+    rig.assert_loads(&host).await;
+    let input = OperationId::generate();
+    host.prompt(rig.prompt_request(input.clone(), "one new prompt"))
+        .await
+        .expect("retry accepted new input");
+    host.wait(wait_request(input))
+        .await
+        .expect("new input finished");
+    assert_eq!(
+        rig.wire_receipt()["prompts"],
+        serde_json::json!([rig.target.session_id])
+    );
+    host.shutdown().await.expect("stop Host");
+}
+
+#[tokio::test]
+async fn a_public_prompt_stays_local_until_host_activation_settles() {
+    let rig = RestoreRig::new();
+    rig.seed_session().await;
+    let host = rig.open_host("silent-prompts").await;
+    let runtime = host.runtime_for(&rig.target.endpoint).expect("runtime");
+    let (reached, release) = runtime.pause_next_activation();
+    let restoring = OperationId::generate();
+    host.load(rig.load_request(restoring.clone()))
+        .await
+        .expect("restore admitted");
+    reached.await.expect("ACP prepared its route");
+    let input = OperationId::generate();
+    let sending = host.prompt(rig.prompt_request(input.clone(), "do not send this input"));
+    tokio::pin!(sending);
+    tokio::select! {
+        () = runtime.wait_for_pending_restore_input_for_test() => {},
+        () = rig.until_wire_request("prompts") => panic!("public prompt reached ACP before Host activation"),
+        result = &mut sending => {
+            let _admitted = result.expect("a pending prompt must not be refused before activation settles");
+            rig.until_wire_request("prompts").await;
+            panic!("public prompt reached ACP before Host activation");
+        },
+    }
+    assert_eq!(rig.wire_receipt()["prompts"], serde_json::json!([]));
+    runtime
+        .event_sink_for_test()
+        .expect("event sink")
+        .reject_next_activation_for_test();
+    release.send(()).expect("fail Host activation");
+    let (restore_failure, refusal) = tokio::join!(host.wait(wait_request(restoring)), sending);
+    assert_eq!(
+        restore_failure.expect_err("restore failed").effect,
+        ProviderOperationEffect::Unknown
+    );
+    let refusal = refusal.expect_err("provisional input was refused locally");
+    assert_eq!(refusal.effect, ProviderOperationEffect::None);
+    assert_eq!(
+        String::from(refusal.message),
+        "the restore did not activate; load or resume this session and retry the input"
+    );
+    let stored = host
+        .wait(wait_request(input))
+        .await
+        .expect_err("refusal was retained");
+    assert_eq!(stored.effect, ProviderOperationEffect::None);
+    assert_eq!(
+        rig.clock.monotonic_now(),
+        ClockInstant::ZERO,
+        "retirement must not need a timeout"
+    );
+    assert!(matches!(
+        runtime
+            .session_activity(String::from(rig.target.session_id.clone()))
+            .await,
+        Ok(crate::ProviderSessionActivity::NotLoaded)
+    ));
+    assert_eq!(rig.wire_receipt()["prompts"], serde_json::json!([]));
+    host.shutdown().await.expect("stop Host");
+}
+
+#[tokio::test]
+async fn successful_host_activation_releases_the_waiting_public_prompt() {
+    let rig = RestoreRig::new();
+    rig.seed_session().await;
+    let host = rig.open_host("restored-in-auto").await;
+    let runtime = host.runtime_for(&rig.target.endpoint).expect("runtime");
+    let (reached, release) = runtime.pause_next_activation();
+    let restoring = OperationId::generate();
+    host.load(rig.load_request(restoring.clone()))
+        .await
+        .expect("restore admitted");
+    reached.await.expect("ACP prepared its route");
+    let input = OperationId::generate();
+    let sending = host.prompt(rig.prompt_request(input.clone(), "wait to send this input"));
+    tokio::pin!(sending);
+    tokio::select! {
+        () = runtime.wait_for_pending_restore_input_for_test() => {},
+        result = &mut sending => panic!("prompt settled before Host activation: {result:?}"),
+    }
+    assert_eq!(rig.wire_receipt()["prompts"], serde_json::json!([]));
+    release.send(()).expect("publish Host activation");
+    let (restored, submitted) = tokio::join!(host.wait(wait_request(restoring)), sending);
+    restored.expect("restore activated");
+    submitted.expect("waiting prompt dispatched");
+    let finished = host
+        .wait(wait_request(input))
+        .await
+        .expect("prompt completed");
+    assert!(matches!(
+        finished.output,
+        ConversationOperationWaitOutput::Available {
+            settlement: ConversationOperationSettlement::PromptCompleted { .. }
+        }
+    ));
+    assert_eq!(
+        rig.wire_receipt()["prompts"],
+        serde_json::json!([rig.target.session_id])
+    );
+    host.shutdown().await.expect("stop Host");
 }
 
 #[tokio::test]

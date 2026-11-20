@@ -99,7 +99,12 @@ impl ExternalProviderRuntime {
     > {
         let started = self
             .client
-            .begin_load_session(provider_session_id.clone(), cwd, setup)
+            .begin_restore_session(
+                provider_session_id.clone(),
+                cwd,
+                setup,
+                super::RestoreVia::Load,
+            )
             .await?;
         let runtime = Arc::clone(self);
         Ok(Box::pin(async move {
