@@ -52,7 +52,9 @@ impl InteractionRetentionWorker {
         }
     }
 
-    /// Prunes one batch of every class that is due at `now_ms`, as one pass does.
+    /// Prunes one batch of every class that is due at `now_ms`, as one pass does. Test-only:
+    /// the Host runs the worker through [`Self::run`].
+    #[cfg(any(test, feature = "test-support"))]
     pub async fn prune_batch(&self, now_ms: i64) -> u64 {
         self.retention_pass()
             .prune_due_classes(now_ms, &WorkerObservation::default())
