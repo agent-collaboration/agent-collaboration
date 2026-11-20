@@ -5,6 +5,7 @@ use agent_client_protocol_schema::v1::{
     SessionConfigSelectOption, SessionConfigSelectOptions, SessionConfigValueId,
 };
 
+/// The settings roles recognized from ACP categories and provider option IDs.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SettingCategory {
     Mode,
@@ -12,6 +13,7 @@ pub enum SettingCategory {
     Effort,
 }
 
+/// A decoded ACP setting with its original ID and label and an optional recognized role.
 #[derive(Debug, Eq, PartialEq)]
 pub struct ObservedSetting<'option> {
     pub id: &'option SessionConfigId,
@@ -20,18 +22,35 @@ pub struct ObservedSetting<'option> {
     pub value: ObservedSettingValue<'option>,
 }
 
+/// A provider's current selection or native Boolean value.
 #[derive(Debug, Eq, PartialEq)]
 pub enum ObservedSettingValue<'option> {
     Select {
+        /// The selected ID, which may be absent from the offered choices.
         current: &'option SessionConfigValueId,
+        /// Decoded choices in provider order, flattened across groups.
+        ///
+        /// `None` means the codec does not recognize the select offer representation.
+        /// `Some` with an empty list means the decoded representation contains no choices.
         offered: Option<Vec<&'option SessionConfigSelectOption>>,
     },
     Boolean(bool),
 }
 
-/// Preserve the difference between an omitted option set and a reported empty set.
+/// Project already-decoded ACP v1 settings options.
 ///
-/// ACP's decoder rejects unrecognized option tags before this function sees them.
+/// `None` preserves absence in the decoded input. `Some` with an empty list means
+/// projection produced zero options. A malformed field can produce the same
+/// decoded state as an omitted field or an explicit empty list.
+///
+/// On typed session replies and updates, the pinned ACP schema can skip malformed
+/// or unrecognized entries and default a malformed `configOptions` field to
+/// absence or an empty list, depending on the message. A list whose entries are
+/// all skipped is also empty. Skipped-entry warnings require the upstream
+/// `tracing` feature.
+///
+/// The Router's set-config-option reply path rejects the entire array if any
+/// item fails to decode before it calls this function.
 #[must_use]
 pub fn observe_config_options(
     options: Option<&[SessionConfigOption]>,
