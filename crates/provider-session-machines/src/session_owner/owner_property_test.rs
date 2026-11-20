@@ -3,10 +3,12 @@ use crate::session_lifecycle_machine::CloseOrigin;
 use hegel::generators as gs;
 use std::collections::BTreeSet;
 
+#[derive(Clone)]
 struct Mailbox {
     owner: SessionOwnerState,
     arrivals: Vec<OwnerEvent>,
     armed: Vec<OwnerDeadline>,
+    cancel_takes: BTreeSet<DispatchAuthorization>,
 }
 
 impl Mailbox {
@@ -15,12 +17,16 @@ impl Mailbox {
             owner: fresh(),
             arrivals: Vec::new(),
             armed: Vec::new(),
+            cancel_takes: BTreeSet::new(),
         }
     }
 
     fn deliver(&mut self, event: OwnerEvent) {
+        if let OwnerEvent::Dispatch(DispatchResult::CancelTaken { authorization, .. }) = &event {
+            self.cancel_takes.insert(authorization.clone());
+        }
         let before = self.owner.snapshot().lifecycle;
-        let previous_waits = pending(&self.owner);
+        let previous_waits = self.pending();
         let fences = sent_settings(&self.owner);
         let restore_fences = self.owner.ports.restore_setting_fences.clone();
         if let Ok(commit) = decide(&self.owner, event.clone()) {
@@ -30,7 +36,7 @@ impl Mailbox {
                 self.observe(effect);
             }
         }
-        let remaining = pending(&self.owner);
+        let remaining = self.pending();
         assert!(
             remaining.iter().all(|wait| self.armed.contains(wait)),
             "I3 pending work has no armed deadline: {remaining:?}"
@@ -75,9 +81,16 @@ impl Mailbox {
         }
     }
 
+    fn pending(&self) -> Vec<OwnerDeadline> {
+        pending(&self.owner, &self.cancel_takes)
+    }
+
     fn observe(&mut self, effect: OwnerEffect) {
         match effect {
-            OwnerEffect::Arm { deadline, .. } => {
+            OwnerEffect::Arm { deadline, budget } => {
+                if matches!(deadline, OwnerDeadline::CancelConfirmation(_)) {
+                    assert_eq!(budget, std::time::Duration::from_secs(30));
+                }
                 self.armed.push(deadline.clone());
                 self.arrivals.push(OwnerEvent::Deadline(deadline));
             }
@@ -321,7 +334,10 @@ fn assert_live_commit(before: SessionLifecycle, after: SessionLifecycle, event: 
     );
 }
 
-fn pending(state: &SessionOwnerState) -> Vec<OwnerDeadline> {
+fn pending(
+    state: &SessionOwnerState,
+    cancel_takes: &BTreeSet<DispatchAuthorization>,
+) -> Vec<OwnerDeadline> {
     let mut waits = Vec::new();
     if let Some(restore) = state.restore {
         waits.push(match restore {
@@ -365,13 +381,25 @@ fn pending(state: &SessionOwnerState) -> Vec<OwnerDeadline> {
     );
     for (key, authorization) in &state.ports.authorizations {
         match (&authorization.status, &authorization.work) {
+            // Cancel takes use the drain's budget, with no second enqueue timer.
+            (AuthorizationStatus::Offered, AuthorizedWork::Cancel(_)) => {}
             (AuthorizationStatus::Offered, _) => waits.push(OwnerDeadline::Enqueue(key.clone())),
             (AuthorizationStatus::Taken, AuthorizedWork::Steer(_)) => {
                 waits.push(OwnerDeadline::SteerResult(key.clone()))
             }
+            (AuthorizationStatus::DrainingCancel, _) => {
+                waits.push(OwnerDeadline::CancelDrain(key.clone()));
+            }
             _ => {}
         }
     }
+    waits.extend(
+        cancel_takes
+            .iter()
+            .cloned()
+            .map(OwnerDeadline::CancelConfirmation)
+            .filter(|deadline| state.has_pending_deadline(deadline)),
+    );
     match state.setting {
         Some((setting, SettingWait::Wire)) => waits.push(OwnerDeadline::SettingWire(setting)),
         Some((setting, SettingWait::Store)) => waits.push(OwnerDeadline::SettingStore(setting)),
@@ -426,6 +454,91 @@ fn assert_fences(
     }
 }
 
+fn exercise_cancel_confirmation(
+    mut mailbox: Mailbox,
+    case: &hegel::TestCase,
+    generation: SessionGeneration,
+) {
+    let prompt = input(
+        generation,
+        case.draw(gs::integers::<u64>().min_value(4).max_value(999)),
+    );
+    mailbox.deliver(OwnerEvent::Command(SessionOwnerCommand::Prompt {
+        input: prompt.clone(),
+        admission: PromptAdmission::Direct,
+    }));
+    mailbox.deliver(mark_prompt(&prompt));
+    let prompt_token = mailbox
+        .arrivals
+        .iter()
+        .find_map(|event| match event {
+            OwnerEvent::Dispatch(DispatchResult::Taken(key)) if key.input_id == prompt.input => {
+                Some(key.clone())
+            }
+            _ => None,
+        })
+        .expect("wire prompt was authorized");
+    mailbox.deliver(OwnerEvent::Dispatch(DispatchResult::Taken(prompt_token)));
+    mailbox.deliver(OwnerEvent::Command(SessionOwnerCommand::CancelTurn {
+        generation,
+        turn: prompt.turn,
+    }));
+    let cancel = mailbox
+        .arrivals
+        .iter()
+        .find_map(|event| match event {
+            OwnerEvent::Dispatch(DispatchResult::CancelDrainFinished(key)) => Some(key.clone()),
+            _ => None,
+        })
+        .expect("cancel has an exact drain authorization");
+    assert_eq!(cancel.run, generation);
+    assert_eq!(
+        cancel.target,
+        AuthorizationTarget::ExistingTurn { turn: prompt.turn }
+    );
+    mailbox.deliver(OwnerEvent::Dispatch(DispatchResult::CancelDrainFinished(
+        cancel.clone(),
+    )));
+    mailbox.deliver(OwnerEvent::Dispatch(DispatchResult::CancelTaken {
+        authorization: cancel.clone(),
+        drain: CancelDrainReport::Drained,
+    }));
+
+    let confirmation = OwnerDeadline::CancelConfirmation(cancel.clone());
+    let mut stale = cancel;
+    match case.draw(gs::integers::<u8>().max_value(2)) {
+        0 => stale.incarnation = OwnerIncarnation(uuid(777)),
+        1 => stale.run = SessionGeneration::UNTRACKED,
+        _ => {
+            stale.target = AuthorizationTarget::ExistingTurn {
+                turn: TurnId(uuid(1)),
+            }
+        }
+    }
+    let before = mailbox.owner.snapshot();
+    assert!(
+        mailbox.pending().contains(&confirmation),
+        "the exact cancel is waiting for confirmation"
+    );
+    mailbox.deliver(OwnerEvent::Deadline(OwnerDeadline::CancelConfirmation(
+        stale,
+    )));
+    assert_eq!(
+        mailbox.owner.snapshot(),
+        before,
+        "another cancel cannot expire this turn"
+    );
+
+    mailbox.deliver(OwnerEvent::Deadline(confirmation.clone()));
+    assert!(!mailbox.pending().contains(&confirmation));
+    assert_eq!(
+        mailbox.owner.turn(),
+        SessionTurn::Cancelling { turn: prompt.turn },
+        "an unconfirmed cancel must keep its exact turn fenced"
+    );
+    assert_eq!(mailbox.owner.snapshot().cancel_unconfirmed, Some(prompt));
+}
+
 #[hegel::test]
 fn generated_orders_check_i1_i3_i7_and_i8(case: hegel::TestCase) {
     let mut mailbox = Mailbox::new();
@@ -458,6 +571,7 @@ fn generated_orders_check_i1_i3_i7_and_i8(case: hegel::TestCase) {
         "I7 old incarnation changed the current attempt"
     );
     mailbox.deliver(OwnerEvent::Prepare(RestorePreparation::RouteReady(first)));
+    exercise_cancel_confirmation(mailbox.clone(), &case, first.generation);
     let setting = OwnerSetting {
         change: RunAttempt {
             generation: first.generation,
@@ -538,11 +652,11 @@ fn generated_orders_check_i1_i3_i7_and_i8(case: hegel::TestCase) {
     // Stable Live/NotLoaded, ordinary running turns and transport-retained
     // setting fences are not bounded attempts. Publication retries may
     // continue after degradation; each individual offer has its own budget.
-    let waits = pending(&mailbox.owner);
+    let waits = mailbox.pending();
     for wait in waits {
         mailbox.deliver(OwnerEvent::Deadline(wait));
     }
-    if pending(&mailbox.owner).is_empty() {
+    if mailbox.pending().is_empty() {
         let before = mailbox.owner.snapshot();
         mailbox.deliver(OwnerEvent::Deadline(OwnerDeadline::Close(close)));
         assert_eq!(
