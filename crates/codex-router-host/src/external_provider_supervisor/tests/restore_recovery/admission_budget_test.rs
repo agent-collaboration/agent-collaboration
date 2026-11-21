@@ -345,6 +345,116 @@ async fn restore_never_enters_the_owner_after_its_dispatch_mark_expires() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn short_operation_wait_answers_at_its_cutoff_while_the_store_is_held() {
+    let rig = RestoreRig::new();
+    let host = rig.open_host("restored-in-auto").await;
+    for live_failure in [false, true] {
+        let operation = OperationId::generate();
+        host.hold_live_operation(operation.clone());
+        let store = host.inner.store.lock().await;
+        let mut waiting = host.wait(ConversationOperationWaitRequest {
+            operation_id: operation.clone(),
+            timeout_seconds: PositiveSeconds::try_from(1).expect("wait cutoff"),
+        });
+        assert!(futures_util::poll!(&mut waiting).is_pending());
+        if live_failure {
+            let live = host
+                .held_result_for_test(&operation)
+                .expect("held operation")
+                .0;
+            let refusal = failure(
+                ConversationOperationFailureKind::Unavailable,
+                ConversationOperationFailureStage::Dispatch,
+                ProviderOperationEffect::None,
+                "the store didn't respond in time, so nothing was sent",
+                operation.clone(),
+                Some(rig.target.clone()),
+            );
+            host.inner
+                .finish(
+                    operation.clone(),
+                    live,
+                    ProviderOperationCompletion::DispatchMarkNotWritten(refusal),
+                )
+                .await;
+        }
+        rig.clock
+            .advance(Duration::from_secs(1))
+            .expect("reach the wait cutoff");
+        let Poll::Ready(Err(answer)) = futures_util::poll!(&mut waiting) else {
+            panic!("operation wait must answer at its cutoff with the store held");
+        };
+        let (stage, effect, message) = if live_failure {
+            (
+                ConversationOperationFailureStage::Dispatch,
+                ProviderOperationEffect::None,
+                "the store didn't respond in time, so nothing was sent",
+            )
+        } else {
+            (
+                ConversationOperationFailureStage::Settlement,
+                ProviderOperationEffect::Unknown,
+                "the store didn't respond in time",
+            )
+        };
+        assert_eq!(answer.stage, stage);
+        assert_eq!(answer.effect, effect);
+        assert_eq!(String::from(answer.message), message);
+        drop(store);
+        if !live_failure {
+            assert!(host.publish_held_result(&operation).await);
+        }
+    }
+    host.shutdown().await.expect("fixture shutdown");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn short_operation_wait_can_use_a_pending_snapshot_read_before_the_cutoff() {
+    let rig = RestoreRig::new();
+    rig.seed_session().await;
+    let host = rig.open_host("restored-in-auto").await;
+    let operation = OperationId::generate();
+    let (mark_waiting, release_mark) = pause_dispatch_mark(&host);
+    host.load(rig.load_request(operation.clone()))
+        .await
+        .expect("admitted restore");
+    mark_waiting
+        .await
+        .expect("dispatch mark waits before taking the store");
+    let initial_store = host.inner.store.lock().await;
+    let mut waiting = host.wait(ConversationOperationWaitRequest {
+        operation_id: operation.clone(),
+        timeout_seconds: PositiveSeconds::try_from(1).expect("wait cutoff"),
+    });
+    assert!(futures_util::poll!(&mut waiting).is_pending());
+    drop(initial_store);
+    let store_after_read = host.inner.store.lock();
+    tokio::pin!(store_after_read);
+    let store_after_read = tokio::select! {
+        biased;
+        result = &mut waiting => panic!("wait answered before its cutoff: {result:?}"),
+        held = &mut store_after_read => held,
+    };
+    rig.clock
+        .advance(Duration::from_secs(1))
+        .expect("reach the wait cutoff");
+    let Poll::Ready(Ok(answer)) = futures_util::poll!(&mut waiting) else {
+        panic!("the already-read Pending snapshot must stand at cutoff");
+    };
+    assert!(matches!(
+        answer.output,
+        ConversationOperationWaitOutput::Pending
+    ));
+    assert_eq!(answer.operation.stage, ProviderOperationStage::Admitted);
+    drop(store_after_read);
+    release_mark.send(()).expect("release the dispatch mark");
+    host.wait(wait_request(operation))
+        .await
+        .expect("restore settled");
+    host.shutdown().await.expect("fixture shutdown");
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn restore_dispatch_mark_is_visible_only_after_admission_and_before_wire_handoff() {
     let rig = RestoreRig::new();
     rig.seed_session().await;
