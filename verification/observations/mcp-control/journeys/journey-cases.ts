@@ -105,7 +105,17 @@ export async function createSession(
   step: string,
   mode?: string,
 ): Promise<SessionRef> {
-  const { context, plan, store } = inputs;
+  const { target } = await createSessionReceipt(inputs, step, mode);
+  verifyCreatedSessionRoles(inputs, target, step);
+  return target;
+}
+
+export async function createSessionReceipt(
+  inputs: CaseInputs,
+  step: string,
+  mode?: string,
+): Promise<{ readonly target: SessionRef; readonly operationId: string }> {
+  const { context, plan } = inputs;
   const operationId = requests.newOperationId();
   const outcome = await callTool(
     context,
@@ -129,7 +139,16 @@ export async function createSession(
   inputs.knownTargets.push(created.target);
   if (created.kind === "createdWithoutSettings" || (created.notApplied?.length ?? 0) > 0)
     throw new Error(`${step}: creation did not apply all declared settings`);
-  const roles = store.sessionRoles(created.target);
+  return { target: created.target, operationId };
+}
+
+export function verifyCreatedSessionRoles(
+  inputs: CaseInputs,
+  target: SessionRef,
+  step: string,
+): void {
+  const { store, plan } = inputs;
+  const roles = store.sessionRoles(target);
   if (roles === null)
     throw new Error(`${step}: the owning store has no record of the created Session`);
   if (
@@ -137,7 +156,6 @@ export async function createSession(
     !storedIdentityIs(roles.approver, declaredStored(plan.approver))
   )
     throw new Error(`${step}: the stored creator or Approver is not the declared identity`);
-  return created.target;
 }
 
 export async function closeSession(

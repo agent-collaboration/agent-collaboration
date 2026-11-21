@@ -8,7 +8,9 @@ import {
   baseline,
   closeSession,
   createSession,
+  createSessionReceipt,
   restoreDeclaredModel,
+  verifyCreatedSessionRoles,
   type CaseInputs,
   type CaseResult,
 } from "./journey-cases.ts";
@@ -76,6 +78,15 @@ type ExternalBinding = z.infer<typeof bindingSnapshot>["binding"];
 interface OverlapResult {
   readonly other: SessionRef;
   readonly overlap: boolean;
+}
+interface WideCreateWitness {
+  readonly other: SessionRef;
+  readonly operationId: string;
+  readonly bRequest: WireEntry;
+  readonly bReply: WireEntry;
+  readonly runningBefore: boolean;
+  readonly runningAfter: boolean;
+  readonly terminalAlreadySeen: boolean;
 }
 type Prompt = Awaited<ReturnType<typeof preparePrompt>>;
 type TurnStart = { readonly prompt: Prompt; readonly request: WireEntry };
@@ -179,13 +190,18 @@ export function sameExternalBinding(left: ExternalBinding, right: ExternalBindin
   );
 }
 
-async function createWhileActive(inputs: CaseInputs, target: SessionRef): Promise<OverlapResult> {
-  const mode = control(inputs).savedMode;
-  const label = "smoke-a-after-cancel";
-  const { prompt, request } = await startLongTurn(inputs, target, label);
+async function witnessWideCreate(
+  inputs: CaseInputs,
+  target: SessionRef,
+  request: WireEntry,
+): Promise<WideCreateWitness> {
   const runningBefore =
     (await inspect(inputs, "smoke-a-before-b-create", target)).state === "running";
-  const other = await createSession(inputs, "smoke-b-create", mode);
+  const { target: other, operationId } = await createSessionReceipt(
+    inputs,
+    "smoke-b-create",
+    control(inputs).savedMode,
+  );
   const runningAfter =
     (await inspect(inputs, "smoke-a-after-b-create", target)).state === "running";
   const wire = wireEntries(inputs);
@@ -202,7 +218,7 @@ async function createWhileActive(inputs: CaseInputs, target: SessionRef): Promis
       entry.frame?.id != null &&
       entry.frame.id === bReply?.frame?.id,
   );
-  const terminalAlreadySeen = promptReply(wire, request);
+  const terminalAlreadySeen = promptReply(wire, request) !== undefined;
   if (
     bRequest === undefined ||
     bReply === undefined ||
@@ -211,25 +227,74 @@ async function createWhileActive(inputs: CaseInputs, target: SessionRef): Promis
     bReply.disposition !== "forwarded"
   )
     throw new Error("the two Sessions cannot be correlated to the same ACP pipe");
-  const bCreate = inputs.store
-    .operations(other)
-    .find((row) => row.operationKind === "conversationCreate");
-  if (bCreate === undefined) throw new Error("the new Session lacks a durable create row");
+  const witness = {
+    other,
+    operationId,
+    bRequest,
+    bReply,
+    runningBefore,
+    runningAfter,
+    terminalAlreadySeen,
+  };
+  record(inputs.context, { step: "smoke-wide-create-window", target, ...witness });
+  return witness;
+}
+
+async function createWhileActive(inputs: CaseInputs, target: SessionRef): Promise<OverlapResult> {
+  const label = "smoke-a-after-cancel";
+  const { prompt, request } = await startLongTurn(inputs, target, label);
+  let witness: WideCreateWitness;
+  let outcome: Awaited<ReturnType<typeof waitOperation>>;
+  let terminal: WireEntry | undefined;
+  try {
+    witness = await witnessWideCreate(inputs, target, request);
+  } finally {
+    outcome = await waitOperation(inputs, label + "-wait", prompt.operationId);
+    terminal = promptReply(wireEntries(inputs), request);
+    if (terminal === undefined) {
+      try {
+        terminal = await waitForWire(
+          inputs,
+          label + " terminal reply",
+          (entry) => promptReply([entry], request) !== undefined,
+        );
+      } catch (error) {
+        record(inputs.context, {
+          step: "smoke-a-third-terminal-wait",
+          target,
+          error: String(error),
+        });
+      }
+    }
+    record(inputs.context, { step: "smoke-a-third-before-store", target, request, terminal });
+  }
+  if (terminal?.disposition !== "forwarded")
+    throw new Error("the third prompt did not produce a forwarded terminal ACP reply");
+  const { other, operationId, bRequest, bReply, runningBefore, runningAfter, terminalAlreadySeen } =
+    witness;
+  const completed = await verifyCompletedPrompt(inputs, label, target, prompt, outcome);
+  verifyCreatedSessionRoles(inputs, other, "smoke-b-create");
+  await requireOperation(
+    inputs,
+    "smoke-b-create",
+    other,
+    operationId,
+    "conversationCreate",
+    APPLIED,
+  );
   const aBinding = bindingSnapshot.parse(
     await operationShow(inputs.context, "smoke-a-binding", prompt.operationId),
   ).binding;
   const bBinding = bindingSnapshot.parse(
-    await operationShow(inputs.context, "smoke-b-binding", bCreate.operationId),
+    await operationShow(inputs.context, "smoke-b-binding", operationId),
   ).binding;
   const sameBinding = sameExternalBinding(aBinding, bBinding);
-  const overlap = runningBefore && runningAfter && sameBinding && terminalAlreadySeen === undefined;
-  const completed = await verifyCompletedPrompt(
-    inputs,
-    label,
-    target,
-    prompt,
-    await waitOperation(inputs, label + "-wait", prompt.operationId),
-  );
+  const overlap =
+    runningBefore &&
+    runningAfter &&
+    sameBinding &&
+    !terminalAlreadySeen &&
+    bReply.sequence < completed.terminal.sequence;
   record(inputs.context, {
     step: "smoke-overlap",
     target,
