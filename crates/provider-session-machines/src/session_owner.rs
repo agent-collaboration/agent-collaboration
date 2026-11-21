@@ -252,6 +252,14 @@ pub enum SessionStoreResult {
         input: OwnerInput,
         operation: uuid::Uuid,
     },
+    QueuedDispatchBusy {
+        input: OwnerInput,
+        attempt: uuid::Uuid,
+    },
+    QueuedDispatchReady {
+        input: OwnerInput,
+        attempt: uuid::Uuid,
+    },
     LateCancelledPromptReconciled {
         input: OwnerInput,
         outcome: EffectOutcome,
@@ -355,6 +363,7 @@ pub enum SessionStoreRequest {
     },
     ReadRestoreSetup(RunAttempt<LoadAttempt>),
     MarkDispatch(OwnerInput),
+    MarkQueuedDispatch(OwnerInput),
     UndoDispatch(OwnerInput),
     MarkSteerDispatch(OwnerInput),
     ReconcileLateCancelledPrompt(OwnerInput),
@@ -643,6 +652,8 @@ pub(in crate::session_owner) struct PendingPrompt {
     input: OwnerInput,
     wait: InputWait,
     choose_steer_if_a_turn_starts: bool,
+    queued: bool,
+    parked_mark: Option<uuid::Uuid>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

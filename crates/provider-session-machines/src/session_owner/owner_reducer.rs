@@ -15,6 +15,7 @@ mod dispatch_effects;
 mod input_effects;
 mod lifecycle_effects;
 mod provider_started_turn;
+mod queued_dispatch;
 pub(super) use provider_started_turn::PreviousPromptSettlement;
 mod publication_effects;
 mod publication_projection;
@@ -254,6 +255,12 @@ impl OwnerTransition {
             }
             SessionStoreResult::DispatchBlockedByUnknown { input, operation } => {
                 self.dispatch_blocked_by_unknown(&input, operation)
+            }
+            SessionStoreResult::QueuedDispatchBusy { input, attempt } => {
+                self.park_queued_dispatch(&input, attempt)
+            }
+            SessionStoreResult::QueuedDispatchReady { input, attempt } => {
+                self.retry_queued_dispatch(&input, attempt)
             }
             SessionStoreResult::LateCancelledPromptReconciled { input, outcome } => {
                 self.late_cancelled_prompt_reconciled(&input, outcome)

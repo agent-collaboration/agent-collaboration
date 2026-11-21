@@ -59,6 +59,7 @@ pub(super) struct LiveOperation {
     mark: DispatchMark,
     target: StdMutex<Option<SessionRef>>,
     lifecycle: Arc<OperationLifecycle>,
+    cancel_target: Option<uuid::Uuid>,
 }
 
 impl LiveOperation {
@@ -121,7 +122,13 @@ impl LiveOperation {
             mark,
             target: StdMutex::new(target),
             lifecycle: Arc::new(OperationLifecycle::new(record, changed)),
+            cancel_target: None,
         }
+    }
+
+    pub(super) fn with_cancel_target(mut self, target: Option<uuid::Uuid>) -> Self {
+        self.cancel_target = target;
+        self
     }
 
     /// Applies one event to the operation's record. A move the record no
@@ -284,6 +291,9 @@ impl LiveOperation {
     /// An admitted handoff or marked send whose writer still holds custody.
     fn in_flight(&self) -> bool {
         let lifecycle = self.lifecycle.state();
+        if let Some(marked) = lifecycle.lane_marked() {
+            return lifecycle.custody.holds_custody() && marked;
+        }
         let record = lifecycle.custody.admission_record(lifecycle.record);
         lifecycle.custody.holds_custody()
             && (record == OperationRecord::Reserving && self.mark == DispatchMark::BeforeHandoff
@@ -412,26 +422,42 @@ impl LiveOperations {
         binding: &ProviderBindingIdentity,
         request: AdmissionRequest<'_>,
     ) -> Vec<OperationId> {
-        self.operations
-            .iter()
-            .filter(|(id, operation)| {
-                operation
-                    .binding
-                    .as_ref()
-                    .is_some_and(|(endpoint, generation)| {
-                        endpoint == &binding.endpoint && generation == &binding.generation
-                    })
-                    && operation.in_flight()
-                    && request.blocked_by(
-                        id,
-                        EarlierOperation::InFlight {
-                            target: operation.target().as_ref(),
-                        },
-                        None,
-                    )
-            })
-            .map(|(operation_id, _)| operation_id.clone())
+        self.overlapping_holders(binding, request)
+            .map(|(operation, _)| operation.clone())
             .collect()
+    }
+
+    pub(super) fn lane_mark_blocker(
+        &self,
+        binding: &ProviderBindingIdentity,
+        request: AdmissionRequest<'_>,
+    ) -> Option<OperationId> {
+        self.overlapping_holders(binding, request)
+            .find(|(_, holder)| !request.is_own_cancel_holder(holder.kind, holder.cancel_target))
+            .map(|(operation, _)| operation.clone())
+    }
+
+    fn overlapping_holders<'a>(
+        &'a self,
+        binding: &'a ProviderBindingIdentity,
+        request: AdmissionRequest<'a>,
+    ) -> impl Iterator<Item = (&'a OperationId, &'a Arc<LiveOperation>)> {
+        self.operations.iter().filter(move |(id, operation)| {
+            operation
+                .binding
+                .as_ref()
+                .is_some_and(|(endpoint, generation)| {
+                    endpoint == &binding.endpoint && generation == &binding.generation
+                })
+                && operation.in_flight()
+                && request.blocked_by(
+                    id,
+                    EarlierOperation::InFlight {
+                        target: operation.target().as_ref(),
+                    },
+                    None,
+                )
+        })
     }
 }
 

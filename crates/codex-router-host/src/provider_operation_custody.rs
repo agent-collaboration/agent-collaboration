@@ -2,9 +2,12 @@
 
 use collaboration_protocol::{CodexGeneration, OperationId, SessionRef};
 use provider_session_machines::{
-    operation_record_machine::OperationRecord,
+    operation_record_machine::{
+        DispatchAttempt, OperationRecord, OperationRecordEvent, OperationRecordMachine,
+    },
     session_owner::{OwnerIncarnation, OwnerInput},
 };
+use state_machine_core::StateMachine;
 use std::{
     collections::BTreeSet,
     sync::{Arc, Mutex, MutexGuard, PoisonError},
@@ -116,6 +119,14 @@ pub(crate) struct OperationLifecycleState {
     pub(crate) record: OperationRecord,
     pub(crate) custody: OperationCustody,
     cancelled_prompt: Option<CancelledPromptIdentity>,
+    lane_mark: Option<(Uuid, bool)>,
+    lane_transition: Option<(Uuid, Uuid)>,
+}
+
+impl OperationLifecycleState {
+    pub(crate) fn lane_marked(&self) -> Option<bool> {
+        self.lane_mark.map(|(_, marked)| marked)
+    }
 }
 
 #[derive(Eq, PartialEq)]
@@ -142,6 +153,8 @@ impl OperationLifecycle {
                 record,
                 custody: OperationCustody::held(),
                 cancelled_prompt: None,
+                lane_mark: None,
+                lane_transition: None,
             }),
             changed,
         }
@@ -211,12 +224,57 @@ impl LaneWriteCustody {
             .get_or_insert(identity);
     }
 
+    pub(crate) fn prepare_lane_projection(&self, attempt: Uuid) {
+        self.lifecycle.state().lane_transition = Some((self.ticket, attempt));
+    }
+
+    pub(crate) fn project_lane_mark(&self, attempt: Uuid) {
+        let mut state = self.lifecycle.state();
+        if state.lane_transition != Some((self.ticket, attempt)) {
+            return;
+        }
+        state.lane_transition = None;
+        state.lane_mark = Some((attempt, true));
+        if let Ok((record, _)) = OperationRecordMachine::transition(
+            &state.record,
+            OperationRecordEvent::DispatchMarked {
+                attempt: DispatchAttempt(attempt),
+            },
+        ) {
+            state.record = record;
+        }
+    }
+
+    pub(crate) fn project_lane_undo(&self, transition: Uuid, attempt: Uuid) {
+        let mut state = self.lifecycle.state();
+        if state.lane_transition != Some((self.ticket, transition))
+            || state.lane_mark != Some((attempt, true))
+        {
+            return;
+        }
+        state.lane_transition = None;
+        state.lane_mark = Some((attempt, false));
+        if let Ok((record, _)) = OperationRecordMachine::transition(
+            &state.record,
+            OperationRecordEvent::Undispatched {
+                attempt: DispatchAttempt(attempt),
+            },
+        ) {
+            state.record = record;
+        }
+    }
+
     pub(crate) fn settle(self, reason: CustodyEnd) {
-        let ended = self
-            .lifecycle
-            .state()
-            .custody
-            .finish_lane_write(self.ticket, reason);
+        let ended = {
+            let mut state = self.lifecycle.state();
+            if state
+                .lane_transition
+                .is_some_and(|(ticket, _)| ticket == self.ticket)
+            {
+                state.lane_transition = None;
+            }
+            state.custody.finish_lane_write(self.ticket, reason)
+        };
         if ended {
             self.lifecycle.changed.notify_waiters();
             (self.on_end)();

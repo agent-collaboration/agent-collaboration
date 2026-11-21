@@ -40,12 +40,13 @@ impl SessionOwnerPorts for PromptPorts {
             OwnerEffect::Publish(
                 PublicationBatch::Commit { id, .. } | PublicationBatch::Rebase { id, .. },
             ) => Some(OwnerEvent::Publication(PublicationResult::Applied(id))),
-            OwnerEffect::Store(SessionStoreRequest::MarkDispatch(input)) => {
-                Some(OwnerEvent::Store(SessionStoreResult::Dispatch {
-                    input,
-                    outcome: EffectOutcome::Applied,
-                }))
-            }
+            OwnerEffect::Store(
+                SessionStoreRequest::MarkDispatch(input)
+                | SessionStoreRequest::MarkQueuedDispatch(input),
+            ) => Some(OwnerEvent::Store(SessionStoreResult::Dispatch {
+                input,
+                outcome: EffectOutcome::Applied,
+            })),
             OwnerEffect::Authorize {
                 authorization,
                 work: AuthorizedWork::Prompt(_),

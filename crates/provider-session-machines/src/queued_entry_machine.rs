@@ -84,6 +84,7 @@ pub enum QueuedEntryEvent {
         run_live: bool,
     },
     MarkFailed,
+    MarkBusy,
     MarkUncertain,
     Withdraw(NotSentReason),
     Cancel,
@@ -170,6 +171,7 @@ impl EventTag for QueuedEntryEvent {
             Self::StartSendClaimed => "start_send_claimed",
             Self::MarkCommitted { .. } => "mark_committed",
             Self::MarkFailed => "mark_failed",
+            Self::MarkBusy => "mark_busy",
             Self::MarkUncertain => "mark_uncertain",
             Self::Withdraw(_) => "withdraw",
             Self::Cancel => "cancel",
@@ -269,6 +271,7 @@ impl StateMachine for QueuedEntryMachine {
                 vec![E::Unmark],
             )),
             (S::Marking, V::MarkFailed) => Ok(not_sent(NotSentReason::DispatchNotRecorded)),
+            (S::Marking, V::MarkBusy) => Ok((S::Waiting, Vec::new())),
             (S::Marking, V::MarkUncertain) => Ok((
                 S::Done(EntryEnding::NotSent(NotSentReason::DispatchRecordUncertain)),
                 vec![E::ReadBackRow(NotSentReason::DispatchRecordUncertain)],
@@ -285,7 +288,9 @@ impl StateMachine for QueuedEntryMachine {
             (S::Withdrawing(reason), V::MarkCommitted { .. }) => {
                 Ok((S::Withdrawing(reason), vec![E::Unmark]))
             }
-            (S::Withdrawing(reason), V::MarkFailed | V::UnmarkCommitted) => Ok(not_sent(reason)),
+            (S::Withdrawing(reason), V::MarkFailed | V::MarkBusy | V::UnmarkCommitted) => {
+                Ok(not_sent(reason))
+            }
             (S::Withdrawing(reason), V::MarkUncertain) => Ok((
                 S::Done(EntryEnding::NotSent(reason)),
                 vec![E::ReadBackRow(reason)],
@@ -309,6 +314,7 @@ impl StateMachine for QueuedEntryMachine {
                 | V::StartSendClaimed
                 | V::MarkCommitted { .. }
                 | V::MarkFailed
+                | V::MarkBusy
                 | V::MarkUncertain
                 | V::Withdraw(_)
                 | V::Cancel
@@ -323,6 +329,7 @@ impl StateMachine for QueuedEntryMachine {
                 | V::StartSendClaimed
                 | V::MarkCommitted { .. }
                 | V::MarkFailed
+                | V::MarkBusy
                 | V::MarkUncertain
                 | V::Withdraw(_)
                 | V::Cancel

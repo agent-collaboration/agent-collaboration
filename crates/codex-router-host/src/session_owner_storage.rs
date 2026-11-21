@@ -1,7 +1,7 @@
 //! Execute owner store effects through its session's ordered lane.
 
 use crate::session_store_lane::{
-    MarkedInput, SessionStoreLane, SessionStoreOfferError, SessionStoreSettlement,
+    LaneDispatchKind, SessionStoreLane, SessionStoreOfferError, SessionStoreSettlement,
     SessionStoreTicket, SessionStoreWaitError, SessionStoreWrite,
 };
 use crate::{binding_dispatch_permit::UnknownRecovery, session_close_evidence::classify_close};
@@ -24,7 +24,7 @@ use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex, MutexGuard},
 };
-use tokio_util::task::TaskTracker;
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 #[derive(Clone)]
 pub struct SessionOwnerStorage {
@@ -34,6 +34,7 @@ pub struct SessionOwnerStorage {
     explicit_setups: Arc<Mutex<HashMap<LoadAttempt, Box<ProviderSessionRecord>>>>,
     delivery_restores: Arc<Mutex<HashSet<LoadAttempt>>>,
     explicit_modes: Arc<Mutex<HashMap<SettingApplication, String>>>,
+    parked_dispatches: Arc<Mutex<HashMap<uuid::Uuid, CancellationToken>>>,
 }
 
 impl SessionOwnerStorage {
@@ -45,11 +46,34 @@ impl SessionOwnerStorage {
             explicit_setups: Arc::default(),
             delivery_restores: Arc::default(),
             explicit_modes: Arc::default(),
+            parked_dispatches: Arc::default(),
         }
     }
 
     pub(crate) fn task_tracker(&self) -> TaskTracker {
         self.tasks.clone()
+    }
+
+    pub(crate) fn release_dispatch_wait(&self, reply: &SessionOwnerReply) {
+        let input = match reply {
+            SessionOwnerReply::InputUnsent { input, .. }
+            | SessionOwnerReply::InputFinished { input, .. }
+            | SessionOwnerReply::PromptCompleted { input, .. }
+            | SessionOwnerReply::PromptFailed { input, .. }
+            | SessionOwnerReply::PromptCancelUnconfirmed { input }
+            | SessionOwnerReply::SteerInvalidReply { input }
+            | SessionOwnerReply::SteerStarted { input, .. } => input,
+            _ => return,
+        };
+        if let Some(wait) = lock(&self.parked_dispatches).remove(&input.operation) {
+            wait.cancel();
+        }
+    }
+
+    pub(crate) fn stop_dispatch_waits(&self) {
+        for (_, wait) in lock(&self.parked_dispatches).drain() {
+            wait.cancel();
+        }
     }
 
     pub fn take_setup(&self, attempt: LoadAttempt) -> Option<Box<ProviderSessionRecord>> {
@@ -154,52 +178,26 @@ impl SessionOwnerStorage {
                 )
             }
             SessionStoreRequest::MarkDispatch(input) => {
-                let mark = marked_input(&input)?;
-                self.report(
-                    address,
-                    || {
-                        self.lane
-                            .offer(owner, SessionStoreWrite::MarkDispatch(mark))
-                    },
-                    completions,
-                    move |receipt| match receipt {
-                        Err(SessionStoreWaitError::EarlierOutcomeUnknown { operation }) => {
-                            SessionStoreResult::DispatchBlockedByUnknown { input, operation }
-                        }
-                        receipt => SessionStoreResult::Dispatch {
-                            input,
-                            outcome: store_effect(receipt),
-                        },
-                    },
-                )
+                self.report_dispatch(address, input, LaneDispatchKind::Prompt, false, completions)
+            }
+            SessionStoreRequest::MarkQueuedDispatch(input) => {
+                self.report_dispatch(address, input, LaneDispatchKind::Prompt, true, completions)
             }
             SessionStoreRequest::MarkSteerDispatch(input) => {
-                let mark = marked_input(&input)?;
-                self.report(
-                    address,
-                    || {
-                        self.lane
-                            .offer(owner, SessionStoreWrite::MarkDispatch(mark))
-                    },
-                    completions,
-                    move |receipt| match receipt {
-                        Err(SessionStoreWaitError::EarlierOutcomeUnknown { operation }) => {
-                            SessionStoreResult::DispatchBlockedByUnknown { input, operation }
-                        }
-                        receipt => SessionStoreResult::SteerDispatch {
-                            input,
-                            outcome: store_effect(receipt),
-                        },
-                    },
-                )
+                self.report_dispatch(address, input, LaneDispatchKind::Steer, false, completions)
             }
             SessionStoreRequest::UndoDispatch(input) => {
-                let mark = marked_input(&input)?;
+                let operation = operation_id(input.operation)?;
+                let undo_input = input.clone();
                 self.report(
                     address,
                     || {
-                        self.lane
-                            .offer(owner, SessionStoreWrite::UndoDispatch(mark))
+                        self.lane.offer_dispatch(
+                            owner,
+                            operation,
+                            undo_input,
+                            LaneDispatchKind::Undo,
+                        )
                     },
                     completions,
                     move |receipt| SessionStoreResult::UndoDispatch {
@@ -297,6 +295,124 @@ impl SessionOwnerStorage {
         }
     }
 
+    fn report_dispatch(
+        &self,
+        address: OwnerAddress,
+        input: OwnerInput,
+        kind: LaneDispatchKind,
+        queued: bool,
+        completions: &OwnerCompletionPort,
+    ) -> Result<Option<OwnerEvent>, OwnerTaskError> {
+        let completion = completions.reserve(address)?;
+        let operation = operation_id(input.operation)?;
+        let lane = self.lane.clone();
+        let mut changes = lane.subscribe_dispatch_eligibility();
+        let offer =
+            lane.offer_dispatch(address.incarnation, operation.clone(), input.clone(), kind);
+        if queued
+            && matches!(offer, Err(SessionStoreOfferError::DispatchBusy { .. }))
+            && let Some(mut changes) = changes.take()
+        {
+            let attempt = uuid::Uuid::now_v7();
+            let cancelled = CancellationToken::new();
+            if let Some(previous) =
+                lock(&self.parked_dispatches).insert(input.operation, cancelled.clone())
+            {
+                previous.cancel();
+            }
+            #[cfg(any(test, feature = "test-support"))]
+            lane.notice_fixture_wait(
+                crate::binding_store_fixture::BindingFixtureWait::QueuedDispatchParked,
+            );
+            let ready_input = input.clone();
+            self.tasks.spawn(async move {
+                let ready = async {
+                    // Subscribe before the original decision. An intervening
+                    // release is visible either here or through changed().
+                    while lane.waits_for_live_dispatch_blocker(&operation, kind) {
+                        if changes.changed().await.is_err() {
+                            return false;
+                        }
+                    }
+                    true
+                };
+                tokio::select! {
+                    biased;
+                    () = cancelled.cancelled() => {},
+                    ready = ready => if ready {
+                        completion.send(OwnerEvent::Store(
+                            SessionStoreResult::QueuedDispatchReady { input: ready_input, attempt }
+                        ));
+                    },
+                }
+            });
+            return Ok(Some(OwnerEvent::Store(
+                SessionStoreResult::QueuedDispatchBusy { input, attempt },
+            )));
+        }
+        if let Err(SessionStoreOfferError::EarlierOutcomeUnknown { operation }) = offer {
+            return Ok(Some(OwnerEvent::Store(
+                SessionStoreResult::DispatchBlockedByUnknown { input, operation },
+            )));
+        }
+        let clock = lane.dispatch_clock();
+        let deadline = clock
+            .monotonic_now()
+            .after(crate::session_store_lane::STORE_WAIT);
+        self.tasks.spawn(async move {
+            let mut offer = offer;
+            if matches!(
+                offer,
+                Err(SessionStoreOfferError::DispatchBusy { pending: true, .. })
+            ) && let Some(mut changes) = changes
+            {
+                let waiting = async {
+                    loop {
+                        changes
+                            .changed()
+                            .await
+                            .map_err(|_| SessionStoreOfferError::Stopped)?;
+                        if clock.monotonic_now() >= deadline {
+                            return Err(SessionStoreOfferError::Stopped);
+                        }
+                        let reply = lane.offer_dispatch(
+                            address.incarnation,
+                            operation.clone(),
+                            input.clone(),
+                            kind,
+                        );
+                        if !matches!(
+                            reply,
+                            Err(SessionStoreOfferError::DispatchBusy { pending: true, .. })
+                        ) {
+                            return reply;
+                        }
+                    }
+                };
+                offer = router_clock::timeout_at(clock.as_ref(), deadline, waiting)
+                    .await
+                    .unwrap_or(Err(SessionStoreOfferError::Stopped));
+            }
+            let outcome = match offer {
+                Ok(ticket) => store_effect(ticket.settlement().await),
+                Err(SessionStoreOfferError::EarlierOutcomeUnknown { operation }) => {
+                    completion.send(OwnerEvent::Store(
+                        SessionStoreResult::DispatchBlockedByUnknown { input, operation },
+                    ));
+                    return;
+                }
+                Err(_) => EffectOutcome::Failed,
+            };
+            let result = if kind == LaneDispatchKind::Steer {
+                SessionStoreResult::SteerDispatch { input, outcome }
+            } else {
+                SessionStoreResult::Dispatch { input, outcome }
+            };
+            completion.send(OwnerEvent::Store(result));
+        });
+        Ok(None)
+    }
+
     fn report(
         &self,
         address: OwnerAddress,
@@ -316,9 +432,9 @@ impl SessionOwnerStorage {
                     SessionStoreOfferError::EarlierOutcomeUnknown { operation } => {
                         SessionStoreWaitError::EarlierOutcomeUnknown { operation }
                     }
-                    SessionStoreOfferError::Replaced | SessionStoreOfferError::Stopped => {
-                        SessionStoreWaitError::Stopped
-                    }
+                    SessionStoreOfferError::Replaced
+                    | SessionStoreOfferError::Stopped
+                    | SessionStoreOfferError::DispatchBusy { .. } => SessionStoreWaitError::Stopped,
                 })))));
             }
         };
@@ -332,13 +448,6 @@ impl SessionOwnerStorage {
 fn lock<T>(lock: &Mutex<T>) -> MutexGuard<'_, T> {
     lock.lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
-
-fn marked_input(input: &OwnerInput) -> Result<MarkedInput, OwnerTaskError> {
-    Ok(MarkedInput {
-        input: input.input.clone(),
-        operation: operation_id(input.operation)?,
-    })
 }
 
 fn operation_id(id: uuid::Uuid) -> Result<OperationId, OwnerTaskError> {

@@ -87,7 +87,7 @@ impl ExternalProviderSupervisor {
                 } {
                     Ok(mut store) => {
                         self.inner
-                            .settle_late_dispatch_mark(&mut store, &operation_id, &failure)
+                            .settle_late_dispatch_mark(&mut store, &operation_id, &failure, &live)
                             .await
                     }
                     Err(_) => CustodyEnd::NoWrite,

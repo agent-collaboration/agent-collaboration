@@ -739,11 +739,9 @@ fn t2_definite_prompt_required_can_replace_the_steer_once_after_durable_unmark()
         turn: replacement_turn,
         ..steering
     };
-    assert!(
-        unmarked.contains(&OwnerEffect::Store(SessionStoreRequest::MarkDispatch(
-            replacement_input.clone()
-        )))
-    );
+    assert!(unmarked.contains(&OwnerEffect::Store(
+        SessionStoreRequest::MarkQueuedDispatch(replacement_input.clone())
+    )));
     let offered = apply(&mut state, mark_prompt(&replacement_input));
     let replacement_key = authorization(&offered);
     assert_eq!(replacement_key.input_id, old.input_id);

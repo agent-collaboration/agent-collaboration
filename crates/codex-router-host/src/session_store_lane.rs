@@ -22,6 +22,11 @@ use tokio::sync::{Mutex as AsyncMutex, Notify, oneshot};
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
+#[path = "session_store_dispatch.rs"]
+mod dispatch;
+pub(crate) use dispatch::LaneDispatchKind;
+use dispatch::{LaneDispatchOffer, LaneDispatchWrite};
+
 pub(crate) const STORE_WAIT: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -71,6 +76,11 @@ pub enum SessionStoreOfferError {
     Stopped,
     #[error("not sent: an earlier outcome is unknown")]
     EarlierOutcomeUnknown { operation: uuid::Uuid },
+    #[error("an earlier send is still in flight")]
+    DispatchBusy {
+        operation: uuid::Uuid,
+        pending: bool,
+    },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -171,6 +181,8 @@ struct AcceptedMark {
     owner: OwnerIncarnation,
     input: InputId,
     status: MarkStatus,
+    owner_input: Option<OwnerInput>,
+    attempt: Option<uuid::Uuid>,
 }
 
 enum LaneRequest {
@@ -211,6 +223,7 @@ struct LaneEntry {
     offered_at_ms: i64,
     request: LaneRequest,
     custody: Option<LaneWriteCustody>,
+    dispatch: Option<LaneDispatchWrite>,
     reply: oneshot::Sender<Result<SessionStoreSettlement, ProviderOperationStoreError>>,
 }
 
@@ -271,14 +284,14 @@ impl SessionStoreLane {
         owner: OwnerIncarnation,
         write: SessionStoreWrite,
     ) -> Result<SessionStoreTicket, SessionStoreOfferError> {
-        self.enqueue(owner, LaneRequest::Write(write))
+        self.enqueue(owner, LaneRequest::Write(write), None)
     }
 
     pub fn read_setup(
         &self,
         owner: OwnerIncarnation,
     ) -> Result<SessionStoreTicket, SessionStoreOfferError> {
-        self.enqueue(owner, LaneRequest::ReadSetup)
+        self.enqueue(owner, LaneRequest::ReadSetup, None)
     }
 
     pub(crate) fn defer_queued_admission(
@@ -320,6 +333,7 @@ impl SessionStoreLane {
         &self,
         owner: OwnerIncarnation,
         request: LaneRequest,
+        dispatch_offer: Option<LaneDispatchOffer>,
     ) -> Result<SessionStoreTicket, SessionStoreOfferError> {
         let (mut entry, ticket) = self.entry(owner, request);
         let mut state = self.state();
@@ -339,6 +353,15 @@ impl SessionStoreLane {
             .get()
             .and_then(|binding| binding.outcomes.get())
             .map(lock);
+        if let Some(offer) = &dispatch_offer
+            && let Some(binding) = self.inner.binding.get()
+        {
+            let outcomes = outcomes
+                .as_deref_mut()
+                .ok_or(SessionStoreOfferError::Stopped)?;
+            entry.dispatch =
+                Some(self.accept_dispatch_write(owner, offer, &state, outcomes, binding)?);
+        }
         if let LaneRequest::Write(SessionStoreWrite::MarkDispatch(marked)) = &entry.request {
             if self.inner.binding.get().is_some() && outcomes.is_none() {
                 return Err(SessionStoreOfferError::Stopped);
@@ -359,6 +382,8 @@ impl SessionStoreLane {
                     owner,
                     input: marked.input.clone(),
                     status: MarkStatus::Accepted,
+                    owner_input: dispatch_offer.as_ref().map(|offer| offer.input.clone()),
+                    attempt: entry.dispatch.as_ref().map(LaneDispatchWrite::attempt),
                 },
             );
             #[cfg(any(test, feature = "test-support"))]
@@ -394,9 +419,15 @@ impl SessionStoreLane {
                     Some(self.inner.target.clone()),
                     *recovery,
                 );
+                if let Some(binding) = self.inner.binding.get() {
+                    binding.eligibility_changed();
+                }
             }
         }
         entry.custody = self.borrow_write_custody(&entry.request);
+        if let (Some(dispatch), Some(custody)) = (&entry.dispatch, &entry.custody) {
+            custody.prepare_lane_projection(dispatch.attempt());
+        }
         if let Some(custody) = &entry.custody
             && let LaneRequest::Write(SessionStoreWrite::Terminal {
                 cancelled_input: Some(input),
@@ -501,6 +532,7 @@ impl SessionStoreLane {
                 offered_at_ms,
                 request,
                 custody: None,
+                dispatch: None,
                 reply,
             },
             SessionStoreTicket {
@@ -579,8 +611,10 @@ impl SessionStoreLaneWriter {
             offered_at_ms,
             request,
             custody,
+            dispatch,
             reply,
         } = entry;
+        let operation = request.written_operation().cloned();
         #[cfg(any(test, feature = "test-support"))]
         let late_repair = matches!(
             &request,
@@ -653,6 +687,25 @@ impl SessionStoreLaneWriter {
                 }
             }
         };
+        if result.is_err()
+            && let (Some(binding), Some(operation), Some(_)) =
+                (self.lane.inner.binding.get(), operation, &custody)
+        {
+            let observed = self.store.lock().await.inspect(&operation).await;
+            if observed.as_ref().is_err()
+                || observed
+                    .as_ref()
+                    .ok()
+                    .and_then(Option::as_ref)
+                    .is_some_and(|row| row.target.as_ref() == Some(&self.target))
+            {
+                binding.preserve_residual(&operation, Some(self.target.clone()), observed);
+            }
+        }
+        if let Some(dispatch) = dispatch {
+            self.project_dispatch_receipt(dispatch, custody.as_ref(), &result)
+                .await;
+        }
         if let Some(custody) = custody {
             custody.settle(match &result {
                 Ok(SessionStoreSettlement::MarkNeverWritten) => CustodyEnd::NoWrite,
@@ -802,6 +855,7 @@ impl SessionStoreLaneWriter {
         if let Some(outcomes) = binding.outcomes.get() {
             lock(outcomes).record_reconciled(operation);
         }
+        binding.eligibility_changed();
         Ok(SessionStoreSettlement::Operation(Box::new(row)))
     }
 

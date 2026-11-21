@@ -10,7 +10,7 @@ use super::{
     ProviderBindingIdentity, ProviderOperationAdmission, ProviderOperationAdmissionResult,
     ProviderOperationEffect, ProviderOperationKind, ProviderOperationRecord,
     ProviderReconciliationState, SessionRef, admission_failure, failure,
-    provider_admission_policy::{AdmissionMode, AdmissionRequest},
+    provider_admission_policy::{AdmissionMode, AdmissionRequest, EarlierOperation},
     provider_operation_index::Reservation,
     snapshot_failure, snapshot_from_record, unavailable_failure,
 };
@@ -162,7 +162,7 @@ impl ExternalProviderSupervisor {
         clippy::result_large_err,
         reason = "The admission preserves its typed refusal."
     )]
-    fn reserve_operation(
+    async fn reserve_operation(
         &self,
         deadline: ClockInstant,
         binding: &ProviderBindingIdentity,
@@ -170,33 +170,86 @@ impl ExternalProviderSupervisor {
         context: &ReservationContext,
         live: &Arc<LiveOperation>,
     ) -> Result<Reservation, ConversationOperationFailure> {
-        let reserved = {
-            // Take binding outcomes before the live index, as the store lane does.
-            // All store reads finish before these guards. Reconcile may take the
-            // index under the store guard and releases the store before outcomes.
-            let outcomes = context
-                .cell
-                .as_ref()
-                .and_then(|cell| cell.outcomes.get())
-                .map(crate::binding_dispatch_permit::lock);
-            let mut operations = self
-                .inner
-                .live_operations
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if self.inner.clock.monotonic_now() >= deadline {
-                return Err(admission_expired(request.operation, request.target));
+        let mut changes = context
+            .cell
+            .as_ref()
+            .map(|cell| cell.subscribe_eligibility());
+        let reserved = loop {
+            if let Some(changes) = &mut changes {
+                changes.borrow_and_update();
             }
-            let unknown = outcomes.as_ref().map_or_else(Vec::new, |outcomes| {
-                outcomes.blockers(request.target, context.can_recover_close)
-            });
-            operations.reserve(
-                binding,
-                request,
-                live,
-                unknown,
-                context.unconfirmed_cancel.as_deref(),
+            let decision = {
+                // Take binding outcomes before the live index, as the store lane does.
+                // All store reads finish before these guards. Reconcile may take the
+                // index under the store guard and releases the store before outcomes.
+                let outcomes = context
+                    .cell
+                    .as_ref()
+                    .and_then(|cell| cell.outcomes.get())
+                    .map(crate::binding_dispatch_permit::lock);
+                let mut operations = self
+                    .inner
+                    .live_operations
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                if self.inner.clock.monotonic_now() >= deadline {
+                    return Err(admission_expired(request.operation, request.target));
+                }
+                let pending = outcomes.as_ref().is_some_and(|outcomes| {
+                    request.target.is_some_and(|target| {
+                        outcomes.pending_dispatches_for(target).any(|operation| {
+                            request.blocked_by(
+                                operation,
+                                EarlierOperation::InFlight {
+                                    target: Some(target),
+                                },
+                                None,
+                            )
+                        })
+                    })
+                });
+                let unknown = outcomes.as_ref().map_or_else(Vec::new, |outcomes| {
+                    outcomes.blockers(request.target, context.can_recover_close)
+                });
+                let blocked_by_unknown = unknown.iter().any(|operation| {
+                    request.blocked_by(
+                        operation,
+                        EarlierOperation::Unknown,
+                        context.unconfirmed_cancel.as_deref(),
+                    )
+                });
+                if pending
+                    && !blocked_by_unknown
+                    && !operations.operations.contains_key(request.operation)
+                {
+                    None
+                } else {
+                    Some(operations.reserve(
+                        binding,
+                        request,
+                        live,
+                        unknown,
+                        context.unconfirmed_cancel.as_deref(),
+                    ))
+                }
+            };
+            if let Some(reservation) = decision {
+                break reservation;
+            }
+            let Some(changes) = &mut changes else {
+                return Err(unavailable_failure(
+                    request.operation.clone(),
+                    request.target.cloned(),
+                ));
+            };
+            self.within_admission(
+                deadline,
+                request.operation,
+                request.target,
+                changes.changed(),
             )
+            .await?
+            .map_err(|_| unavailable_failure(request.operation.clone(), request.target.cloned()))?;
         };
         reserved.map_err(|blocking| {
             let Some(answer) = blocking.answer() else {
@@ -253,7 +306,10 @@ impl ExternalProviderSupervisor {
             .await?
             .map_err(|()| unavailable_failure(operation_id.clone(), Some(target.clone())))?;
         let live = Arc::new(LiveOperation::queued_prompt(binding, target.clone()));
-        match self.reserve_operation(deadline, binding, request, &context, &live)? {
+        match self
+            .reserve_operation(deadline, binding, request, &context, &live)
+            .await?
+        {
             Reservation::Acquired => Ok(Some(live)),
             Reservation::Occupied(prior) if prior.is_prompt_for(target) => Ok(None),
             Reservation::Occupied(_) => Err(reused_id_failure(
@@ -308,14 +364,13 @@ impl ExternalProviderSupervisor {
 
         #[cfg(test)]
         self.pause_before_admission_reservation_for_test().await;
-        let live = Arc::new(LiveOperation::reserving(
-            &binding,
-            known_target.cloned(),
-            operation_kind,
-            mode.mark,
-        ));
+        let live = Arc::new(
+            LiveOperation::reserving(&binding, known_target.cloned(), operation_kind, mode.mark)
+                .with_cancel_target(mode.cancel_target),
+        );
         if matches!(
-            self.reserve_operation(deadline, &binding, request, &context, &live)?,
+            self.reserve_operation(deadline, &binding, request, &context, &live)
+                .await?,
             Reservation::Occupied(_)
         ) {
             let lookup = async {
@@ -545,6 +600,7 @@ impl ExternalProviderSupervisor {
         }
         drop(operations);
         live.dropped(conflict, end);
+        self.inner.wake_operation_eligibility(live);
     }
 }
 
@@ -568,6 +624,7 @@ impl super::SupervisorInner {
         {
             crate::binding_dispatch_permit::lock(outcomes)
                 .record_reconciled(row.operation_id.clone());
+            cell.eligibility_changed();
         }
     }
 

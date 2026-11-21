@@ -28,6 +28,7 @@ impl SupervisorInner {
         store: &mut collaboration_runtime::ProviderOperationStore,
         operation: &OperationId,
         failure: &ConversationOperationFailure,
+        live: &LiveOperation,
     ) -> CustodyEnd {
         if let Err(error) = self
             .write_terminal_failure(
@@ -39,9 +40,25 @@ impl SupervisorInner {
             .await
         {
             tracing::error!(operation = operation.as_str(), %error, "could not settle the late mark of an unsent operation");
+            self.preserve_operation_residue(store, operation, live)
+                .await;
             CustodyEnd::Failed
         } else {
             CustodyEnd::Written
+        }
+    }
+
+    pub(super) async fn preserve_operation_residue(
+        &self,
+        store: &mut collaboration_runtime::ProviderOperationStore,
+        operation: &OperationId,
+        live: &LiveOperation,
+    ) {
+        if let Some(endpoint) = live.binding() {
+            let observed = store.inspect(operation).await;
+            self.uncertainty
+                .slot(endpoint)
+                .preserve_residual(operation, live.target(), observed);
         }
     }
 
@@ -205,6 +222,14 @@ impl SupervisorInner {
                     {
                         Ok(settled) => settled,
                         Err(late_end) => {
+                            if late_end == CustodyEnd::Failed {
+                                self.preserve_operation_residue(
+                                    &mut *self.store.lock().await,
+                                    &operation_id,
+                                    &live,
+                                )
+                                .await;
+                            }
                             self.finish_late_write(&live, late_end);
                             return;
                         }
@@ -276,7 +301,13 @@ impl SupervisorInner {
                 }
             }
         };
-        live.finish_write(non_terminal_receipt.unwrap_or_else(|| retention.write_receipt()));
+        if non_terminal_receipt.is_none() && retention == Retention::PersistenceFailed {
+            self.preserve_operation_residue(&mut *self.store.lock().await, &operation_id, &live)
+                .await;
+        }
+        if live.finish_write(non_terminal_receipt.unwrap_or_else(|| retention.write_receipt())) {
+            self.wake_operation_eligibility(&live);
+        }
         self.publish_result(operation_id, &live, result, retention)
             .await;
     }

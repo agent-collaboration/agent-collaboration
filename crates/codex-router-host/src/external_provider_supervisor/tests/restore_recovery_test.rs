@@ -6,6 +6,9 @@ mod admission_budget_tests;
 #[path = "restore_recovery/admission_race_test.rs"]
 mod admission_race_tests;
 
+#[path = "restore_recovery/dispatch_eligibility_test.rs"]
+mod dispatch_eligibility_tests;
+
 #[path = "restore_recovery/prompt_custody_test.rs"]
 mod prompt_custody_tests;
 

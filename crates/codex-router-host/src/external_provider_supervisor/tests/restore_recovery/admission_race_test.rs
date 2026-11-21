@@ -164,7 +164,10 @@ async fn check_binding_wide_reservation(second_kind: ProviderOperationKind) {
     host.shutdown().await.expect("drain the selected create");
 }
 
-fn create_request(rig: &RestoreRig, operation_id: OperationId) -> ConversationCreateRequest {
+pub(super) fn create_request(
+    rig: &RestoreRig,
+    operation_id: OperationId,
+) -> ConversationCreateRequest {
     ConversationCreateRequest {
         operation_id,
         endpoint: rig.target.endpoint.clone(),

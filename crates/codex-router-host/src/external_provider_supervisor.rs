@@ -414,9 +414,18 @@ impl ExternalProviderSupervisor {
             let runtime = Arc::new(binding.runtime);
             let owners = runtime.session_owner_door(Arc::clone(&store), Arc::clone(&owner_hub));
             let permit = uncertainty.slot(&endpoint);
+            permit.identity.get_or_init(|| binding.identity.clone());
             let operations = Arc::downgrade(&live_operations);
+            let dispatch_operations = operations.clone();
             let repair_operations = operations.clone();
-            let on_custody_end = Arc::clone(&on_custody_end);
+            let wake_retention = Arc::clone(&on_custody_end);
+            let permit_for_release = Arc::downgrade(&permit);
+            let on_custody_end: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
+                wake_retention();
+                if let Some(permit) = permit_for_release.upgrade() {
+                    permit.eligibility_changed();
+                }
+            });
             let generation = binding.identity.generation.clone();
             let repair_generation = generation.clone();
             permit.lane_custody.get_or_init(|| {
@@ -442,6 +451,25 @@ impl ExternalProviderSupervisor {
                         .operations
                         .get(operation)?
                         .authorize_late_prompt_repair(&repair_generation, target, identity)
+                })
+            });
+            let dispatch_binding = binding.identity.clone();
+            permit.live_dispatch_blocker.get_or_init(|| {
+                use provider_admission_policy::{AdmissionClass, AdmissionMode, AdmissionRequest};
+                Arc::new(move |operation, target| {
+                    dispatch_operations
+                        .upgrade()?
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .lane_mark_blocker(
+                            &dispatch_binding,
+                            AdmissionRequest {
+                                operation,
+                                kind: ProviderOperationKind::ConversationPrompt,
+                                target: Some(target),
+                                mode: AdmissionMode::deferred(AdmissionClass::Independent),
+                            },
+                        )
                 })
             });
             owners.install_binding_permit(permit);
@@ -691,8 +719,15 @@ impl SupervisorInner {
         self.clock.utc_now().timestamp_millis()
     }
 
+    fn wake_operation_eligibility(&self, live: &LiveOperation) {
+        if let Some(binding) = live.binding() {
+            self.uncertainty.slot(binding).eligibility_changed();
+        }
+    }
+
     fn finish_late_write(&self, live: &LiveOperation, reason: CustodyEnd) {
         if live.finish_write(reason) {
+            self.wake_operation_eligibility(live);
             self.live_operations
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)

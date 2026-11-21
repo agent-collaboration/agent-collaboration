@@ -8,6 +8,7 @@ use tokio::sync::oneshot;
 pub(crate) enum BindingFixtureWait {
     ExplicitSetting,
     LatePromptRepair,
+    QueuedDispatchParked,
 }
 
 #[derive(Default)]

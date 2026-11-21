@@ -17,7 +17,9 @@ fn pending_placement(effects: &[OwnerEffect], kind: DeliveryPlacementKind) -> De
     assert!(!effects.iter().any(|effect| matches!(
         effect,
         OwnerEffect::Store(
-            SessionStoreRequest::MarkDispatch(_) | SessionStoreRequest::MarkSteerDispatch(_)
+            SessionStoreRequest::MarkDispatch(_)
+                | SessionStoreRequest::MarkQueuedDispatch(_)
+                | SessionStoreRequest::MarkSteerDispatch(_)
         ) | OwnerEffect::Authorize { .. }
     )));
     effects
@@ -102,11 +104,9 @@ fn t2_queued_delivery_records_intake_then_dispatch_evidence_before_its_first_mar
             outcome: EffectOutcome::Applied,
         },
     );
-    assert!(
-        marked.contains(&OwnerEffect::Store(SessionStoreRequest::MarkDispatch(
-            queued
-        )))
-    );
+    assert!(marked.contains(&OwnerEffect::Store(
+        SessionStoreRequest::MarkQueuedDispatch(queued)
+    )));
 }
 
 #[test]
@@ -130,7 +130,9 @@ fn t2_expired_dispatch_evidence_retires_a_queue_input_before_its_first_mark() {
     );
     assert!(!effects.iter().any(|effect| matches!(
         effect,
-        OwnerEffect::Store(SessionStoreRequest::MarkDispatch(_)) | OwnerEffect::Authorize { .. }
+        OwnerEffect::Store(
+            SessionStoreRequest::MarkDispatch(_) | SessionStoreRequest::MarkQueuedDispatch(_)
+        ) | OwnerEffect::Authorize { .. }
     )));
     assert!(effects.iter().any(|effect| matches!(effect,
         OwnerEffect::Store(SessionStoreRequest::RecordTerminal { reply, .. })

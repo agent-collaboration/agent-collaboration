@@ -293,7 +293,9 @@ fn unknown_prompt_offers_terminal_then_retires_the_line_known_unsent() {
     assert!(state.snapshot().queue.is_empty());
     assert!(!effects.iter().any(|effect| matches!(
         effect,
-        OwnerEffect::Store(SessionStoreRequest::MarkDispatch(_)) | OwnerEffect::Authorize { .. }
+        OwnerEffect::Store(
+            SessionStoreRequest::MarkDispatch(_) | SessionStoreRequest::MarkQueuedDispatch(_)
+        ) | OwnerEffect::Authorize { .. }
     )));
 }
 
@@ -361,7 +363,10 @@ fn selected_skill_disappearing_while_queued_or_marking_is_never_sent() {
         assert!(!after_removal.iter().any(|effect| matches!(
             effect,
             OwnerEffect::Authorize { .. }
-                | OwnerEffect::Store(SessionStoreRequest::MarkDispatch(_))
+                | OwnerEffect::Store(
+                    SessionStoreRequest::MarkDispatch(_)
+                        | SessionStoreRequest::MarkQueuedDispatch(_)
+                )
         )));
         if marking {
             assert!(after_removal.contains(&OwnerEffect::Store(

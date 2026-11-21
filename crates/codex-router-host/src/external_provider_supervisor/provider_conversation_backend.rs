@@ -514,12 +514,15 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                 ));
             }
             let prepared = backend
-                .prepare_operation(
+                .admit_operation(
                     deadline,
                     request.operation_id.clone(),
                     ProviderOperationKind::ConversationCancel,
                     binding,
                     Some(&target),
+                    super::provider_admission_policy::AdmissionMode::canceling(
+                        &request.target_operation_id,
+                    ),
                 )
                 .await?;
             match prepared {

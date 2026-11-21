@@ -107,6 +107,36 @@ fn refuse_busy_leaves_only_the_exact_running_turn_to_the_owner() {
 }
 
 #[test]
+fn a_lane_mark_excludes_only_the_cancel_that_names_it() {
+    let operation = OperationId::generate();
+    let target = session("queued");
+    let request = AdmissionRequest {
+        operation: &operation,
+        kind: ProviderOperationKind::ConversationPrompt,
+        target: Some(&target),
+        mode: AdmissionMode::deferred(AdmissionClass::Independent),
+    };
+    let exact = uuid::Uuid::parse_str(operation.as_str()).unwrap();
+    assert!(
+        request.is_own_cancel_holder(Some(ProviderOperationKind::ConversationCancel), Some(exact))
+    );
+    assert!(!request.is_own_cancel_holder(
+        Some(ProviderOperationKind::ConversationCancel),
+        Some(uuid::Uuid::now_v7())
+    ));
+    assert!(
+        !request.is_own_cancel_holder(Some(ProviderOperationKind::ConversationClose), Some(exact))
+    );
+    assert!(request.blocked_by(
+        &OperationId::generate(),
+        EarlierOperation::InFlight {
+            target: Some(&target)
+        },
+        None
+    ));
+}
+
+#[test]
 fn close_only_excludes_its_exact_unconfirmed_cancel_from_unknown_evidence() {
     let target = session("closing");
     let operation = OperationId::generate();

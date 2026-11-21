@@ -186,6 +186,9 @@ pub enum SessionCellEvent {
     MarkFailed {
         sequence: u64,
     },
+    MarkBusy {
+        sequence: u64,
+    },
     MarkUncertain {
         sequence: u64,
     },
@@ -305,6 +308,7 @@ impl EventTag for SessionCellEvent {
             Self::StartSendClaimed { .. } => "start_send_claimed",
             Self::MarkCommitted { .. } => "mark_committed",
             Self::MarkFailed { .. } => "mark_failed",
+            Self::MarkBusy { .. } => "mark_busy",
             Self::MarkUncertain { .. } => "mark_uncertain",
             Self::UnmarkCommitted { .. } => "unmark_committed",
             Self::UnmarkFailed { .. } => "unmark_failed",
@@ -669,6 +673,9 @@ impl StateMachine for SessionCellMachine {
             }
             V::MarkFailed { sequence } => {
                 entry_move(cell, sequence, QueuedEntryEvent::MarkFailed, None)
+            }
+            V::MarkBusy { sequence } => {
+                entry_move(cell, sequence, QueuedEntryEvent::MarkBusy, None)
             }
             V::MarkUncertain { sequence } => {
                 entry_move(cell, sequence, QueuedEntryEvent::MarkUncertain, None)

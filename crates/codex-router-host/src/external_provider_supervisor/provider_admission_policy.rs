@@ -19,18 +19,28 @@ pub(super) enum AdmissionClass {
 pub(super) struct AdmissionMode {
     pub(super) mark: DispatchMark,
     pub(super) class: AdmissionClass,
+    pub(super) cancel_target: Option<uuid::Uuid>,
 }
 
 impl AdmissionMode {
     pub(super) const HANDOFF: Self = Self {
         mark: DispatchMark::BeforeHandoff,
         class: AdmissionClass::Independent,
+        cancel_target: None,
     };
 
     pub(super) const fn deferred(class: AdmissionClass) -> Self {
         Self {
             mark: DispatchMark::Deferred,
             class,
+            cancel_target: None,
+        }
+    }
+
+    pub(super) fn canceling(target: &OperationId) -> Self {
+        Self {
+            cancel_target: uuid::Uuid::parse_str(target.as_str()).ok(),
+            ..Self::HANDOFF
         }
     }
 }
@@ -49,6 +59,16 @@ pub(super) enum EarlierOperation<'a> {
 }
 
 impl AdmissionRequest<'_> {
+    /// Only a lane mark leaves the exact cancel and its input to the owner.
+    pub(super) fn is_own_cancel_holder(
+        self,
+        holder_kind: Option<ProviderOperationKind>,
+        target: Option<uuid::Uuid>,
+    ) -> bool {
+        holder_kind == Some(ProviderOperationKind::ConversationCancel)
+            && target.is_some()
+            && uuid::Uuid::parse_str(self.operation.as_str()).ok() == target
+    }
     pub(super) fn checks_blockers(self) -> bool {
         self.kind != ProviderOperationKind::ConversationCancel
     }

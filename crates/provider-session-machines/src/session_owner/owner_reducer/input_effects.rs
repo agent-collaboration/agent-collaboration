@@ -135,6 +135,8 @@ impl OwnerTransition {
             PendingPrompt {
                 input,
                 wait: InputWait::Admission,
+                queued,
+                parked_mark: None,
                 choose_steer_if_a_turn_starts: matches!(
                     admission,
                     PromptAdmission::Auto {
@@ -158,40 +160,6 @@ impl OwnerTransition {
         } else {
             Ok(())
         }
-    }
-
-    pub(super) fn drive_prompt_line(&mut self) -> OwnerResult {
-        if !self.next.ports.connection_alive
-            || self.prompt_in_progress()
-            || self.next.cell.settings_held()
-            || self.next.setting.is_some()
-        {
-            return Ok(());
-        }
-        while let Some((&sequence, pending)) = self.next.prompts.first_key_value() {
-            if !self.is_live(pending.input.generation) {
-                return Ok(());
-            }
-            let input = pending.input.clone();
-            if !self.selected_skills_current(&input.input) {
-                let operation = QueuedOperation(input.input.as_str().to_owned());
-                self.next
-                    .ports
-                    .unsent_prompts
-                    .insert(input, RevokeReason::SkillSelectionChanged);
-                let effects = self.cell_move(SessionCellEvent::CancelEntry { operation })?;
-                self.apply_entry_effects(effects)?;
-            } else {
-                if self.await_delivery_evidence(&input, DeliveryPlacementKind::Start) {
-                    return Ok(());
-                }
-                self.cell_move(SessionCellEvent::Claim { sequence })?;
-                self.cell_move(SessionCellEvent::Commit { sequence })?;
-                let effects = self.cell_move(SessionCellEvent::StartSendClaimed { sequence })?;
-                return self.apply_entry_effects(effects);
-            }
-        }
-        Ok(())
     }
 
     pub(super) fn steer_contending_auto_after_take(
@@ -237,7 +205,7 @@ impl OwnerTransition {
         self.admit_existing_steer(input, true)
     }
 
-    fn selected_skills_current(&self, input: &InputId) -> bool {
+    pub(super) fn selected_skills_current(&self, input: &InputId) -> bool {
         self.next
             .ports
             .selected_skills
@@ -301,9 +269,11 @@ impl OwnerTransition {
         match effect {
             QueuedEntryEffect::StartSend => Ok(()),
             QueuedEntryEffect::WriteMark => {
-                self.release(SessionOwnerEffect::Store(
-                    SessionStoreRequest::MarkDispatch(input),
-                ));
+                self.release(SessionOwnerEffect::Store(if pending.queued {
+                    SessionStoreRequest::MarkQueuedDispatch(input)
+                } else {
+                    SessionStoreRequest::MarkDispatch(input)
+                }));
                 self.arm_prompt_deadline(sequence, InputWait::DispatchStore)
             }
             QueuedEntryEffect::SendRequest => {
@@ -359,7 +329,7 @@ impl OwnerTransition {
         Ok(())
     }
 
-    fn prompt_sequence(&self, input: &OwnerInput, wait: InputWait) -> OwnerResult<u64> {
+    pub(super) fn prompt_sequence(&self, input: &OwnerInput, wait: InputWait) -> OwnerResult<u64> {
         self.next
             .prompts
             .iter()
@@ -826,6 +796,8 @@ impl OwnerTransition {
                 input,
                 wait: InputWait::Admission,
                 choose_steer_if_a_turn_starts: false,
+                queued: false,
+                parked_mark: None,
             });
         } else {
             self.start_steer_mark(input);
@@ -859,6 +831,8 @@ impl OwnerTransition {
                 input: input.clone(),
                 wait: InputWait::Enqueue,
                 choose_steer_if_a_turn_starts: false,
+                queued: false,
+                parked_mark: None,
             });
             self.issue_authorization(AuthorizedWork::Steer(input.clone()))?;
         } else {
@@ -916,6 +890,8 @@ impl OwnerTransition {
             input: input.clone(),
             wait,
             choose_steer_if_a_turn_starts: false,
+            queued: false,
+            parked_mark: None,
         });
         self.release(SessionOwnerEffect::ArmDeadline(SessionDeadline::Steer {
             input,

@@ -194,7 +194,8 @@ async fn assert_restore_mode_reply(
         .open_host_with_fixture_arguments(&[], adapter.clone())
         .await;
 
-    host.load(rig.load_request(OperationId::generate()))
+    let restore = OperationId::generate();
+    host.load(rig.load_request(restore.clone()))
         .await
         .expect("restore admitted");
     let owner = host.session_owner_for(&rig.target).expect("loaded owner");
@@ -254,6 +255,15 @@ async fn assert_restore_mode_reply(
         Some("agent"),
         "the same live run accepts its still-current mode observation",
     );
+    assert!(matches!(
+        host.wait(wait_request(restore))
+            .await
+            .expect("the Host publishes restore settlement")
+            .output,
+        ConversationOperationWaitOutput::Available {
+            settlement: ConversationOperationSettlement::Loaded { .. }
+        }
+    ));
     let edit = serde_json::json!({"kind":"edit","locations":[{"path":scratch.join("note.txt")}]});
     let input = OperationId::generate();
     host.prompt(rig.prompt_request(input.clone(), &edit.to_string()))

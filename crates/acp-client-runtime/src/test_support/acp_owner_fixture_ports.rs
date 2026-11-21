@@ -581,7 +581,8 @@ impl<P: InteractionPort> SessionOwnerPorts for FixturePorts<P> {
                     run,
                     outcome: EffectOutcome::Applied,
                 },
-                SessionStoreRequest::MarkDispatch(input) => {
+                SessionStoreRequest::MarkDispatch(input)
+                | SessionStoreRequest::MarkQueuedDispatch(input) => {
                     let completion = completions.reserve(address)?;
                     tokio::spawn(async move {
                         crate::sim_points::reach(

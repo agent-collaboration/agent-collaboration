@@ -263,7 +263,8 @@ impl Mailbox {
                 SessionStoreRequest::ReadRestoreSetup(run) => {
                     SessionStoreResult::RestoreSetup { run: *run, outcome }
                 }
-                SessionStoreRequest::MarkDispatch(input) => SessionStoreResult::Dispatch {
+                SessionStoreRequest::MarkDispatch(input)
+                | SessionStoreRequest::MarkQueuedDispatch(input) => SessionStoreResult::Dispatch {
                     input: input.clone(),
                     outcome,
                 },
@@ -541,6 +542,121 @@ fn exercise_cancel_confirmation(
         "an unconfirmed cancel must keep its exact turn fenced"
     );
     assert_eq!(mailbox.owner.snapshot().cancel_unconfirmed, Some(prompt));
+}
+
+#[hegel::test(seed = Some(29118), test_cases = 100)]
+fn queued_mark_busy_keeps_the_exact_head_and_acknowledgement(case: hegel::TestCase) {
+    let mut state = fresh();
+    let run = restore_live(&mut state, 1);
+    let head = input(run.generation, 71);
+    let tail = input(run.generation, 72);
+    for queued in [&head, &tail] {
+        let effects = command(
+            &mut state,
+            SessionOwnerCommand::Prompt {
+                input: queued.clone(),
+                admission: PromptAdmission::Queue,
+            },
+        );
+        assert_eq!(
+            effects
+                .iter()
+                .filter(|effect| **effect == OwnerEffect::InputQueued(queued.clone()))
+                .count(),
+            1
+        );
+    }
+    let arrivals = case.draw(gs::integers::<u8>().min_value(1).max_value(12));
+    for ordinal in 0..arrivals {
+        let attempt = uuid(100 + u64::from(ordinal));
+        let parked = apply(
+            &mut state,
+            OwnerEvent::Store(SessionStoreResult::QueuedDispatchBusy {
+                input: head.clone(),
+                attempt,
+            }),
+        );
+        assert!(
+            parked.is_empty(),
+            "the head has no mark, settlement or second acknowledgement"
+        );
+        let snapshots = state.snapshot().queue;
+        assert_eq!(
+            snapshots
+                .iter()
+                .map(|entry| &entry.input)
+                .collect::<Vec<_>>(),
+            vec![&head, &tail]
+        );
+        assert!(snapshots.iter().all(|entry| !entry.started));
+        assert!(!state.has_pending_deadline(&OwnerDeadline::DispatchMark {
+            input: head.clone()
+        }));
+        if case.draw(gs::booleans()) {
+            let stale = decide(
+                &state,
+                OwnerEvent::Store(SessionStoreResult::QueuedDispatchReady {
+                    input: head.clone(),
+                    attempt: uuid(99),
+                }),
+            );
+            assert!(matches!(stale, Err(SessionOwnerRejection::IgnoredLate)));
+        }
+        if case.draw(gs::booleans()) {
+            let effects = command(
+                &mut state,
+                SessionOwnerCommand::CancelQueued {
+                    generation: head.generation,
+                    input: head.input.clone(),
+                },
+            );
+            assert!(
+                !effects
+                    .iter()
+                    .any(|effect| matches!(effect, OwnerEffect::InputQueued(_)))
+            );
+            assert!(
+                !state
+                    .snapshot()
+                    .queue
+                    .iter()
+                    .any(|entry| entry.input == head)
+            );
+            assert!(
+                state
+                    .snapshot()
+                    .queue
+                    .iter()
+                    .any(|entry| entry.input == tail)
+            );
+            let stale = decide(
+                &state,
+                OwnerEvent::Store(SessionStoreResult::QueuedDispatchReady {
+                    input: head,
+                    attempt,
+                }),
+            );
+            assert!(matches!(stale, Err(SessionOwnerRejection::IgnoredLate)));
+            return;
+        }
+        let ready = apply(
+            &mut state,
+            OwnerEvent::Store(SessionStoreResult::QueuedDispatchReady {
+                input: head.clone(),
+                attempt,
+            }),
+        );
+        assert!(ready.contains(&OwnerEffect::Store(
+            SessionStoreRequest::MarkQueuedDispatch(head.clone())
+        )));
+        assert!(!ready.iter().any(|effect| matches!(
+            effect,
+            OwnerEffect::InputQueued(_)
+                | OwnerEffect::Reply(_)
+                | OwnerEffect::ReplyUnsaved(_)
+                | OwnerEffect::Authorize { .. }
+        )));
+    }
 }
 
 #[hegel::test]

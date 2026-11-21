@@ -695,6 +695,7 @@ impl SessionOwnerPorts for SessionOwnerExecution {
                 self.publisher.publish(owner, batch, completions)
             }
             OwnerEffect::Reply(reply) => {
+                self.storage.release_dispatch_wait(&reply);
                 if let SessionOwnerReply::SettingFinished { setting, .. }
                 | SessionOwnerReply::SettingNotSent { setting, .. }
                 | SessionOwnerReply::ModelFastFinished { setting, .. } = &reply
@@ -705,6 +706,7 @@ impl SessionOwnerPorts for SessionOwnerExecution {
                 Ok(None)
             }
             OwnerEffect::ReplyUnsaved(reply) => {
+                self.storage.release_dispatch_wait(&reply);
                 self.calls.settle(reply, false);
                 Ok(None)
             }
@@ -790,6 +792,7 @@ impl SessionOwnerPorts for SessionOwnerExecution {
 
 impl Drop for SessionOwnerExecution {
     fn drop(&mut self) {
+        self.storage.stop_dispatch_waits();
         for route in self.routes.values() {
             route.cancel.cancel();
         }

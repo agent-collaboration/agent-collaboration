@@ -139,7 +139,6 @@ impl ExternalProviderSupervisor {
                                 | InputAcceptance::Steered { .. } => {
                                     snapshot.stage = ProviderOperationStage::MayHaveDispatched;
                                     snapshot.effect = ProviderOperationEffect::Unknown;
-                                    live.dispatch_marked();
                                 }
                                 InputAcceptance::Queued => {
                                     snapshot.queue_state =

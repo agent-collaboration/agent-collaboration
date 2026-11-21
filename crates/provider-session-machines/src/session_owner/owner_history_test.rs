@@ -432,11 +432,9 @@ fn input_waits_for_owner_commit_and_failed_preparation_never_waits_for_a_turn() 
         run,
         catalogue: Arc::default(),
     }));
-    assert!(
-        !prepared.contains(&OwnerEffect::Store(SessionStoreRequest::MarkDispatch(
-            waiting.clone()
-        )))
-    );
+    assert!(!prepared.contains(&OwnerEffect::Store(
+        SessionStoreRequest::MarkQueuedDispatch(waiting.clone())
+    )));
 
     let failed = apply(&mut state, failed_prepare(run));
     retired(&state, run.generation);
@@ -528,7 +526,7 @@ fn an_auto_input_admitted_on_a_cannot_send_its_late_dispatch_mark_on_b() {
     apply(&mut state, restore_reply(first));
     assert!(
         finish_preparation(&mut state, first).contains(&OwnerEffect::Store(
-            SessionStoreRequest::MarkDispatch(waiting.clone())
+            SessionStoreRequest::MarkQueuedDispatch(waiting.clone())
         ))
     );
     let close = start_close(&mut state, first.generation, 3);
