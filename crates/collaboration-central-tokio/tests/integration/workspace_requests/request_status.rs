@@ -42,6 +42,37 @@ async fn request_status_reads_only_its_scope_and_only_for_its_original_caller() 
         RequestStatusAnswer::NotFound
     );
 
+    let missing_deliverable = id::<m::DeliverableId>(999);
+    let missing_item = fixture
+        .call(
+            803,
+            m::WorkspaceOperation::CreateIssue {
+                deliverable_id: missing_deliverable.clone(),
+                title: "Missing deliverable".to_owned().try_into().unwrap(),
+            },
+        )
+        .await;
+    assert_eq!(
+        missing_item.result,
+        m::WorkspaceResult::NotFound {
+            workspace_id: fixture.workspace.clone(),
+            item: m::ItemRef::Deliverable(missing_deliverable),
+        }
+    );
+    assert_eq!(
+        runtime
+            .request_status(
+                &caller,
+                &RequestStatusQuery {
+                    request_id: id(803),
+                    scope: status_query.scope.clone(),
+                },
+            )
+            .await
+            .unwrap(),
+        RequestStatusAnswer::Answered(ReplyPayload::Workspace(missing_item))
+    );
+
     // Give the second session a real actor on the same machine and access to the same workspace.
     let other_caller = collaboration_central_core::WorkspaceCaller::new(
         caller.connection().clone(),

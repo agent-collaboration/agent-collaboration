@@ -5,6 +5,11 @@ use central_link_protocol::{
     ReplyPayload, RequestRefusal, RequestScope, RequestStatusAnswer, RequestStatusQuery,
 };
 use central_storage::{ReadOutcome, StoreFailure};
+use fleet_contracts::{
+    ReadWorkspaceRequestStatus, RetainedWorkspaceStatus, RetainedWriteAnswer,
+    WorkspaceServiceClient, WorkspaceServiceProtocol, WorkspaceServiceRpc, WorkspaceStatusFailure,
+};
+use fleet_rpc::{CallError, Transport};
 use fleet_runtime::workspace_request_log::{RequestLogStore, lookup};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_runtime_ports::{
@@ -12,7 +17,8 @@ use fleet_runtime_ports::{
     workspace_decode_error::corrupt,
 };
 use workspace_model::{
-    ActorIdentityId, WorkspaceReply, WorkspaceResult, central_mail::CentralMailResult,
+    ActorIdentityId, WorkspaceAnswer, WorkspaceReply, WorkspaceResult,
+    central_mail::CentralMailResult,
 };
 
 #[derive(serde::Deserialize)]
@@ -23,10 +29,9 @@ enum OrganizationDecision {
     PrivateAdmin(OrganizationAdminResult),
 }
 
-fn retained_decision(
+fn retained_organization_decision(
     rows: &ReadOutcome,
     caller: &ActorIdentityId,
-    scope: &RequestScope,
 ) -> Result<Option<OrganizationDecision>, StoreFailure> {
     let row = match rows.rows.as_slice() {
         [] => return Ok(None),
@@ -39,14 +44,7 @@ fn retained_decision(
     if &stored_actor != caller {
         return Ok(None);
     }
-    let answer = string(rows, row, "answer")?;
-    match scope {
-        RequestScope::Organization => json(answer, "runtime_request_log.answer"),
-        RequestScope::Workspace(_) => {
-            json(answer, "workspace_request_log.answer").map(OrganizationDecision::Workspace)
-        }
-    }
-    .map(Some)
+    json(string(rows, row, "answer")?, "runtime_request_log.answer").map(Some)
 }
 
 impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
@@ -55,7 +53,10 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         &self,
         caller: &WorkspaceCaller,
         query: &RequestStatusQuery,
-    ) -> Result<RequestStatusAnswer, StoreFailure> {
+    ) -> Result<RequestStatusAnswer, StoreFailure>
+    where
+        Stores: Transport<WorkspaceServiceProtocol>,
+    {
         let _turn = self.execution.take_central_turn().await;
         let scope_workspace = match &query.scope {
             RequestScope::Organization => None,
@@ -77,25 +78,54 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         let Some(actor) = self.access().existing_caller_actor(caller.caller()).await? else {
             return Ok(RequestStatusAnswer::NotFound);
         };
-        let cutoff = (self.execution.now()? - chrono::Duration::hours(24)).to_rfc3339();
-        let rows = if let Some(workspace) = scope_workspace {
-            self.execution
-                .read_workspace(
-                    workspace,
-                    lookup(RequestLogStore::Workspace, &query.request_id, &cutoff),
-                )
-                .await?
+        let cutoff = self.execution.now()? - chrono::Duration::hours(24);
+        let decision = if let Some(workspace) = scope_workspace {
+            let workspace =
+                WorkspaceServiceClient::new(workspace.clone(), self.execution.workspace_stores());
+            match workspace
+                .read_request_status(ReadWorkspaceRequestStatus {
+                    request_id: query.request_id.clone(),
+                    actor,
+                    cutoff,
+                })
+                .await
+                .map_err(|failure| match failure {
+                    CallError::NeverReached
+                    | CallError::Service(WorkspaceStatusFailure::Unavailable) => {
+                        StoreFailure::Unavailable
+                    }
+                    CallError::AnswerLost => StoreFailure::AnswerLost,
+                    CallError::Service(WorkspaceStatusFailure::Corrupt) => {
+                        corrupt("request log answer")
+                    }
+                })? {
+                RetainedWorkspaceStatus::NotFound => None,
+                RetainedWorkspaceStatus::Refused(reason) => Some(OrganizationDecision::Workspace(
+                    WorkspaceResult::Refused(reason),
+                )),
+                RetainedWorkspaceStatus::Done(answer) => Some(OrganizationDecision::Workspace(
+                    WorkspaceResult::Done(public_workspace_answer(*answer)),
+                )),
+                RetainedWorkspaceStatus::ItemNotFound { workspace_id, item } => {
+                    Some(OrganizationDecision::Workspace(WorkspaceResult::NotFound {
+                        workspace_id,
+                        item,
+                    }))
+                }
+            }
         } else {
-            self.execution
+            let rows = self
+                .execution
                 .statement_host()
                 .read(lookup(
                     RequestLogStore::Organization,
                     &query.request_id,
-                    &cutoff,
+                    &cutoff.to_rfc3339(),
                 ))
-                .await?
+                .await?;
+            retained_organization_decision(&rows, &actor)?
         };
-        Ok(match retained_decision(&rows, &actor, &query.scope)? {
+        Ok(match decision {
             None
             | Some(OrganizationDecision::PrivateAdmin(
                 OrganizationAdminResult::Applied { .. }
@@ -125,12 +155,43 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 RequestStatusAnswer::Answered(ReplyPayload::Mail(result))
             }
             Some(
-                OrganizationDecision::Workspace(_)
-                | OrganizationDecision::Mail(_)
-                | OrganizationDecision::PrivateAdmin(_),
+                OrganizationDecision::Workspace(
+                    WorkspaceResult::Conflict
+                    | WorkspaceResult::OutcomeUnknown
+                    | WorkspaceResult::CentralUnavailable,
+                )
+                | OrganizationDecision::Mail(
+                    CentralMailResult::Conflict
+                    | CentralMailResult::OutcomeUnknown
+                    | CentralMailResult::CentralUnavailable,
+                )
+                | OrganizationDecision::PrivateAdmin(
+                    OrganizationAdminResult::Found { .. }
+                    | OrganizationAdminResult::Records { .. }
+                    | OrganizationAdminResult::EngineHealth { .. }
+                    | OrganizationAdminResult::EngineRetired { .. },
+                ),
             ) => {
                 return Err(corrupt("request log answer"));
             }
         })
+    }
+}
+
+fn public_workspace_answer(answer: RetainedWriteAnswer) -> WorkspaceAnswer {
+    match answer {
+        RetainedWriteAnswer::Created { item, position } => {
+            WorkspaceAnswer::Created { item, position }
+        }
+        RetainedWriteAnswer::Updated { item, position } => {
+            WorkspaceAnswer::Updated { item, position }
+        }
+        RetainedWriteAnswer::Removed { item, position } => {
+            WorkspaceAnswer::Removed { item, position }
+        }
+        RetainedWriteAnswer::Marked { scope, through } => {
+            WorkspaceAnswer::Marked { scope, through }
+        }
+        RetainedWriteAnswer::Unchanged { item } => WorkspaceAnswer::Unchanged { item },
     }
 }

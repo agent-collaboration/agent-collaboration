@@ -149,13 +149,66 @@
           "SQLX_PREPARE_DATABASE_URL": "sqlite://<root>/tmp/<schema>/ui-preferences-schema.sqlite",
           "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/ui-preference-store-metadata"
         }
+      },
+      {
+        "command": ["<root>/tmp/rust-tools/bin/sqlx", "database", "create"],
+        "environment": {
+          "DATABASE_URL": "sqlite://<root>/tmp/<schema>/fleet-workspace-schema.sqlite"
+        }
+      },
+      {
+        "command": [
+          "<root>/tmp/rust-tools/bin/sqlx",
+          "migrate",
+          "run",
+          "--source",
+          "crates/fleet-storage-schema/migrations/workspace"
+        ],
+        "environment": {
+          "DATABASE_URL": "sqlite://<root>/tmp/<schema>/fleet-workspace-schema.sqlite"
+        }
+      },
+      {
+        "command": [
+          "cargo",
+          "clean",
+          "--package",
+          "path+file://<root>/crates/fleet-workspace-service"
+        ],
+        "environment": {
+          "SQLX_OFFLINE": "true",
+          "RUSTC_WRAPPER": "<wrapper>",
+          "SQLX_PREPARE_PACKAGE": "fleet-workspace-service",
+          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/fleet-workspace-service",
+          "SQLX_PREPARE_DATABASE_URL": "sqlite://<root>/tmp/<schema>/fleet-workspace-schema.sqlite",
+          "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/fleet-workspace-service-metadata"
+        }
+      },
+      {
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--package",
+          "path+file://<root>/crates/fleet-workspace-service",
+          "--all-targets"
+        ],
+        "environment": {
+          "SQLX_OFFLINE": "true",
+          "RUSTC_WRAPPER": "<wrapper>",
+          "SQLX_PREPARE_PACKAGE": "fleet-workspace-service",
+          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/fleet-workspace-service",
+          "SQLX_PREPARE_DATABASE_URL": "sqlite://<root>/tmp/<schema>/fleet-workspace-schema.sqlite",
+          "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/fleet-workspace-service-metadata"
+        }
       }
     ],
     "metadata": {
       ".sqlx": {
         "query-codex-router-state.json": "codex-router-state",
         "query-collaboration-runtime.json": "collaboration-runtime",
-        "query-ui-preference-store.json": "ui-preference-store"
+        "query-ui-preference-store.json": "ui-preference-store",
+        "query-fleet-workspace-service.json": "fleet-workspace-service"
       }
     },
     "stderr": ""

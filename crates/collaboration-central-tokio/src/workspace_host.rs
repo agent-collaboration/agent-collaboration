@@ -4,6 +4,12 @@ use crate::{
     sign_in_trust::NativeSignInTrust,
 };
 use collaboration_central_core::WorkspaceCaller;
+use fleet_contracts::{
+    WorkspaceRequest as WorkspaceRpcRequest, WorkspaceResponse, WorkspaceServiceProtocol,
+    WorkspaceStatusFailure,
+};
+use fleet_rpc::{CallFailure, Envelope, Transport, dispatch};
+use fleet_workspace_service::WorkspaceService;
 #[path = "workspace_alarm_owner.rs"]
 mod workspace_alarm_owner;
 use central_storage::{
@@ -58,6 +64,15 @@ pub struct TokioWorkspaceStores {
     stores: Arc<Mutex<BTreeMap<WorkspaceId, Arc<ObjectStorage>>>>,
 }
 impl TokioWorkspaceStores {
+    /// Use the fixture's existing object storage for both legacy and typed calls.
+    #[cfg(feature = "test-support")]
+    pub fn with_fixture_store(root: PathBuf, id: WorkspaceId, store: Arc<ObjectStorage>) -> Self {
+        Self {
+            root,
+            stores: Arc::new(Mutex::new(BTreeMap::from([(id, store)]))),
+        }
+    }
+
     async fn store(&self, id: &WorkspaceId) -> Result<Arc<ObjectStorage>, StoreFailure> {
         let mut stores = self.stores.lock().await;
         if let Some(store) = stores.get(id) {
@@ -90,6 +105,30 @@ impl WorkspaceStores for TokioWorkspaceStores {
         }
     }
 }
+impl Transport<WorkspaceServiceProtocol> for TokioWorkspaceStores {
+    async fn exchange(
+        &self,
+        request: Envelope<WorkspaceId, WorkspaceRpcRequest>,
+    ) -> Result<Envelope<WorkspaceId, WorkspaceResponse>, CallFailure> {
+        let workspace = request.target.clone();
+        dispatch::<WorkspaceServiceProtocol, _, _>(&workspace, request, |call| async {
+            let store = match self.store(&workspace).await {
+                Ok(store) => store,
+                Err(_) => return call.unavailable_reply(WorkspaceStatusFailure::Unavailable),
+            };
+            match store.workspace_pool().await {
+                Ok(pool) => {
+                    fleet_contracts::dispatch_workspace_request(&WorkspaceService::new(pool), call)
+                        .await
+                }
+                Err(_) => call.unavailable_reply(WorkspaceStatusFailure::Unavailable),
+            }
+        })
+        .await
+        .map_err(|_| CallFailure::NeverReached)
+    }
+}
+
 /// One process-local owner of each org, with workspace stores shared by their UUID.
 pub struct TokioWorkspaceHost {
     root: PathBuf,

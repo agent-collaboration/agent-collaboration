@@ -8,7 +8,8 @@ use std::process::Command;
 #[path = "job_layer_tests.rs"]
 mod job_layer_tests;
 
-pub(super) const FLEET_PURE_CRATES: [(&str, &[&str]); 2] = [
+pub(super) const FLEET_PURE_CRATES: [(&str, &[&str]); 3] = [
+    (FLEET_RPC, &[]),
     (
         "fleet-runtime-ports",
         &["central-engine-model", "central-storage", "workspace-ids"],
@@ -19,12 +20,29 @@ pub(super) const FLEET_PURE_CRATES: [(&str, &[&str]); 2] = [
             "central-engine-model",
             "central-storage",
             "fleet-identity-protocol",
+            FLEET_RPC,
             "fleet-runtime-ports",
             "message-board",
             "workspace-ids",
             "workspace-model",
         ],
     ),
+];
+const FLEET_RPC: &str = "fleet-rpc";
+const WORKSPACE_SERVICE: &str = "fleet-workspace-service";
+const CENTRAL_CORE: &str = "collaboration-central-core";
+const CENTRAL_WORKER: &str = "collaboration-central-cloudflare";
+const SERVICE_SUPPORT_PACKAGES: &[&str] = &[
+    "sqlx",
+    "sqlx-core",
+    "sqlx-macros",
+    "sqlx-macros-core",
+    "futures-core",
+    "futures-intrusive",
+    "futures-io",
+    "futures-sink",
+    "futures-task",
+    "futures-util",
 ];
 const FLEET_ACCESS: &str = "fleet-workspace-access";
 const FLEET_DIRECTORY: &str = "fleet-workspace-directory";
@@ -168,6 +186,7 @@ fn is_effectful(name: &str) -> bool {
         || name.starts_with("sqlx")
         || name.starts_with("turso")
         || name.starts_with("rusqlite")
+        || name == "libsqlite3-sys"
         || name.starts_with("worker")
         || name.starts_with("reqwest")
         || name.starts_with("hyper")
@@ -233,6 +252,13 @@ pub(super) fn check_boundaries(
         }
         check_workspace_driver_edges(graph, source)?;
     }
+    check_closed_workspace_edges(
+        graph,
+        WORKSPACE_SERVICE,
+        &["central-storage", "fleet-contracts", "workspace-model"],
+    )?;
+    check_job_reachability(graph, WORKSPACE_SERVICE, &["fleet-runtime"])?;
+    check_job_reachability(graph, CENTRAL_CORE, &[WORKSPACE_SERVICE])?;
     check_closed_workspace_edges(graph, FLEET_ENGINE, ENGINE_EDGES)?;
     for (name, allowed) in TIMER_CRATES {
         check_closed_workspace_edges(graph, name, allowed)?;
@@ -409,19 +435,21 @@ pub(super) fn check_pure_dependency_tree(root: &Path) -> Result<(), Box<dyn std:
             FLEET_MAIL,
             FLEET_NOTICES,
             FLEET_DIRECTORY,
+            WORKSPACE_SERVICE,
         ])
         .chain(TIMER_CRATES.into_iter().map(|(package, _)| package))
     {
         check_package_targets(root, package)?;
     }
-    Ok(())
+    check_package_tree(root, CENTRAL_WORKER, Some(FLEET_WASM_TARGET))
 }
 
 fn check_package_targets(root: &Path, package: &str) -> Result<(), Box<dyn std::error::Error>> {
     check_package_tree(root, package, None)?;
     if matches!(
         package,
-        FLEET_ACCESS
+        WORKSPACE_SERVICE
+            | FLEET_ACCESS
             | FLEET_DIRECTORY
             | FLEET_ENGINE
             | FLEET_MAIL
@@ -468,7 +496,9 @@ fn check_package_tree(
         )
         .into());
     }
-    let allowed_support = if matches!(
+    let allowed_support = if package == WORKSPACE_SERVICE {
+        SERVICE_SUPPORT_PACKAGES
+    } else if matches!(
         package,
         FLEET_ENGINE | FLEET_MAIL | FLEET_NOTICES | FLEET_WAKES | FLEET_SCHEDULES
     ) {
@@ -490,6 +520,12 @@ fn check_tree_output(
         let Some(name) = identity.split_whitespace().next() else {
             continue;
         };
+        if package == CENTRAL_WORKER {
+            if matches!(name, "sqlx-sqlite" | "libsqlite3-sys") {
+                return Err(format!("R1: Cloudflare reaches stock SQLite through {name}").into());
+            }
+            continue;
+        }
         if !is_effectful(name) || allowed_support.contains(&name) {
             continue;
         }
@@ -645,6 +681,43 @@ fn fleet_interfaces_reject_upward_normal_and_build_edges() {
                 );
             }
         }
+    }
+}
+
+#[test]
+fn workspace_rpc_rejects_upward_normal_and_build_edges() {
+    for kind in [DependencyKind::Normal, DependencyKind::Build] {
+        for (from, to) in [
+            (FLEET_RPC, "fleet-runtime"),
+            (WORKSPACE_SERVICE, CENTRAL_WORKER),
+            (WORKSPACE_SERVICE, CENTRAL_CORE),
+            (WORKSPACE_SERVICE, "fleet-runtime"),
+            (CENTRAL_CORE, WORKSPACE_SERVICE),
+        ] {
+            let violation = check_boundaries(&graph(&[(from, to, kind)]))
+                .expect_err("the workspace RPC layer must reject an upward edge");
+            let diagnostic = violation.to_string();
+            assert!(
+                diagnostic.contains(from) && diagnostic.contains(to),
+                "{diagnostic}"
+            );
+        }
+    }
+}
+
+#[test]
+fn workspace_rpc_rejects_effects_and_concrete_sqlite_in_the_package_tree() {
+    for (package, allowed, dependency) in [
+        (FLEET_RPC, &[][..], "sqlx"),
+        (FLEET_RPC, &[][..], "worker"),
+        (WORKSPACE_SERVICE, SERVICE_SUPPORT_PACKAGES, "sqlx-sqlite"),
+        (WORKSPACE_SERVICE, SERVICE_SUPPORT_PACKAGES, "tokio"),
+        (CENTRAL_WORKER, &[][..], "libsqlite3-sys"),
+    ] {
+        let violation =
+            check_tree_output(&format!("{package} v1\n{dependency} v1"), allowed, package)
+                .expect_err("the workspace RPC layer must reject this dependency");
+        assert!(violation.to_string().contains(dependency));
     }
 }
 

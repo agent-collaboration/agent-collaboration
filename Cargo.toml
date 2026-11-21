@@ -25,6 +25,8 @@ members = [
     "crates/fleet-storage-schema",
     "crates/fleet-store-sqlx",
     "crates/fleet-contracts",
+    "crates/fleet-rpc",
+    "crates/fleet-workspace-service",
     "crates/router-clock",
     "crates/tailnet-verification-host",
     "crates/message-board",
@@ -94,6 +96,8 @@ provider-session-machines = { path = "crates/provider-session-machines", version
 fleet-runtime-ports = { path = "crates/fleet-runtime-ports", version = "0.1.156" }
 fleet-runtime-test-support = { path = "crates/fleet-runtime-test-support", version = "0.1.156" }
 fleet-contracts = { path = "crates/fleet-contracts", version = "0.1.156" }
+fleet-rpc = { path = "crates/fleet-rpc", version = "0.1.157" }
+fleet-workspace-service = { path = "crates/fleet-workspace-service", version = "0.1.157" }
 fleet-runtime = { path = "crates/fleet-runtime", version = "0.1.156" }
 fleet-engine = { path = "crates/fleet-engine", version = "0.1.156" }
 fleet-mail = { path = "crates/fleet-mail", version = "0.1.156" }

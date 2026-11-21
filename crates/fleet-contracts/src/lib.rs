@@ -15,6 +15,7 @@ mod provisioning_failure;
 mod statement_refusal;
 pub mod workspace_description;
 mod workspace_directory;
+mod workspace_rpc;
 
 pub use central_observation::CentralObservation;
 pub use client_id::ClientId;
@@ -32,3 +33,8 @@ pub use legacy_units::LegacyUnitOutcome;
 pub use mail_delivery_ready::MailDeliveryReady;
 pub use workspace_description::MAXIMUM_DESCRIPTION_BYTES;
 pub use workspace_directory::{DirectoryWorkspace, WorkspaceDirectory, WorkspaceView};
+pub use workspace_rpc::{
+    ReadWorkspaceRequestStatus, RetainedWorkspaceStatus, RetainedWriteAnswer, WorkspaceRequest,
+    WorkspaceResponse, WorkspaceServiceClient, WorkspaceServiceProtocol, WorkspaceServiceRpc,
+    WorkspaceStatusFailure, dispatch_workspace_request,
+};

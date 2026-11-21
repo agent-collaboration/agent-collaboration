@@ -18,6 +18,8 @@ link = []
 test-support = ["fleet-runtime/test-support", "fleet-storage-schema/test-support", "collaboration-central-core/test-support", "dep:sqlx"]
 
 [dependencies]
+fleet-rpc.workspace = true
+fleet-workspace-service.workspace = true
 central-storage.workspace = true
 central-link-protocol.workspace = true
 fleet-contracts.workspace = true

@@ -1,36 +1,40 @@
-//! One workspace's store: it holds the tables and runs the statements it is given,
-//! atomically. No rules, decisions or notifications live here (owner decision 29);
-//! central sends every call.
+//! One workspace's SQLite and its typed procedures. Legacy operations still
+//! use the statement route until their procedures move.
 
 use crate::object_location::ObjectAddress;
 use crate::statement_store::{self, AlarmPolicy};
 use crate::store_wire::{OwnedStoreCall, StoreAnswer};
 use central_storage::{StoreFailure, StoreReply};
+use fleet_contracts::{WorkspaceRequest, WorkspaceServiceProtocol, WorkspaceStatusFailure};
+use fleet_rpc::{Envelope, dispatch};
+use fleet_workspace_service::WorkspaceService;
 use sqlx_durable_object::DoConnection;
-use std::cell::Cell;
+use std::cell::{Cell, OnceCell};
 use worker::{DurableObject, Env, Request, Response, Result, State, durable_object, wasm_bindgen};
 
 #[durable_object]
 pub struct WorkspaceStoreObject {
     state: State,
     env: Env,
-    connection: DoConnection,
+    connection: OnceCell<DoConnection>,
     migrated: Cell<bool>,
+    #[cfg(feature = "test-support")]
+    typed_dispatches: Cell<u32>,
 }
 
 impl WorkspaceStoreObject {
     /// Refuses a call addressed to another object than this one.
-    fn check_address(&self, request: &Request) -> Result<()> {
+    fn check_address(&self, request: &Request) -> Result<workspace_ids::WorkspaceId> {
         let requested = request
             .headers()
             .get("x-central-object-address")?
             .ok_or_else(|| worker::Error::RustError("object address missing".into()))?;
         let address: ObjectAddress = serde_json::from_str(&requested)?;
-        if !matches!(address, ObjectAddress::WorkspaceStore(_)) {
+        let ObjectAddress::WorkspaceStore(workspace) = &address else {
             return Err(worker::Error::RustError(
                 "not a workspace store address".into(),
             ));
-        }
+        };
         let (binding, name) = crate::object_location::location(&address);
         if self
             .env
@@ -43,16 +47,18 @@ impl WorkspaceStoreObject {
                 "object address does not match physical id".into(),
             ));
         }
-        Ok(())
+        Ok(workspace.clone())
     }
 
-    async fn answer(
+    async fn open_store(
         &self,
-        call: OwnedStoreCall,
         migrator: std::sync::Arc<sqlx_core::migrate::Migrator>,
-    ) -> StoreAnswer {
+    ) -> std::result::Result<&DoConnection, StoreFailure> {
+        let connection = self
+            .connection
+            .get_or_init(|| DoConnection::new(self.state.storage()));
         if !self.migrated.get() {
-            statement_store::migrate(&self.connection, migrator)
+            statement_store::migrate(connection, migrator)
                 .await
                 .map_err(|failure| {
                     worker::console_warn!("workspace store migration failed: {failure}");
@@ -60,13 +66,22 @@ impl WorkspaceStoreObject {
                 })?;
             self.migrated.set(true);
         }
+        Ok(connection)
+    }
+
+    async fn answer(
+        &self,
+        call: OwnedStoreCall,
+        migrator: std::sync::Arc<sqlx_core::migrate::Migrator>,
+    ) -> StoreAnswer {
+        let connection = self.open_store(migrator).await?;
         match call {
             OwnedStoreCall::Batch(batch) => {
-                statement_store::run_batch(&self.connection, batch, AlarmPolicy::Ignore)
+                statement_store::run_batch(connection, batch, AlarmPolicy::Ignore)
                     .await
                     .map(StoreReply::Batch)
             }
-            OwnedStoreCall::Read(statement) => statement_store::read(&self.connection, statement)
+            OwnedStoreCall::Read(statement) => statement_store::read(connection, statement)
                 .await
                 .map(StoreReply::Read),
         }
@@ -75,17 +90,59 @@ impl WorkspaceStoreObject {
 
 impl DurableObject for WorkspaceStoreObject {
     fn new(state: State, env: Env) -> Self {
-        let connection = DoConnection::new(state.storage());
         Self {
             state,
             env,
-            connection,
+            connection: OnceCell::new(),
             migrated: Cell::new(false),
+            #[cfg(feature = "test-support")]
+            typed_dispatches: Cell::new(0),
         }
     }
 
     async fn fetch(&self, mut request: Request) -> Result<Response> {
-        self.check_address(&request)?;
+        let workspace = self.check_address(&request)?;
+        #[cfg(feature = "test-support")]
+        if request.path() == "/test/storage-state" {
+            return Response::from_json(&crate::workspace_rpc_fixture::StorageState {
+                opened: self.connection.get().is_some(),
+                migrated: self.migrated.get(),
+                typed_dispatches: self.typed_dispatches.get(),
+            });
+        }
+        if request.path() == "/workspace-rpc" {
+            if request.method() != worker::Method::Post {
+                return Response::error("expected POST", 405);
+            }
+            let envelope: Envelope<workspace_ids::WorkspaceId, WorkspaceRequest> =
+                request.json().await?;
+            let reply =
+                dispatch::<WorkspaceServiceProtocol, _, _>(&workspace, envelope, |call| async {
+                    #[cfg(feature = "test-support")]
+                    self.typed_dispatches
+                        .set(self.typed_dispatches.get().saturating_add(1));
+                    match self
+                        .open_store(crate::object_migrations::workspace_store())
+                        .await
+                    {
+                        Ok(connection) => {
+                            fleet_contracts::dispatch_workspace_request(
+                                &WorkspaceService::new(connection),
+                                call,
+                            )
+                            .await
+                        }
+                        Err(_) => call.unavailable_reply(WorkspaceStatusFailure::Unavailable),
+                    }
+                })
+                .await
+                .map_err(|_| {
+                    worker::Error::RustError(
+                        "workspace envelope target does not match address".into(),
+                    )
+                })?;
+            return Response::from_json(&reply);
+        }
         #[cfg(feature = "test-support")]
         if request.path() == "/test/crash" {
             self.state

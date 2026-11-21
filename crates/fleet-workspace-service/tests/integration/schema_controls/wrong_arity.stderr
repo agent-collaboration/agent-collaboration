@@ -1,0 +1,7 @@
+error: expected 1 parameters, got 2
+ --> tests/integration/schema_controls/wrong_arity.rs:2:18
+  |
+2 |     let _query = sqlx::query!("SELECT caller FROM workspace_request_log WHERE request_id = ?", "id", "extra");
+  |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the macro `$crate::sqlx_macros::expand_query` which comes from the expansion of the macro `sqlx::query` (in Nightly builds, run with -Z macro-backtrace for more info)

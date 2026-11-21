@@ -284,6 +284,10 @@ impl ObjectStorage {
         self.opened().await?.read(statement).await
     }
 
+    pub(crate) async fn workspace_pool(&self) -> Result<&sqlx::SqlitePool, StoreFailure> {
+        Ok(self.opened().await?.pool())
+    }
+
     #[must_use]
     pub fn subscribe_alarm(&self) -> watch::Receiver<Option<SyncTime>> {
         self.alarm.subscribe()

@@ -9,7 +9,9 @@ use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
 use collaboration_central_core::WorkspaceRuntime;
+use fleet_contracts::{WorkspaceRequest, WorkspaceResponse, WorkspaceServiceProtocol};
 use fleet_identity_protocol::OrganizationId;
+use fleet_rpc::{CallFailure, Envelope, Transport};
 use fleet_runtime::{ClockIds, FleetRuntime};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use futures_util::lock::Mutex;
@@ -146,6 +148,8 @@ struct WorkspaceTransport {
     env: Arc<SendWrapper<Env>>,
     #[cfg(feature = "test-support")]
     lose_read: Arc<std::sync::atomic::AtomicBool>,
+    #[cfg(feature = "test-support")]
+    legacy_workspace_calls: Arc<std::sync::atomic::AtomicUsize>,
 }
 impl WorkspaceStores for WorkspaceTransport {
     fn call_workspace(
@@ -156,6 +160,9 @@ impl WorkspaceStores for WorkspaceTransport {
     {
         let id = id.clone();
         SendFuture::new(async move {
+            #[cfg(feature = "test-support")]
+            self.legacy_workspace_calls
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             #[cfg(feature = "test-support")]
             let is_read = matches!(&call, StoreCall::Read(_));
             let answer = crate::cloudflare_transport::call_store(&self.env, id, call.into()).await;
@@ -171,6 +178,37 @@ impl WorkspaceStores for WorkspaceTransport {
         })
     }
 }
+impl Transport<WorkspaceServiceProtocol> for WorkspaceTransport {
+    fn exchange(
+        &self,
+        request: Envelope<workspace_ids::WorkspaceId, WorkspaceRequest>,
+    ) -> impl std::future::Future<
+        Output = std::result::Result<
+            Envelope<workspace_ids::WorkspaceId, WorkspaceResponse>,
+            CallFailure,
+        >,
+    > + Send {
+        SendFuture::new(async move {
+            let answer = crate::cloudflare_transport::workspace_exchange(
+                &self.env,
+                request.target.clone(),
+                "/workspace-rpc",
+                &request,
+                None,
+            )
+            .await;
+            #[cfg(feature = "test-support")]
+            if self
+                .lose_read
+                .swap(false, std::sync::atomic::Ordering::SeqCst)
+            {
+                return Err(CallFailure::AnswerLost);
+            }
+            answer
+        })
+    }
+}
+
 type OrgRuntime = WorkspaceRuntime<CentralStatements, WorkspaceTransport>;
 enum AlarmFailure {
     Store(StoreFailure),
@@ -249,6 +287,8 @@ impl CentralObject {
                 env: Arc::new(SendWrapper::new(self.env.clone())),
                 #[cfg(feature = "test-support")]
                 lose_read: self.controls.lose_read.clone(),
+                #[cfg(feature = "test-support")]
+                legacy_workspace_calls: self.controls.legacy_workspace_calls.clone(),
             },
             clock.clone(),
             Arc::new(ClockIds::new(self.clock.clone())),

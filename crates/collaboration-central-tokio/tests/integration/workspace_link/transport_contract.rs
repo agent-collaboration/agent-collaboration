@@ -1,15 +1,20 @@
 //! Real links retain each connection's grant, correlate concurrent calls and replay writes.
-use super::fixture::{Fixture, INSTALLATION, send};
+use super::fixture::{Fixture, INSTALLATION, receive, send};
 use super::link_support::{
     caller, connect_client, correlation, create_workspace, created_workspace, workspace_reply,
 };
-use central_link_protocol::RequestPayload;
+use central_link_protocol::{
+    CorrelationId, DataFrame, LinkFrame, ReplyPayload, RequestPayload, RequestScope,
+    RequestStatusAnswer, RequestStatusQuery,
+};
 use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, SqlValue, Statement,
     StatementBatch,
 };
 use collaboration_central_conformance::{ConformanceResult as Result, signin_fixtures as signed};
 use collaboration_central_tokio::ObjectStorage;
+use futures_util::StreamExt;
+use reqwest_websocket::{CloseCode, Message};
 use serde_json::json;
 use std::{collections::BTreeMap, sync::Arc};
 use workspace_model::{ItemRef, WorkspaceAnswer, WorkspaceId, WorkspaceResult};
@@ -210,9 +215,64 @@ async fn lost_reply_after_commit_replays_one_durable_write_on_a_new_correlation(
             .await?,
         committed
     );
-    store.close().await;
-    socket
-        .close(reqwest_websocket::CloseCode::Normal, None)
+    let status_correlation: CorrelationId = "019f0000-0000-7000-8000-00000000d303".parse()?;
+    let query = RequestStatusQuery {
+        request_id: write_id.parse()?,
+        scope: RequestScope::Workspace(workspace.workspace_id.clone()),
+    };
+    send(
+        &mut socket,
+        &LinkFrame::Data(DataFrame::RequestStatus {
+            correlation_id: status_correlation.clone(),
+            caller: caller()?,
+            query: query.clone(),
+        }),
+    )
+    .await?;
+    assert_eq!(
+        receive(&mut socket).await?,
+        LinkFrame::Data(DataFrame::RequestStatusReply {
+            correlation_id: status_correlation,
+            result: Box::new(RequestStatusAnswer::Answered(ReplyPayload::Workspace(
+                replay
+            ))),
+        })
+    );
+    let altered = store
+        .run_batch(StatementBatch {
+            statements: vec![GuardedStatement {
+                statement: Statement {
+                    sql: "UPDATE workspace_request_log SET caller=?, answer=? WHERE request_id=?",
+                    args: vec![
+                        SqlValue::Text("019f0000-0000-7000-8000-00000000d305".into()),
+                        SqlValue::Blob(vec![255]),
+                        SqlValue::Text(write_id.into()),
+                    ],
+                },
+                expect: RowExpectation::Exactly(1),
+            }],
+            alarm: AlarmUpdate::Unchanged,
+        })
         .await?;
+    assert!(matches!(altered, BatchOutcome::Applied { .. }));
+    send(
+        &mut socket,
+        &LinkFrame::Data(DataFrame::RequestStatus {
+            correlation_id: "019f0000-0000-7000-8000-00000000d304".parse()?,
+            caller: caller()?,
+            query,
+        }),
+    )
+    .await?;
+    let closed = socket.next().await;
+    assert!(
+        matches!(
+            &closed,
+            Some(Ok(Message::Close { code: CloseCode::Error, reason }))
+                if reason == "central unavailable"
+        ),
+        "the damaged receipt must close the native link: {closed:?}"
+    );
+    store.close().await;
     fixture.close().await
 }

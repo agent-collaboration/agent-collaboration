@@ -1,0 +1,65 @@
+use fleet_contracts::{ReadWorkspaceRequestStatus, WorkspaceStatusFailure};
+use sqlx::{ColumnIndex, Database, Decode, Encode, Executor, IntoArguments, Type};
+use workspace_model::{ActorIdentityId, WorkspaceResult};
+
+#[derive(sqlx::FromRow)]
+struct StoredWorkspaceReceipt {
+    caller: String,
+    answer: String,
+}
+
+pub(crate) struct WorkspaceRepo;
+
+impl WorkspaceRepo {
+    pub(crate) async fn retained_status<'connection, DB, E>(
+        executor: E,
+        request: &ReadWorkspaceRequestStatus,
+    ) -> Result<Option<(ActorIdentityId, WorkspaceResult)>, WorkspaceStatusFailure>
+    where
+        DB: Database,
+        E: Executor<'connection, Database = DB>,
+        DB::Arguments: IntoArguments<DB>,
+        String: Type<DB> + for<'query> Encode<'query, DB> + for<'row> Decode<'row, DB>,
+        for<'row> &'row str: ColumnIndex<DB::Row>,
+    {
+        let request_id = request.request_id.to_string();
+        let cutoff = request.cutoff.to_rfc3339();
+        #[cfg(all(test, not(target_arch = "wasm32")))]
+        let _ = sqlx::query_file_as!(
+            StoredWorkspaceReceipt,
+            "src/queries/read_request_status.sql",
+            &request_id,
+            &cutoff
+        );
+
+        let rows = sqlx::query_as::<DB, StoredWorkspaceReceipt>(include_str!(
+            "queries/read_request_status.sql"
+        ))
+        .bind(request_id)
+        .bind(cutoff)
+        .fetch_all(executor)
+        .await
+        .map_err(query_failure)?;
+        let row = match rows.as_slice() {
+            [] => return Ok(None),
+            [row] => row,
+            _ => return Err(WorkspaceStatusFailure::Corrupt),
+        };
+        let caller = row
+            .caller
+            .parse()
+            .map_err(|_| WorkspaceStatusFailure::Corrupt)?;
+        let answer =
+            serde_json::from_str(&row.answer).map_err(|_| WorkspaceStatusFailure::Corrupt)?;
+        Ok(Some((caller, answer)))
+    }
+}
+
+fn query_failure(error: sqlx::Error) -> WorkspaceStatusFailure {
+    match error {
+        sqlx::Error::ColumnDecode { .. } | sqlx::Error::ColumnNotFound(_) => {
+            WorkspaceStatusFailure::Corrupt
+        }
+        _ => WorkspaceStatusFailure::Unavailable,
+    }
+}

@@ -2,7 +2,12 @@ use super::*;
 use central_link_protocol::{ReplyPayload, RequestScope, RequestStatusAnswer, RequestStatusQuery};
 use central_storage::{StoreCall, StoreFailure, StoreReply};
 use collaboration_central_core::WorkspaceRuntime;
-use collaboration_central_tokio::ObjectStorage;
+use collaboration_central_tokio::{ObjectStorage, TokioWorkspaceStores};
+use fleet_contracts::{
+    ReadWorkspaceRequestStatus, WorkspaceRequest, WorkspaceResponse, WorkspaceServiceClient,
+    WorkspaceServiceProtocol, WorkspaceServiceRpc, WorkspaceStatusFailure,
+};
+use fleet_rpc::{CallError, CallFailure, Envelope, Transport};
 use fleet_runtime::{ClockIds, FleetRuntime};
 use fleet_runtime_ports::{Clock, SyncTime, WorkspaceStores};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -15,26 +20,34 @@ impl Clock for ArcClock {
 }
 #[derive(Clone)]
 struct LoseFirstRead {
-    store: Arc<ObjectStorage>,
+    stores: TokioWorkspaceStores,
     lose: Arc<AtomicBool>,
 }
 impl WorkspaceStores for LoseFirstRead {
     async fn call_workspace(
         &self,
-        _workspace: &m::WorkspaceId,
+        workspace: &m::WorkspaceId,
         call: StoreCall,
     ) -> Result<StoreReply, StoreFailure> {
-        match call {
-            StoreCall::Read(statement) => {
-                let answer = self.store.read(statement).await?;
-                if self.lose.swap(false, Ordering::SeqCst) {
-                    Err(StoreFailure::AnswerLost)
-                } else {
-                    Ok(StoreReply::Read(answer))
-                }
-            }
-            StoreCall::Batch(batch) => self.store.run_batch(batch).await.map(StoreReply::Batch),
+        let is_read = matches!(call, StoreCall::Read(_));
+        let reply = self.stores.call_workspace(workspace, call).await?;
+        if is_read && self.lose.swap(false, Ordering::SeqCst) {
+            return Err(StoreFailure::AnswerLost);
         }
+        Ok(reply)
+    }
+}
+
+impl Transport<WorkspaceServiceProtocol> for LoseFirstRead {
+    async fn exchange(
+        &self,
+        request: Envelope<m::WorkspaceId, WorkspaceRequest>,
+    ) -> Result<Envelope<m::WorkspaceId, WorkspaceResponse>, CallFailure> {
+        let reply = self.stores.exchange(request).await?;
+        if self.lose.swap(false, Ordering::SeqCst) {
+            return Err(CallFailure::AnswerLost);
+        }
+        Ok(reply)
     }
 }
 #[tokio::test]
@@ -69,7 +82,11 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
         f.caller.organization_id().clone(),
         central.clone(),
         LoseFirstRead {
-            store: store.clone(),
+            stores: TokioWorkspaceStores::with_fixture_store(
+                f.root.path().join("workspace-stores"),
+                f.workspace.clone(),
+                store.clone(),
+            ),
             lose: lose.clone(),
         },
         Arc::new(clock.clone()),
@@ -132,4 +149,40 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
     );
     central.close().await;
     store.close().await;
+}
+
+#[tokio::test]
+async fn request_status_returns_a_typed_reply_when_the_workspace_store_cannot_open() {
+    let root = tempfile::tempdir().unwrap();
+    let workspace = id::<m::WorkspaceId>(895);
+    let store = Arc::new(ObjectStorage::new(
+        root.path().join("workspace.sqlite"),
+        Arc::new(fleet_storage_schema::workspace_migrations::failing_upgrade(
+            fleet_storage_schema::workspace_migrations::workspace_migrator(),
+        )),
+    ));
+    let stores =
+        TokioWorkspaceStores::with_fixture_store(root.path().into(), workspace.clone(), store);
+    let client = WorkspaceServiceClient::new(
+        workspace,
+        LoseFirstRead {
+            stores,
+            lose: Arc::new(AtomicBool::new(true)),
+        },
+    );
+    let status_call = || ReadWorkspaceRequestStatus {
+        request_id: id(896),
+        actor: id(897),
+        cutoff: "2026-11-20T12:00:00Z".parse().unwrap(),
+    };
+
+    // The fixture can lose the first reply only after the real transport returns an envelope.
+    assert_eq!(
+        client.read_request_status(status_call()).await,
+        Err(CallError::AnswerLost)
+    );
+    assert_eq!(
+        client.read_request_status(status_call()).await,
+        Err(CallError::Service(WorkspaceStatusFailure::Unavailable))
+    );
 }

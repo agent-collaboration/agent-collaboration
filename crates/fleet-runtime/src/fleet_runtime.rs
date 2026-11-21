@@ -297,6 +297,11 @@ impl<Host: CentralStore, Stores: WorkspaceStores> FleetRuntime<Host, Stores> {
             )),
         }
     }
+    /// Borrow the transport to the owning workspace objects.
+    pub fn workspace_stores(&self) -> &Stores {
+        &self.stores
+    }
+
     pub async fn batch_workspace(
         &self,
         workspace: &WorkspaceId,
