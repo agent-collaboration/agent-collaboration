@@ -1,7 +1,8 @@
 //! Workspace turn precedes central commit; durable deadlines precede workspace writes.
 use crate::{
     WorkspaceRuntime,
-    central_mail_store::{alarm_update, applied, timestamp},
+    central_statement_values::{applied, timestamp},
+    engine::query_registry::alarm_update,
     notification_windows::{parse, parse_time},
     workspace_notice_plans::DrainResult,
 };

@@ -2,7 +2,7 @@ use super::super::{Statement, support::*};
 use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, StatementBatch,
 };
-use collaboration_central_core::{WELCOME_PAGE_SIZE, WelcomeDeliveryPage};
+use fleet_contracts::mail_link::{WELCOME_PAGE_SIZE, WelcomeDeliveryPage};
 use router_clock::RuntimeClock;
 use workspace_model::central_mail::{
     CentralMailAnswer, CentralMailOperation, CentralMailRequest, CentralMailResult, MessageDelivery,

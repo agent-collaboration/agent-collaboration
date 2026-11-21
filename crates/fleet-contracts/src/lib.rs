@@ -10,6 +10,7 @@ mod legacy_units;
 mod machine_connection;
 mod machine_connection_refusal;
 mod mail_delivery_ready;
+pub mod mail_link;
 mod provisioning_failure;
 mod statement_refusal;
 

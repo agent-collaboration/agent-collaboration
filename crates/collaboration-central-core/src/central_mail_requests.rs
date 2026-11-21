@@ -1,6 +1,6 @@
 //! Central-only admitted request ledger; cached answers precede mutable decisions.
 use crate::WorkspaceCaller;
-use crate::{WorkspaceRuntime, central_mail_store};
+use crate::{WorkspaceRuntime, central_statement_values, engine::query_registry::alarm_update};
 use central_storage::{BatchOutcome, StatementBatch, StoreFailure};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_runtime_ports::{
@@ -84,12 +84,12 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             }
             // A committed request may have lost its alarm publication before its reply.
             let repair = async {
-                central_mail_store::applied(
+                central_statement_values::applied(
                     self.execution
                         .statement_host()
                         .run_batch(StatementBatch {
                             statements: vec![],
-                            alarm: central_mail_store::alarm_update(),
+                            alarm: alarm_update(),
                         })
                         .await?,
                 )
@@ -133,8 +133,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                     statements.push(fleet_runtime_ports::guarded_statements::exact(
                         "UPDATE mail_notification_windows SET due_at=?,updated_at=? WHERE window_id=?",
                         vec![
-                            fleet_runtime_ports::guarded_statements::text(central_mail_store::timestamp(due)),
-                            fleet_runtime_ports::guarded_statements::text(central_mail_store::timestamp(now)),
+                            fleet_runtime_ports::guarded_statements::text(central_statement_values::timestamp(due)),
+                            fleet_runtime_ports::guarded_statements::text(central_statement_values::timestamp(now)),
                             fleet_runtime_ports::guarded_statements::text(&window.id),
                         ],
                     ));
@@ -155,32 +155,21 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             if !self.known_session(to).await? {
                 Err(Refusal::UnknownSession { target: to.clone() })
             } else {
-                let message = self.prepare_message_record(
-                    mail::MessageSender::Actor(actor.clone()),
-                    to.clone(),
-                    mail::MessageBody::Direct {
+                let plan = fleet_mail::plan_direct_send(
+                    &request.request_id,
+                    actor.clone(),
+                    mail::SendMessageRequest {
+                        to: to.clone(),
                         body: body.clone(),
                         delivery: *delivery,
                         reply_to: reply_to.clone(),
                     },
-                    None,
+                    *sent_at,
                     now,
+                    || self.execution.mint(),
                 )?;
-                delivery_ready = Some(fleet_contracts::MailDeliveryReady::from(&message));
-                Ok((
-                    vec![crate::central_mail_rows::insert_message_due(
-                        &message,
-                        Some(&crate::central_mail_rows::DirectMessageTerms {
-                            cancel_due_at: crate::message_deadline::cancel_due_at(*sent_at, now),
-                            delivery_window_ends_at:
-                                crate::message_deadline::delivery_window_ends_at(*sent_at, now),
-                            sender_request_id: request.request_id.clone(),
-                        }),
-                    )?],
-                    mail::CentralMailAnswer::Queued {
-                        message_id: message.message_id,
-                    },
-                ))
+                delivery_ready = Some(plan.delivery_ready);
+                Ok((vec![plan.insert], plan.answer))
             }
         } else {
             self.plan_timer_request(&request.operation, now).await?
@@ -204,7 +193,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             .statement_host()
             .run_batch(StatementBatch {
                 statements,
-                alarm: central_mail_store::alarm_update(),
+                alarm: alarm_update(),
             })
             .await
         {

@@ -4,9 +4,10 @@ use central_link_protocol::{
     DataFrame, FrameDirection, LinkFrame, LinkRequest, LinkRequestBatch, ReplyPayload,
     RequestPayload, RequestRefusal, RequestStatusAnswer, RequestStatusQuery,
 };
+use collaboration_central_core::MachineLinkRequestAuthority;
 use collaboration_central_core::WorkspaceCaller;
-use collaboration_central_core::{MachineLinkRequestAuthority, MailAckIgnored, MailAckSettlement};
 use fleet_contracts::MachineConnectionAttachment;
+use fleet_contracts::mail_link::{MailAckIgnored, MailAckSettlement};
 use fleet_runtime_ports::Clock;
 use worker::{
     Request, Response, Result, WebSocket, WebSocketIncomingMessage, WebSocketPair,
@@ -277,7 +278,7 @@ impl CentralObject {
         socket: &WebSocket,
         attachment: &MachineConnectionAttachment,
     ) -> Result<()> {
-        use collaboration_central_core::{WELCOME_PAGE_SIZE, WelcomeDeliveryPage};
+        use fleet_contracts::mail_link::{WELCOME_PAGE_SIZE, WelcomeDeliveryPage};
         let mut cursor = None;
         loop {
             let page = runtime
@@ -289,7 +290,7 @@ impl CentralObject {
             };
             cursor = rows
                 .last()
-                .map(collaboration_central_core::WindowedDelivery::cursor);
+                .map(fleet_contracts::mail_link::WindowedDelivery::cursor);
             let count = rows.len();
             for row in rows {
                 if !self
@@ -339,7 +340,7 @@ impl CentralObject {
         attachment: &MachineConnectionAttachment,
         message_id: &workspace_ids::MessageId,
     ) -> Result<bool> {
-        use collaboration_central_core::WindowedDeliveryDecision;
+        use fleet_contracts::mail_link::WindowedDeliveryDecision;
         let decision = runtime
             .prepare_windowed_delivery(attachment, message_id)
             .await

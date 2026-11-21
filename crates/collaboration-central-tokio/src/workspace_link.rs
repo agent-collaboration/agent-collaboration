@@ -15,11 +15,12 @@ use central_link_protocol::{
     RequestRefusal, RequestStatusAnswer, TokenRenewalRefusal, TokenRenewalResult, decode_text,
     encode_text,
 };
-use collaboration_central_core::{
-    MachineLinkRequestAuthority, MailAckIgnored, MailAckSettlement, WELCOME_PAGE_SIZE,
-    WelcomeDeliveryPage, WindowedDeliveryDecision, WorkspaceRuntime,
-};
+use collaboration_central_core::{MachineLinkRequestAuthority, WorkspaceRuntime};
 use collaboration_central_core::{ValidatedMachineConnection, WorkspaceCaller};
+use fleet_contracts::mail_link::{
+    MailAckIgnored, MailAckSettlement, WELCOME_PAGE_SIZE, WelcomeDeliveryPage,
+    WindowedDeliveryDecision,
+};
 use fleet_identity_protocol::OrganizationId;
 use futures_util::FutureExt;
 use std::sync::Arc;
@@ -369,7 +370,7 @@ async fn send_welcome_backlog(
         };
         cursor = rows
             .last()
-            .map(collaboration_central_core::WindowedDelivery::cursor);
+            .map(fleet_contracts::mail_link::WindowedDelivery::cursor);
         let count = rows.len();
         for row in rows {
             if !offer_windowed_delivery(

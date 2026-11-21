@@ -1,23 +1,20 @@
 //! Core's concrete timed jobs and whole-unit execution.
 use crate::WorkspaceRuntime;
-use crate::engine::{
-    machines::{
-        automation_timer,
-        direct_message::DirectMessage,
-        direct_message_store::DirectMessageStore,
-        system_message_expiry::{ExpireAt, SystemMessageExpiry, SystemMessageExpiryStore},
-        timer_store::{AutomationStore, WakeStore},
-        wake_timer,
-    },
-    query_registry,
-};
+#[cfg(feature = "test-support")]
+use crate::engine::query_registry;
 use central_engine_model::{DueRow, EngineTime, InstanceKey, MachineKind, RetirementThreshold};
 use central_storage::{AlarmUpdate, StatementBatch};
 use fleet_contracts::{AlarmResult, EngineSubject, LegacyUnitOutcome, ObservedControl};
 use fleet_engine::{
     DueCutoff, Engine, TimedRowOutcome, TimedRows, TimedSource, WholeUnit, WholeUnitOutcome,
 };
+use fleet_mail::{
+    DirectMessage, DirectMessageEvent, DirectMessageStore, ExpireAt, SystemMessageExpiry,
+    SystemMessageExpiryStore, insert_message,
+};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_schedules::{self as automation_timer, AutomationStore};
+use fleet_wakes::{self as wake_timer, WakeStore};
 
 #[derive(Clone, Copy)]
 pub enum DueKind {
@@ -43,10 +40,10 @@ impl DueKind {
     }
     fn sql(self) -> &'static str {
         match self {
-            Self::Wake => query_registry::WAKE_LIST,
-            Self::Automation => query_registry::AUTOMATION_LIST,
-            Self::DirectMessage => query_registry::DIRECT_MESSAGE_LIST,
-            Self::SystemMessageExpiry => query_registry::SYSTEM_MESSAGE_EXPIRY_LIST,
+            Self::Wake => fleet_wakes::WAKE_LIST,
+            Self::Automation => fleet_schedules::AUTOMATION_LIST,
+            Self::DirectMessage => fleet_mail::DIRECT_MESSAGE_LIST,
+            Self::SystemMessageExpiry => fleet_mail::SYSTEM_MESSAGE_EXPIRY_LIST,
             #[cfg(feature = "test-support")]
             Self::Probe => query_registry::PROBE_LIST,
         }
@@ -100,7 +97,7 @@ impl<H: CentralStore, S: WorkspaceStores> TimedRows<WorkspaceRuntime<H, S>> for 
             DueKind::Wake => {
                 engine
                     .run_machine_unit::<wake_timer::WakeTimer, _>(
-                        &WakeStore(runtime),
+                        &WakeStore::new(runtime, insert_message),
                         row,
                         "automation_wakes.due_at",
                         |occurrence| wake_timer::Event::Due { occurrence },
@@ -110,7 +107,7 @@ impl<H: CentralStore, S: WorkspaceStores> TimedRows<WorkspaceRuntime<H, S>> for 
             DueKind::Automation => {
                 engine
                     .run_machine_unit::<automation_timer::AutomationTimer, _>(
-                        &AutomationStore(runtime),
+                        &AutomationStore::new(runtime, insert_message),
                         row,
                         "automation_schedules.next_due_at",
                         |occurrence| automation_timer::Event::Due { occurrence },
@@ -120,19 +117,17 @@ impl<H: CentralStore, S: WorkspaceStores> TimedRows<WorkspaceRuntime<H, S>> for 
             DueKind::DirectMessage => {
                 engine
                     .run_machine_unit::<DirectMessage, _>(
-                        &DirectMessageStore(runtime),
+                        &DirectMessageStore::new(runtime),
                         row,
                         "mail_messages.cancel_due_at",
-                        |occurrence| crate::engine::machines::direct_message::Event::Due {
-                            occurrence,
-                        },
+                        |occurrence| DirectMessageEvent::Due { occurrence },
                     )
                     .await
             }
             DueKind::SystemMessageExpiry => {
                 engine
                     .run_machine_unit::<SystemMessageExpiry, _>(
-                        &SystemMessageExpiryStore(runtime),
+                        &SystemMessageExpiryStore::new(runtime),
                         row,
                         "mail_messages.delivery_window_ends_at",
                         ExpireAt,

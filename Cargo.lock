@@ -807,6 +807,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "central-engine-test-support"
+version = "0.1.157"
+dependencies = [
+ "central-engine-model",
+ "sqlx",
+ "uuid",
+ "workspace-ids",
+]
+
+[[package]]
 name = "central-link-client"
 version = "0.1.157"
 dependencies = [
@@ -1411,6 +1421,7 @@ dependencies = [
  "collaboration-central-core",
  "fleet-contracts",
  "fleet-identity-protocol",
+ "fleet-mail",
  "fleet-runtime",
  "fleet-runtime-ports",
  "fleet-storage-schema",
@@ -1467,15 +1478,20 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "central-engine-model",
+ "central-engine-test-support",
  "central-link-protocol",
  "central-storage",
  "chrono",
  "fleet-contracts",
  "fleet-engine",
  "fleet-identity-protocol",
+ "fleet-mail",
  "fleet-runtime",
  "fleet-runtime-ports",
+ "fleet-schedules",
  "fleet-storage-schema",
+ "fleet-timer-policy",
+ "fleet-wakes",
  "fleet-workspace-access",
  "futures-util",
  "hegeltest",
@@ -1515,6 +1531,7 @@ dependencies = [
  "collaboration-central-tokio",
  "fleet-contracts",
  "fleet-identity-protocol",
+ "fleet-mail",
  "fleet-runtime",
  "fleet-runtime-ports",
  "fleet-storage-schema",
@@ -2434,6 +2451,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "fleet-mail"
+version = "0.1.157"
+dependencies = [
+ "central-engine-model",
+ "central-engine-test-support",
+ "central-storage",
+ "chrono",
+ "fleet-contracts",
+ "fleet-engine",
+ "fleet-runtime-ports",
+ "fleet-workspace-access",
+ "hegeltest",
+ "serde",
+ "serde_json",
+ "workspace-ids",
+ "workspace-model",
+]
+
+[[package]]
 name = "fleet-runtime"
 version = "0.1.157"
 dependencies = [
@@ -2464,6 +2500,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "fleet-schedules"
+version = "0.1.157"
+dependencies = [
+ "agent-automation",
+ "central-engine-model",
+ "central-engine-test-support",
+ "central-storage",
+ "chrono",
+ "fleet-contracts",
+ "fleet-engine",
+ "fleet-runtime-ports",
+ "fleet-timer-policy",
+ "hegeltest",
+ "serde",
+ "serde_json",
+ "workspace-ids",
+ "workspace-model",
+]
+
+[[package]]
 name = "fleet-storage-schema"
 version = "0.1.157"
 dependencies = [
@@ -2479,6 +2535,36 @@ dependencies = [
  "fleet-runtime-ports",
  "sqlx",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "fleet-timer-policy"
+version = "0.1.157"
+dependencies = [
+ "central-engine-model",
+ "chrono",
+ "serde",
+]
+
+[[package]]
+name = "fleet-wakes"
+version = "0.1.157"
+dependencies = [
+ "central-engine-model",
+ "central-engine-test-support",
+ "central-storage",
+ "chrono",
+ "fleet-contracts",
+ "fleet-engine",
+ "fleet-runtime-ports",
+ "fleet-timer-policy",
+ "hegeltest",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "workspace-ids",
+ "workspace-model",
 ]
 
 [[package]]

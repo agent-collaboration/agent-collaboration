@@ -39,10 +39,10 @@ pub async fn prepare_central_alarm(
 ) -> Result<CentralOrganizationIdentity, StoreFailure> {
     let identity = read_central_organization(host).await?;
     if identity == CentralOrganizationIdentity::Unprovisioned {
-        crate::central_mail_store::applied(
+        crate::central_statement_values::applied(
             host.run_batch(central_storage::StatementBatch {
                 statements: vec![],
-                alarm: crate::central_mail_store::alarm_update(),
+                alarm: crate::engine::query_registry::alarm_update(),
             })
             .await?,
         )?;

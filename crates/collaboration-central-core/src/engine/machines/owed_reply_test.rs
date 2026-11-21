@@ -294,7 +294,7 @@ fn owed_reply_sequences_leave_refusals_unchanged_and_finish_once(case: hegel::Te
             _ => Event::RetentionEnded,
         };
         let before = state.clone();
-        match crate::engine::machine_property_support::checked_step::<OwedReply>(
+        match central_engine_test_support::checked_step::<OwedReply>(
             &state,
             event,
             now,

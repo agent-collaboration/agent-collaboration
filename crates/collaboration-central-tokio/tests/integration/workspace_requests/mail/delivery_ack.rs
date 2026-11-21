@@ -1,5 +1,5 @@
 use super::super::{Statement, support::*};
-use collaboration_central_core::{MailAckIgnored, MailAckSettlement};
+use fleet_contracts::mail_link::{MailAckIgnored, MailAckSettlement};
 use router_clock::RuntimeClock;
 use workspace_model::central_mail::{
     CentralMailAnswer, CentralMailOperation, CentralMailRequest, CentralMailResult, DeliveryAnswer,
@@ -62,7 +62,7 @@ async fn a_live_recipient_can_settle_once_after_cancel_and_another_machine_canno
         MailAckSettlement::Ignored(MailAckIgnored::WrongMachine)
     );
 
-    let cancel_at = collaboration_central_core::message_deadline::cancel_due_at(sent_at, sent_at);
+    let cancel_at = fleet_mail::message_deadline::cancel_due_at(sent_at, sent_at);
     fixture.set_utc(cancel_at).await;
     runtime.after_event().await.unwrap();
     let recipient = fixture
