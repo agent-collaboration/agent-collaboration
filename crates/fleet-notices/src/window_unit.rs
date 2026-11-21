@@ -33,7 +33,8 @@ impl<Host: CentralStore> DueWindowPlan<'_, Host> {
         self.deliveries.len()
     }
 
-    /// Apply the planned batch while the caller still holds the central turn.
+    /// Apply under the same central turn used for planning.
+    /// Release readiness hints only after the batch succeeds.
     pub async fn apply_held(self) -> Result<Vec<MailDeliveryReady>, LegacyUnitOutcome> {
         LegacyUnitOutcome::batch(
             self.store
@@ -47,7 +48,12 @@ impl<Host: CentralStore> DueWindowPlan<'_, Host> {
     }
 }
 
-/// The caller holds the central turn and supplies the mailbox for this execution.
+/// Plan due windows while holding the central turn and using a mailbox over
+/// the same runtime. Pass the Engine's subject and observed control for this
+/// exact window run.
+///
+/// Apply a successful plan once under that same turn, or abandon it without
+/// reporting the unit complete.
 pub async fn plan_due_windows_held<'store, Host: CentralStore, Stores: WorkspaceStores>(
     execution: &'store FleetRuntime<Host, Stores>,
     mailbox: &impl NoticeMailbox,

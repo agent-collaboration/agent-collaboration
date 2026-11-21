@@ -11,6 +11,8 @@ use fleet_runtime_ports::{
 use workspace_model::{ActorIdentityId, NoticeCadence, Timestamp};
 
 /// The caller holds the central turn and has admitted the requesting session.
+/// Apply these statements in that request's batch with its retained answer
+/// and alarm update.
 pub async fn plan_notice_cadence_held(
     host: &impl CentralStore,
     actor: &ActorIdentityId,

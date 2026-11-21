@@ -8,6 +8,9 @@ use workspace_model::{
     central_mail::{NoticeItem, NoticeSource},
 };
 
+/// Validate queued notices or plan mailbox writes. The caller owns applying
+/// those writes. The readiness hint from a sourced notice belongs to its
+/// planned INSERT.
 pub trait NoticeMailbox: Sync {
     /// The caller holds the central turn for the notice planning batch.
     fn validate_queued_notices_held(&self)
@@ -22,6 +25,7 @@ pub trait NoticeMailbox: Sync {
         now: Timestamp,
     ) -> impl Future<Output = Result<Vec<GuardedStatement>, StoreFailure>> + Send + 'a;
 
+    /// Plan a sourced notice INSERT and return its paired delivery hint.
     fn plan_sourced_notice(
         &self,
         target: SessionRef,

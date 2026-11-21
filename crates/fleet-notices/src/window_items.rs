@@ -17,7 +17,13 @@ pub(crate) async fn window_notice_items<Host: CentralStore, Stores: WorkspaceSto
     execution: &FleetRuntime<Host, Stores>,
     window: &NotificationWindowId,
 ) -> Result<Vec<mail::NoticeItem>, LegacyUnitOutcome> {
-    let rows=execution.statement_host().read(Statement{sql:"SELECT window_item_id,workspace_id,thread_id,change_id FROM mail_notification_window_items WHERE window_id=? ORDER BY workspace_id,change_id",args:vec![text(window)]}).await?;
+    let rows = execution
+        .statement_host()
+        .read(Statement {
+            sql: "SELECT window_item_id,workspace_id,thread_id,change_id FROM mail_notification_window_items WHERE window_id=? ORDER BY workspace_id,change_id",
+            args: vec![text(window)]
+        })
+        .await?;
     let mut grouped: std::collections::BTreeMap<WorkspaceId, Vec<(ChangeId, Option<ThreadId>)>> =
         Default::default();
     for row in &rows.rows {
@@ -51,7 +57,18 @@ pub(crate) async fn window_notice_items<Host: CentralStore, Stores: WorkspaceSto
         let encoded = serde_json::to_string(&ids)
             .map(text)
             .map_err(|_| corrupt("mail JSON"))?;
-        let rows=execution.read_workspace(&workspace,Statement{sql:"SELECT json_object('changeId',change_id,'position',position,'item',json_object('kind',item_kind,'id',item_id),'actor',actor,'changeKind',change_kind,'threadId',thread_id,'projectId',project_id,'subjectActor',subject_actor,'role',role,'createdAt',created_at) AS payload FROM workspace_changes WHERE change_id IN (SELECT value FROM json_each(?)) ORDER BY position",args:vec![encoded]}).await.map_err(|failure| match failure { StoreFailure::Unavailable | StoreFailure::AlarmUnpublishable { .. } => LegacyUnitOutcome::RemoteUnavailable { workspaces: vec![workspace.clone()] }, failure @ (StoreFailure::Corrupt { .. } | StoreFailure::AnswerLost) => failure.into() })?;
+        let rows = execution
+            .read_workspace(&workspace, Statement {
+                sql: "SELECT json_object('changeId',change_id,'position',position,'item',json_object('kind',item_kind,'id',item_id),'actor',actor,'changeKind',change_kind,'threadId',thread_id,'projectId',project_id,'subjectActor',subject_actor,'role',role,'createdAt',created_at) AS payload FROM workspace_changes WHERE change_id IN (SELECT value FROM json_each(?)) ORDER BY position",
+                args: vec![encoded]
+            })
+            .await
+            .map_err(|failure| match failure {
+                StoreFailure::Unavailable | StoreFailure::AlarmUnpublishable { .. } => LegacyUnitOutcome::RemoteUnavailable {
+                    workspaces: vec![workspace.clone()]
+                },
+                failure @ (StoreFailure::Corrupt { .. } | StoreFailure::AnswerLost) => failure.into()
+            })?;
         if rows.rows.len() != changes.len() {
             return Err(corrupt("mail_notification_window_items.change_id").into());
         }

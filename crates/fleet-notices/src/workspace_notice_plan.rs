@@ -14,6 +14,9 @@ use fleet_workspace_access::{WorkspaceAccess, workspace_row_codec::WorkspaceRows
 use workspace_model as m;
 use workspace_model::{Timestamp, WorkspaceId};
 
+/// Ordered notice statements and counts for a workspace drain. Under the same
+/// central turn used for planning, append the drain's cursor compare-and-set
+/// after these statements and apply them together in one alarm-updating batch.
 pub struct WorkspaceNoticePlan {
     pub statements: Vec<GuardedStatement>,
     pub window_items_added: usize,
@@ -21,6 +24,8 @@ pub struct WorkspaceNoticePlan {
 }
 
 /// The caller holds the central turn and supplies the mailbox for this execution.
+/// Append the cursor compare-and-set after the returned statements and commit
+/// them together with the alarm update while still holding that turn.
 pub async fn plan_workspace_notices_held<Host: CentralStore, Stores: WorkspaceStores>(
     execution: &FleetRuntime<Host, Stores>,
     mailbox: &impl NoticeMailbox,
