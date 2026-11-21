@@ -6,7 +6,8 @@
  * Generated once from commit afc76c82cfad3375e2861b1720084aae0530a6f4 (`git ls-tree -r --name-only afc76c82c`) by the rule
  * `LEDGER_BASE` records: paths under every crate's and provider package's `src` directory (`crates/<name>/src/`, `providers/<name>/src/`), leaving out by
  * name only colocated unit tests (`*_test.rs`, `*_tests.rs`), sorted. 2656 files, split
- * into parts to keep every file under 1,000 lines.
+ * into parts to keep every file under 1,000 lines. The provider settings entries
+ * follow their relocation and split in PR 291.
  */
 import { files as part1 } from "./ledger-base-files/part-1.ts";
 import { files as part2 } from "./ledger-base-files/part-2.ts";

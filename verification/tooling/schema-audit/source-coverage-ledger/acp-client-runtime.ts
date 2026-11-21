@@ -169,8 +169,8 @@ export const section: LedgerSection = {
     },
     {
       file: `${R}provider_behavior.rs`,
-      disposition: { kind: "none" },
-      note: "ProviderBehavior trait; its model-metadata decode is implemented in acp-provider-adapters",
+      disposition: { kind: "defines", owners: ["router-extension"] },
+      note: "ModelMetadataSource names the connection method (:32); the adapter implements the metadata decode",
     },
     {
       file: `${R}provider_capability_report.rs`,
@@ -191,11 +191,6 @@ export const section: LedgerSection = {
       file: `${R}provider_model_picker.rs`,
       disposition: { kind: "none" },
       note: "enum that selects the Cursor parameterizedModelPicker capability (:4); the wire write is in provider_initialize_request.rs",
-    },
-    {
-      file: `${R}provider_model_reasoning.rs`,
-      disposition: { kind: "defines", owners: ["router-extension"] },
-      note: "ModelReasoningUnknown derives serde (:7); ModelMetadataSource names the connection method (:18); validated types for _meta.codexRouter.modelReasoning",
     },
     {
       file: `${R}provider_persistence_target.rs`,
@@ -229,18 +224,13 @@ export const section: LedgerSection = {
     },
     {
       file: `${R}provider_session_settings.rs`,
-      disposition: { kind: "converts", owners: ["router-vocabulary"] },
-      note: "typed settings structs, not serialized; ProviderSettingKind::as_str names mode, model, effort by hand (:38-46); to_session_settings converts the catalog to session_event_model::SessionSettings (:120-146)",
-    },
-    {
-      file: `${R}provider_setting_choice.rs`,
       disposition: { kind: "none" },
-      note: "value and label pair",
+      note: "Typed ACP client setting requests and results; catalogue values live in provider-session-machines",
     },
     {
       file: `${R}provider_settings_catalog_codec.rs`,
       disposition: { kind: "converts", owners: ["acp", "router-extension"] },
-      note: "NewSessionResponse and config options to catalog (:13, :74, :106); reads _meta.codexRouter.modelReasoning (:50-62)",
+      note: "NewSessionResponse to catalogue (:13), live settings notification to owner observation (:97), and _meta.codexRouter.modelReasoning decoding (:56)",
     },
     {
       file: `${R}provider_transport_diagnostics.rs`,

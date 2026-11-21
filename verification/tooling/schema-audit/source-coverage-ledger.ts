@@ -70,6 +70,7 @@ import { section as lifecycleObservation } from "./source-coverage-ledger/lifecy
 import { section as messageBoard } from "./source-coverage-ledger/message-board.ts";
 import { section as nodeTestFixture } from "./source-coverage-ledger/node-test-fixture.ts";
 import { section as ownedProcessTestSupport } from "./source-coverage-ledger/owned-process-test-support.ts";
+import { section as providerSessionMachines } from "./source-coverage-ledger/provider-session-machines.ts";
 import { section as providersClaudeAcp } from "./source-coverage-ledger/providers-claude-acp.ts";
 import { section as routerClock } from "./source-coverage-ledger/router-clock.ts";
 import { section as sessionEventModel } from "./source-coverage-ledger/session-event-model.ts";
@@ -150,6 +151,7 @@ export const LEDGER_SECTIONS: readonly LedgerSection[] = [
   messageBoard,
   nodeTestFixture,
   ownedProcessTestSupport,
+  providerSessionMachines,
   providersClaudeAcp,
   routerClock,
   sessionEventModel,

@@ -74,7 +74,7 @@ export const rows: InventoryRow[] = [
   },
   {
     file: `${R}provider_settings_catalog_codec.rs`,
-    line: 50,
+    line: 56,
     owner: "router-extension",
     kind: "content-parser",
     defines:
@@ -84,12 +84,21 @@ export const rows: InventoryRow[] = [
     disposition: "boundary-encoding",
   },
   {
-    file: `${R}provider_model_reasoning.rs`,
-    line: 7,
+    file: "crates/provider-session-machines/src/provider_model_reasoning.rs",
+    line: 8,
     owner: "router-extension",
     kind: "rust-type",
-    defines:
-      "ModelReasoningUnknown (serde) and ModelMetadataSource naming the connection method string",
+    defines: "ModelReasoningUnknown (serde) and validated provider model-reasoning descriptors",
+    usedBy: [{ part: "N6" }, { part: "N12" }],
+    duplicateGroup: "router-extension-meta",
+    disposition: "boundary-encoding",
+  },
+  {
+    file: `${R}provider_behavior.rs`,
+    line: 32,
+    owner: "router-extension",
+    kind: "rust-type",
+    defines: "ModelMetadataSource names where the adapter reads metadata and the connection method",
     usedBy: [{ part: "N6" }, { part: "N12" }],
     duplicateGroup: "router-extension-meta",
     disposition: "boundary-encoding",
@@ -591,12 +600,12 @@ export const rows: InventoryRow[] = [
     disposition: "boundary-encoding",
   },
   {
-    file: `${R}provider_session_settings.rs`,
-    line: 111,
+    file: "crates/provider-session-machines/src/provider_settings_catalog.rs",
+    line: 125,
     owner: "router-vocabulary",
     kind: "rust-type",
     defines:
-      "ProviderSettingsCatalog::to_session_settings: effective mode, model, effort and each Select or Boolean config option mapped to session_event_model::SessionSettings, published in SessionEvent::SettingsChanged (provider_session_setting_update.rs:127, provider_connection_task.rs:382, :455, provider_prompt_observation.rs:196)",
+      "ProviderSettingsCatalog::to_session_settings maps the effective mode, model, effort and each Select or Boolean option into the session owner's SettingsChanged publication",
     usedBy: [{ part: "N6" }, { part: "N3" }],
     duplicateGroup: null,
     disposition: "boundary-encoding",
@@ -607,7 +616,7 @@ export const rows: InventoryRow[] = [
     owner: "acp",
     kind: "rust-type",
     defines:
-      "catalog_from_session_response: decoded NewSessionResponse available mode ids and names and the current mode id copied into ProviderSettingsCatalog (13-46); apply_settings_update maps CurrentModeUpdate and ConfigOptionUpdate into the same catalog (74-103)",
+      "catalog_from_session_response converts NewSessionResponse into ProviderSettingsCatalog (13-43); decode_settings_update converts CurrentModeUpdate and ConfigOptionUpdate to protocol-neutral observations (97-115)",
     usedBy: [{ part: "N6" }],
     duplicateGroup: null,
     disposition: "boundary-encoding",
