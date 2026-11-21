@@ -2639,7 +2639,6 @@ dependencies = [
 name = "fleet-workspace-service"
 version = "0.1.157"
 dependencies = [
- "central-storage",
  "fleet-contracts",
  "fleet-storage-schema",
  "serde_json",

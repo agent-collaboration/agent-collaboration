@@ -1,5 +1,4 @@
 use super::WorkspaceService;
-use central_storage::CorruptReason;
 use fleet_contracts::{
     ReadWorkspaceRequestStatus, RetainedWorkspaceStatus, WorkspaceResponse, WorkspaceServiceRpc,
     WorkspaceStatusFailure,
@@ -92,11 +91,7 @@ async fn damaged_answer_is_corrupt_even_for_the_other_actor() -> TestResult<()> 
     for actor in [ACTOR, FOREIGN] {
         assert_eq!(
             status(&db, REQUEST, actor).await?,
-            Err(WorkspaceStatusFailure::Corrupt {
-                reason: CorruptReason::BadValue {
-                    column: "workspace_request_log.answer".to_owned()
-                }
-            })
+            Err(WorkspaceStatusFailure::Corrupt)
         );
     }
     sqlx::query("UPDATE workspace_request_log SET answer = ? WHERE request_id = ?")
@@ -107,11 +102,7 @@ async fn damaged_answer_is_corrupt_even_for_the_other_actor() -> TestResult<()> 
     for actor in [ACTOR, FOREIGN] {
         assert_eq!(
             status(&db, REQUEST, actor).await?,
-            Err(WorkspaceStatusFailure::Corrupt {
-                reason: CorruptReason::BadValue {
-                    column: "answer".to_owned()
-                }
-            })
+            Err(WorkspaceStatusFailure::Corrupt)
         );
     }
     Ok(())
@@ -184,22 +175,32 @@ fn status_wire_rejects_nonretained_results_and_unknown_fields() {
 }
 
 #[test]
-fn workspace_status_reply_cannot_report_transport_loss() {
-    let wire = json!({
-        "kind": "readRequestStatus",
-        "reply": {"Err": {"kind": "answerLost"}}
-    });
-    let decoded = serde_json::from_value::<WorkspaceResponse>(wire);
-    assert!(
-        decoded.is_err(),
-        "server reply reported transport loss: {decoded:?}"
-    );
+fn workspace_status_reply_accepts_only_unit_service_failures() {
+    let reply = |failure| json!({"kind": "readRequestStatus", "reply": {"Err": failure}});
+    for failure in [
+        json!({"kind": "answerLost"}),
+        json!({"kind": "corrupt", "reason": {"kind": "unknownKind", "column": "answer"}}),
+        json!({"kind": "corrupt", "reason": null}),
+        json!({"kind": "unavailable", "extra": true}),
+    ] {
+        let wire = reply(failure);
+        let decoded = serde_json::from_value::<WorkspaceResponse>(wire.clone());
+        assert!(
+            decoded.is_err(),
+            "unexpected service failure for {wire}: {decoded:?}"
+        );
+    }
+    for kind in ["unavailable", "corrupt"] {
+        let wire = reply(json!({"kind": kind}));
+        let decoded = serde_json::from_value::<WorkspaceResponse>(wire.clone()).unwrap();
+        assert_eq!(serde_json::to_value(decoded).unwrap(), wire);
+    }
 }
 
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Compare the exact corruption reason for both actors"
+    reason = "Compare the exact failure for both actors"
 )]
 async fn retained_page_is_corrupt_for_original_and_foreign_actors() -> TestResult<()> {
     let db = database().await?;
@@ -210,11 +211,12 @@ async fn retained_page_is_corrupt_for_original_and_foreign_actors() -> TestResul
     insert_receipt(&db, REQUEST, FRESH, &serde_json::to_string(&page)?).await?;
     let original = status(&db, REQUEST, ACTOR).await?;
     let foreign = status(&db, REQUEST, FOREIGN).await?;
-    let failure = WorkspaceStatusFailure::Corrupt {
-        reason: CorruptReason::BadValue {
-            column: "request log answer".into(),
-        },
-    };
-    assert_eq!([original, foreign], [Err(failure.clone()), Err(failure)]);
+    assert_eq!(
+        [original, foreign],
+        [
+            Err(WorkspaceStatusFailure::Corrupt),
+            Err(WorkspaceStatusFailure::Corrupt)
+        ]
+    );
     Ok(())
 }

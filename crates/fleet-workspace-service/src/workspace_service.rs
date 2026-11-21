@@ -1,4 +1,4 @@
-use crate::workspace_repository::{WorkspaceRepo, corrupt};
+use crate::workspace_repository::WorkspaceRepo;
 use fleet_contracts::{
     ReadWorkspaceRequestStatus, RetainedWorkspaceStatus, RetainedWriteAnswer, WorkspaceServiceRpc,
     WorkspaceStatusFailure,
@@ -58,7 +58,7 @@ where
             }
             WorkspaceResult::Conflict
             | WorkspaceResult::OutcomeUnknown
-            | WorkspaceResult::CentralUnavailable => return Err(corrupt("request log answer")),
+            | WorkspaceResult::CentralUnavailable => return Err(WorkspaceStatusFailure::Corrupt),
         };
         if caller != call.actor {
             return Ok(RetainedWorkspaceStatus::NotFound);
@@ -91,7 +91,7 @@ fn retained_write_answer(
         | WorkspaceAnswer::Page { .. }
         | WorkspaceAnswer::References { .. }
         | WorkspaceAnswer::Links { .. }
-        | WorkspaceAnswer::Inbox { .. } => return Err(corrupt("request log answer")),
+        | WorkspaceAnswer::Inbox { .. } => return Err(WorkspaceStatusFailure::Corrupt),
     })
 }
 

@@ -3,8 +3,8 @@ use central_link_protocol::{
     CorrelationId, DataFrame, ReplyPayload, RequestScope, RequestStatusAnswer, RequestStatusQuery,
 };
 use central_storage::{
-    AlarmUpdate, BatchOutcome, CorruptReason, GuardedStatement, ReadOutcome, RowExpectation,
-    SqlValue, Statement, StatementBatch, StoreFailure,
+    AlarmUpdate, BatchOutcome, GuardedStatement, ReadOutcome, RowExpectation, SqlValue, Statement,
+    StatementBatch,
 };
 use collaboration_central_conformance::ConformanceResult as Result;
 use fleet_rpc::Envelope;
@@ -408,9 +408,7 @@ async fn check_corruption(
         envelope.body,
         json!({
             "kind": "readRequestStatus",
-            "reply": {"Err": StoreFailure::Corrupt {
-                reason: CorruptReason::BadValue { column: "answer".into() },
-            }}
+            "reply": {"Err": {"kind": "corrupt"}}
         })
     );
 

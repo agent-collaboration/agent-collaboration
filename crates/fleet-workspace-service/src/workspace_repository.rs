@@ -1,4 +1,3 @@
-use central_storage::CorruptReason;
 use fleet_contracts::{ReadWorkspaceRequestStatus, WorkspaceStatusFailure};
 use sqlx::{ColumnIndex, Database, Decode, Encode, Executor, IntoArguments, Type};
 use workspace_model::{ActorIdentityId, WorkspaceResult};
@@ -44,32 +43,23 @@ impl WorkspaceRepo {
         let row = match rows.as_slice() {
             [] => return Ok(None),
             [row] => row,
-            _ => return Err(corrupt("request log request_id")),
+            _ => return Err(WorkspaceStatusFailure::Corrupt),
         };
         let caller = row
             .caller
             .parse()
-            .map_err(|_| corrupt("request log caller"))?;
-        let answer = serde_json::from_str(&row.answer)
-            .map_err(|_| corrupt("workspace_request_log.answer"))?;
+            .map_err(|_| WorkspaceStatusFailure::Corrupt)?;
+        let answer =
+            serde_json::from_str(&row.answer).map_err(|_| WorkspaceStatusFailure::Corrupt)?;
         Ok(Some((caller, answer)))
     }
 }
 
 fn query_failure(error: sqlx::Error) -> WorkspaceStatusFailure {
     match error {
-        sqlx::Error::ColumnDecode { index, .. } => corrupt(index.trim_matches('"')),
-        sqlx::Error::ColumnNotFound(column) => WorkspaceStatusFailure::Corrupt {
-            reason: CorruptReason::MissingColumn { column },
-        },
+        sqlx::Error::ColumnDecode { .. } | sqlx::Error::ColumnNotFound(_) => {
+            WorkspaceStatusFailure::Corrupt
+        }
         _ => WorkspaceStatusFailure::Unavailable,
-    }
-}
-
-pub(crate) fn corrupt(column: &str) -> WorkspaceStatusFailure {
-    WorkspaceStatusFailure::Corrupt {
-        reason: CorruptReason::BadValue {
-            column: column.to_owned(),
-        },
     }
 }

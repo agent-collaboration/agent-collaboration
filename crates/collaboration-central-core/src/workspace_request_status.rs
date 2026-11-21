@@ -95,8 +95,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                         StoreFailure::Unavailable
                     }
                     CallError::AnswerLost => StoreFailure::AnswerLost,
-                    CallError::Service(WorkspaceStatusFailure::Corrupt { reason }) => {
-                        StoreFailure::Corrupt { reason }
+                    CallError::Service(WorkspaceStatusFailure::Corrupt) => {
+                        corrupt("request log answer")
                     }
                 })? {
                 RetainedWorkspaceStatus::NotFound => None,
