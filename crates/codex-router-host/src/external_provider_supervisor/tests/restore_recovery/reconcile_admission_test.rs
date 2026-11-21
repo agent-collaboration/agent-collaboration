@@ -1,16 +1,6 @@
 use super::*;
 use crate::external_provider_supervisor::supervisor_test_pauses::ReconcilePausePoint;
 
-fn admission_pause() -> (
-    AdmissionTestPause,
-    tokio::sync::oneshot::Receiver<()>,
-    tokio::sync::oneshot::Sender<()>,
-) {
-    let (entered, reached) = tokio::sync::oneshot::channel();
-    let (resume, release) = tokio::sync::oneshot::channel();
-    (AdmissionTestPause { entered, release }, reached, resume)
-}
-
 #[tokio::test(flavor = "current_thread")]
 async fn reconcile_rechecks_liveness_after_admission_commits_before_its_store_guard() {
     let rig = RestoreRig::new();

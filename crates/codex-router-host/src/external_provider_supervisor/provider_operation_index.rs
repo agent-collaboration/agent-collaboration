@@ -7,7 +7,13 @@
 //! unknown, and the live operations say which sends are still in flight.
 //! Every lock here is short and never held across an await.
 
-use super::{MAX_RETAINED_SETTLEMENTS, provider_operation_finish::Retention};
+use super::{
+    MAX_RETAINED_SETTLEMENTS,
+    provider_admission_policy::{
+        AdmissionBlockers, AdmissionRequest, DispatchMark, EarlierOperation,
+    },
+    provider_operation_finish::Retention,
+};
 use crate::binding_dispatch_permit::{BindingOutcomes, BindingUncertainty};
 use crate::provider_operation_custody::{CustodyEnd, LaneWriteCustody, OperationLifecycle};
 use collaboration_protocol::{
@@ -31,6 +37,11 @@ pub(super) struct LiveOperations {
     persistence_failed_order: VecDeque<OperationId>,
 }
 
+pub(super) enum Reservation {
+    Acquired,
+    Occupied(Arc<LiveOperation>),
+}
+
 /// One operation's live owner: its result once published, its binding and
 /// target, and its record on the operation record machine (design note
 /// §11.5, §12.5): reserving, admitted, may-have-dispatched under one
@@ -42,6 +53,7 @@ pub(super) struct LiveOperation {
     /// The binding it runs on; none for an operation a test holds.
     binding: Option<(EndpointRef, CodexGeneration)>,
     kind: Option<ProviderOperationKind>,
+    mark: DispatchMark,
     target: StdMutex<Option<SessionRef>>,
     lifecycle: Arc<OperationLifecycle>,
 }
@@ -54,6 +66,7 @@ impl LiveOperation {
             None,
             None,
             None,
+            DispatchMark::Deferred,
             OperationRecord::Admitted { queued: false },
         )
     }
@@ -63,11 +76,13 @@ impl LiveOperation {
         binding: &ProviderBindingIdentity,
         target: Option<SessionRef>,
         kind: ProviderOperationKind,
+        mark: DispatchMark,
     ) -> Self {
         Self::new(
             Some(binding),
             target,
             Some(kind),
+            mark,
             OperationRecord::Reserving,
         )
     }
@@ -77,6 +92,7 @@ impl LiveOperation {
             Some(binding),
             Some(target),
             Some(ProviderOperationKind::ConversationPrompt),
+            DispatchMark::Deferred,
             OperationRecord::Admitted { queued: true },
         )
     }
@@ -90,6 +106,7 @@ impl LiveOperation {
         binding: Option<&ProviderBindingIdentity>,
         target: Option<SessionRef>,
         kind: Option<ProviderOperationKind>,
+        mark: DispatchMark,
         record: OperationRecord,
     ) -> Self {
         let changed = Arc::new(Notify::new());
@@ -98,6 +115,7 @@ impl LiveOperation {
             changed: Arc::clone(&changed),
             binding: binding.map(|binding| (binding.endpoint.clone(), binding.generation.clone())),
             kind,
+            mark,
             target: StdMutex::new(target),
             lifecycle: Arc::new(OperationLifecycle::new(record, changed)),
         }
@@ -245,13 +263,16 @@ impl LiveOperation {
         let lifecycle = self.lifecycle.state();
         let record = lifecycle.custody.admission_record(lifecycle.record);
         lifecycle.custody.holds_custody()
-            && (matches!(
-                record,
-                OperationRecord::MayHaveDispatched { .. } | OperationRecord::SettlingUnknown { .. }
-            ) || matches!(record, OperationRecord::Admitted { queued: false })
-                && self
-                    .kind
-                    .is_some_and(|kind| kind != ProviderOperationKind::ConversationPrompt))
+            && (record == OperationRecord::Reserving && self.mark == DispatchMark::BeforeHandoff
+                || matches!(
+                    record,
+                    OperationRecord::MayHaveDispatched { .. }
+                        | OperationRecord::SettlingUnknown { .. }
+                )
+                || matches!(record, OperationRecord::Admitted { queued: false })
+                    && self
+                        .kind
+                        .is_some_and(|kind| kind != ProviderOperationKind::ConversationPrompt))
     }
 }
 
@@ -268,6 +289,29 @@ impl HeldResult {
 }
 
 impl LiveOperations {
+    pub(super) fn reserve(
+        &mut self,
+        binding: &ProviderBindingIdentity,
+        request: AdmissionRequest<'_>,
+        live: &Arc<LiveOperation>,
+        mut unknown: Vec<OperationId>,
+        unconfirmed_cancel: Option<&str>,
+    ) -> Result<Reservation, AdmissionBlockers> {
+        if let Some(prior) = self.operations.get(request.operation) {
+            return Ok(Reservation::Occupied(Arc::clone(prior)));
+        }
+        unknown.retain(|operation| {
+            request.blocked_by(operation, EarlierOperation::Unknown, unconfirmed_cancel)
+        });
+        let in_flight = self.in_flight_blockers(binding, request);
+        if !unknown.is_empty() || !in_flight.is_empty() {
+            return Err(AdmissionBlockers { unknown, in_flight });
+        }
+        self.operations
+            .insert(request.operation.clone(), Arc::clone(live));
+        Ok(Reservation::Acquired)
+    }
+
     pub(super) fn begin_lane_write(
         &self,
         operation: &OperationId,
@@ -328,21 +372,28 @@ impl LiveOperations {
 
     /// Sends still in flight on `binding` that an admission on `target`
     /// waits behind: the target's own, and binding-wide ones (no target).
-    pub(super) fn in_flight_on(
+    pub(super) fn in_flight_blockers(
         &self,
-        binding: &EndpointRef,
-        target: Option<&SessionRef>,
+        binding: &ProviderBindingIdentity,
+        request: AdmissionRequest<'_>,
     ) -> Vec<OperationId> {
         self.operations
             .iter()
-            .filter(|(_, operation)| {
-                operation.binding() == Some(binding)
+            .filter(|(id, operation)| {
+                operation
+                    .binding
+                    .as_ref()
+                    .is_some_and(|(endpoint, generation)| {
+                        endpoint == &binding.endpoint && generation == &binding.generation
+                    })
                     && operation.in_flight()
-                    && match (operation.target(), target) {
-                        (None, _) => true,
-                        (Some(held), Some(asking)) => &held == asking,
-                        (Some(_), None) => false,
-                    }
+                    && request.blocked_by(
+                        id,
+                        EarlierOperation::InFlight {
+                            target: operation.target().as_ref(),
+                        },
+                        None,
+                    )
             })
             .map(|(operation_id, _)| operation_id.clone())
             .collect()

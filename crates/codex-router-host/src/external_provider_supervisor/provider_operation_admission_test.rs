@@ -1,7 +1,8 @@
 //! Which stored operations count as the same request (D1 R15), and what an
 //! admission blocked by earlier sends answers (D1 M8).
 
-use super::{AdmissionBlockers, same_request};
+use super::super::provider_admission_policy::AdmissionBlockers;
+use super::same_request;
 use collaboration_protocol::{
     ConversationBindingIdentity, OperationId, ProviderOperationEffect, ProviderOperationKind,
     ProviderOperationStage, ProviderReconciliationState, SessionId, SessionRef,

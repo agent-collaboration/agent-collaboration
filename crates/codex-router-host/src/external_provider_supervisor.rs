@@ -1,5 +1,6 @@
 //! Host-owned admission and settlement for external ACP provider operations.
 
+mod provider_admission_policy;
 mod provider_operation_admission;
 mod provider_operation_index;
 #[cfg(test)]
@@ -536,7 +537,7 @@ impl ExternalProviderSupervisor {
             operation_kind,
             binding,
             known_target,
-            provider_operation_admission::DispatchMark::BeforeHandoff,
+            provider_admission_policy::DispatchMark::BeforeHandoff,
         )
         .await
     }

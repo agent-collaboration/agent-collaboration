@@ -3,6 +3,9 @@
 #[path = "restore_recovery/admission_budget_test.rs"]
 mod admission_budget_tests;
 
+#[path = "restore_recovery/admission_race_test.rs"]
+mod admission_race_tests;
+
 #[path = "restore_recovery/prompt_custody_test.rs"]
 mod prompt_custody_tests;
 
@@ -40,6 +43,16 @@ use collaboration_protocol::{
 };
 use collaboration_runtime::{EndpointDirectory, ProviderSessionEventHub, ProviderSessionRecord};
 use router_clock::{ClockInstant, ManualClock, RuntimeClock as _};
+
+fn admission_pause() -> (
+    AdmissionTestPause,
+    tokio::sync::oneshot::Receiver<()>,
+    tokio::sync::oneshot::Sender<()>,
+) {
+    let (entered, reached) = tokio::sync::oneshot::channel();
+    let (resume, release) = tokio::sync::oneshot::channel();
+    (AdmissionTestPause { entered, release }, reached, resume)
+}
 
 async fn wait_for_queued_input(
     host: &ExternalProviderSupervisor,

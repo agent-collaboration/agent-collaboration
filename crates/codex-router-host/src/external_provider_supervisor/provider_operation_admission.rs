@@ -9,13 +9,22 @@ use super::{
     ExternalProviderSupervisor, LiveOperation, OperationId, PreparedOperation,
     ProviderBindingIdentity, ProviderOperationAdmission, ProviderOperationAdmissionResult,
     ProviderOperationEffect, ProviderOperationKind, ProviderOperationRecord,
-    ProviderReconciliationState, SessionRef, admission_failure, failure, snapshot_failure,
-    snapshot_from_record, unavailable_failure,
+    ProviderReconciliationState, SessionRef, admission_failure, failure,
+    provider_admission_policy::{AdmissionRequest, DispatchMark},
+    provider_operation_index::Reservation,
+    snapshot_failure, snapshot_from_record, unavailable_failure,
 };
-use crate::provider_operation_custody::CustodyEnd;
+use crate::{binding_dispatch_permit::BindingUncertainty, provider_operation_custody::CustodyEnd};
 use router_clock::ClockInstant;
 use std::{future::Future, time::Duration};
 use tokio::sync::oneshot;
+
+#[derive(Default)]
+struct ReservationContext {
+    cell: Option<Arc<BindingUncertainty>>,
+    can_recover_close: bool,
+    unconfirmed_cancel: Option<String>,
+}
 
 const HOST_ADMISSION_BUDGET: Duration = Duration::from_secs(10);
 
@@ -38,53 +47,6 @@ fn admission_expired(
         operation.clone(),
         target.cloned(),
     )
-}
-
-/// When an admitted operation is marked as possibly dispatched.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum DispatchMark {
-    /// A retained lifecycle operation marks before handing off to the owner.
-    BeforeHandoff,
-    /// Later, when the owner authorizes a prompt or steer to dispatch.
-    Deferred,
-}
-
-/// What blocks an admission, by state: each state has its own next step.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub(super) struct AdmissionBlockers {
-    /// Earlier sends whose outcome is unknown: reconcile them first.
-    pub(super) unknown: Vec<OperationId>,
-    /// Sends still in flight on the same session (or binding-wide): wait
-    /// for them.
-    pub(super) in_flight: Vec<OperationId>,
-}
-
-impl AdmissionBlockers {
-    /// The refusal's one line: each blocking state and its valid next step
-    /// (D1 M8); none when nothing blocks.
-    pub(super) fn answer(&self) -> Option<String> {
-        let ids = |operations: &[OperationId]| {
-            operations
-                .iter()
-                .map(OperationId::as_str)
-                .collect::<Vec<_>>()
-                .join(", ")
-        };
-        let mut clauses = Vec::new();
-        if !self.unknown.is_empty() {
-            clauses.push(format!(
-                "an earlier prompt's outcome is unknown; check the session, then run operation reconcile for {}",
-                ids(&self.unknown)
-            ));
-        }
-        if !self.in_flight.is_empty() {
-            clauses.push(format!(
-                "an earlier send is still in flight; wait for {}",
-                ids(&self.in_flight)
-            ));
-        }
-        (!clauses.is_empty()).then(|| clauses.join("; "))
-    }
 }
 
 /// The refusal for an operation ID reused for a different request (R15).
@@ -166,44 +128,89 @@ impl ExternalProviderSupervisor {
         ))
     }
 
-    /// What blocks an admission on `known_target`: an earlier send's unknown
-    /// outcome with no live owner (the binding's uncertainty cell); and, for
-    /// an operation dispatched at admission, a send still in flight on the
-    /// same session (or binding-wide), as today's scan counted it.
-    pub(super) async fn admission_blockers(
+    /// Seed durable uncertainty and read owner state before the atomic reservation.
+    async fn reservation_context(
         &self,
         binding: &ProviderBindingIdentity,
-        known_target: Option<&SessionRef>,
-        mark: DispatchMark,
-        operation_kind: ProviderOperationKind,
-    ) -> Result<AdmissionBlockers, ()> {
+        request: AdmissionRequest<'_>,
+    ) -> Result<ReservationContext, ()> {
+        if !request.checks_blockers() {
+            return Ok(ReservationContext::default());
+        }
         let cell = self.inner.binding_uncertainty(binding).await?;
-        let can_recover_close = operation_kind.is_restore()
-            || known_target.is_some_and(|target| {
+        let can_recover_close = request.kind.is_restore()
+            || request.target.is_some_and(|target| {
                 self.owner_session_activity(target) != crate::ProviderSessionActivity::NotLoaded
             });
-        let mut unknown = crate::binding_dispatch_permit::lock(cell.outcomes.get().ok_or(())?)
-            .blockers(known_target, can_recover_close);
-        if operation_kind == ProviderOperationKind::ConversationClose
-            && let Some(input) = known_target
+        let unconfirmed_cancel = if request.kind == ProviderOperationKind::ConversationClose {
+            request
+                .target
                 .and_then(|target| self.owner_session_snapshot(target))
                 .and_then(|snapshot| snapshot.cancel_unconfirmed)
-        {
-            let foreground = input.operation.to_string();
-            unknown.retain(|operation| operation.as_str() != foreground);
-        }
-        let in_flight = if mark == DispatchMark::BeforeHandoff
-            && operation_kind != ProviderOperationKind::ConversationClose
-        {
-            self.inner
+                .map(|input| input.operation.to_string())
+        } else {
+            None
+        };
+        Ok(ReservationContext {
+            cell: Some(cell),
+            can_recover_close,
+            unconfirmed_cancel,
+        })
+    }
+
+    #[expect(
+        clippy::result_large_err,
+        reason = "The admission preserves its typed refusal."
+    )]
+    fn reserve_operation(
+        &self,
+        deadline: ClockInstant,
+        binding: &ProviderBindingIdentity,
+        request: AdmissionRequest<'_>,
+        context: &ReservationContext,
+        live: &Arc<LiveOperation>,
+    ) -> Result<Reservation, ConversationOperationFailure> {
+        let reserved = {
+            // Take binding outcomes before the live index, as the store lane does.
+            // All store reads finish before these guards. Reconcile may take the
+            // index under the store guard and releases the store before outcomes.
+            let outcomes = context
+                .cell
+                .as_ref()
+                .and_then(|cell| cell.outcomes.get())
+                .map(crate::binding_dispatch_permit::lock);
+            let mut operations = self
+                .inner
                 .live_operations
                 .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .in_flight_on(&binding.endpoint, known_target)
-        } else {
-            Vec::new()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if self.inner.clock.monotonic_now() >= deadline {
+                return Err(admission_expired(request.operation, request.target));
+            }
+            let unknown = outcomes.as_ref().map_or_else(Vec::new, |outcomes| {
+                outcomes.blockers(request.target, context.can_recover_close)
+            });
+            operations.reserve(
+                binding,
+                request,
+                live,
+                unknown,
+                context.unconfirmed_cancel.as_deref(),
+            )
         };
-        Ok(AdmissionBlockers { unknown, in_flight })
+        reserved.map_err(|blocking| {
+            let Some(answer) = blocking.answer() else {
+                return unavailable_failure(request.operation.clone(), request.target.cloned());
+            };
+            failure(
+                ConversationOperationFailureKind::Busy,
+                ConversationOperationFailureStage::Validation,
+                ProviderOperationEffect::None,
+                &answer,
+                request.operation.clone(),
+                request.target.cloned(),
+            )
+        })
     }
 
     #[expect(
@@ -221,83 +228,38 @@ impl ExternalProviderSupervisor {
         let existing = self
             .within_admission(deadline, operation_id, Some(target), async {
                 self.wait_for_reservation(operation_id).await;
-                if let Some(record) = self
-                    .stored_operation(operation_id, &Some(target.clone()))
-                    .await?
-                {
-                    Self::existing_operation(operation_id.clone(), record, kind, Some(target))?;
-                    return Ok(true);
-                }
-                self.check_operation_blockers(
-                    operation_id,
-                    kind,
-                    binding,
-                    Some(target),
-                    DispatchMark::Deferred,
-                )
-                .await?;
-                Ok(false)
+                self.stored_operation(operation_id, &Some(target.clone()))
+                    .await
             })
             .await??;
-        if existing {
+        if let Some(record) = existing {
+            Self::existing_operation(operation_id.clone(), record, kind, Some(target))?;
             return Ok(None);
         }
-        let mut operations = self
-            .inner
-            .live_operations
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if self.inner.clock.monotonic_now() >= deadline {
-            return Err(admission_expired(operation_id, Some(target)));
-        }
-        match operations.operations.entry(operation_id.clone()) {
-            std::collections::hash_map::Entry::Occupied(entry)
-                if entry.get().is_prompt_for(target) =>
-            {
-                Ok(None)
-            }
-            std::collections::hash_map::Entry::Occupied(_) => Err(reused_id_failure(
+        let request = AdmissionRequest {
+            operation: operation_id,
+            kind,
+            target: Some(target),
+            mark: DispatchMark::Deferred,
+        };
+        let context = self
+            .within_admission(
+                deadline,
+                operation_id,
+                Some(target),
+                self.reservation_context(binding, request),
+            )
+            .await?
+            .map_err(|()| unavailable_failure(operation_id.clone(), Some(target.clone())))?;
+        let live = Arc::new(LiveOperation::queued_prompt(binding, target.clone()));
+        match self.reserve_operation(deadline, binding, request, &context, &live)? {
+            Reservation::Acquired => Ok(Some(live)),
+            Reservation::Occupied(prior) if prior.is_prompt_for(target) => Ok(None),
+            Reservation::Occupied(_) => Err(reused_id_failure(
                 operation_id.clone(),
                 Some(target.clone()),
             )),
-            std::collections::hash_map::Entry::Vacant(entry) => {
-                let live = Arc::new(LiveOperation::queued_prompt(binding, target.clone()));
-                entry.insert(Arc::clone(&live));
-                Ok(Some(live))
-            }
         }
-    }
-
-    #[expect(
-        clippy::result_large_err,
-        reason = "Keeps the operation identity and typed refusal."
-    )]
-    async fn check_operation_blockers(
-        &self,
-        operation: &OperationId,
-        kind: ProviderOperationKind,
-        binding: &ProviderBindingIdentity,
-        target: Option<&SessionRef>,
-        mark: DispatchMark,
-    ) -> Result<(), ConversationOperationFailure> {
-        if kind == ProviderOperationKind::ConversationCancel {
-            return Ok(());
-        }
-        let blocking = self
-            .admission_blockers(binding, target, mark, kind)
-            .await
-            .map_err(|()| unavailable_failure(operation.clone(), target.cloned()))?;
-        if let Some(answer) = blocking.answer() {
-            return Err(failure(
-                ConversationOperationFailureKind::Busy,
-                ConversationOperationFailureStage::Validation,
-                ProviderOperationEffect::None,
-                &answer,
-                operation.clone(),
-                target.cloned(),
-            ));
-        }
-        Ok(())
     }
 
     /// Owns a new reservation up to durable admission. Only the transaction
@@ -327,19 +289,21 @@ impl ExternalProviderSupervisor {
         {
             return Self::existing_operation(operation_id, record, operation_kind, known_target);
         }
-        self.within_admission(
-            deadline,
-            &operation_id,
-            known_target,
-            self.check_operation_blockers(
+        let request = AdmissionRequest {
+            operation: &operation_id,
+            kind: operation_kind,
+            target: known_target,
+            mark,
+        };
+        let context = self
+            .within_admission(
+                deadline,
                 &operation_id,
-                operation_kind,
-                &binding,
                 known_target,
-                mark,
-            ),
-        )
-        .await??;
+                self.reservation_context(&binding, request),
+            )
+            .await?
+            .map_err(|()| unavailable_failure(operation_id.clone(), failure_target.clone()))?;
 
         #[cfg(test)]
         self.pause_before_admission_reservation_for_test().await;
@@ -347,26 +311,12 @@ impl ExternalProviderSupervisor {
             &binding,
             known_target.cloned(),
             operation_kind,
+            mark,
         ));
-        let reserved = {
-            use std::collections::hash_map::Entry;
-            let mut operations = self
-                .inner
-                .live_operations
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if self.inner.clock.monotonic_now() >= deadline {
-                return Err(admission_expired(&operation_id, known_target));
-            }
-            match operations.operations.entry(operation_id.clone()) {
-                Entry::Occupied(_) => false,
-                Entry::Vacant(entry) => {
-                    entry.insert(Arc::clone(&live));
-                    true
-                }
-            }
-        };
-        if !reserved {
+        if matches!(
+            self.reserve_operation(deadline, &binding, request, &context, &live)?,
+            Reservation::Occupied(_)
+        ) {
             let lookup = async {
                 self.wait_for_reservation(&operation_id).await;
                 self.stored_operation(&operation_id, &failure_target).await

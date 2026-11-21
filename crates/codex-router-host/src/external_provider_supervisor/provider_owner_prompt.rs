@@ -6,7 +6,7 @@ use super::{
     ProviderConversationFuture, ProviderOperationCompletion, ProviderOperationEffect,
     ProviderOperationKind, SessionRef, admitted_submission, existing_submission, failure,
     optional_message_text,
-    provider_operation_admission::DispatchMark,
+    provider_admission_policy::DispatchMark,
     provider_operation_failure::PromptStartFailure,
     provider_owner_operations::owner_failure,
     provider_prompt_contents::{PromptBusyPolicy, ProviderPromptContentsRequest},

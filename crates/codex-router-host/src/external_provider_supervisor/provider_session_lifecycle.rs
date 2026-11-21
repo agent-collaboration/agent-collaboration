@@ -1,6 +1,6 @@
 //! Durable provider resume and close operations.
 
-use super::provider_operation_admission::DispatchMark;
+use super::provider_admission_policy::DispatchMark;
 use super::{
     ConversationOperationFailureKind, ConversationOperationFailureStage,
     ConversationOperationSubmission, ExternalProviderSupervisor, PreparedOperation,

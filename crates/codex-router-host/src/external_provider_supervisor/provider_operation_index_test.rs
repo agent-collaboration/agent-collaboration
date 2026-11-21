@@ -20,6 +20,18 @@ fn session(name: &str) -> SessionRef {
     }
 }
 
+fn in_flight_on(index: &LiveOperations, target: &SessionRef) -> Vec<OperationId> {
+    index.in_flight_blockers(
+        &binding(),
+        AdmissionRequest {
+            operation: &OperationId::generate(),
+            kind: ProviderOperationKind::ConversationLoad,
+            mark: DispatchMark::BeforeHandoff,
+            target: Some(target),
+        },
+    )
+}
+
 fn index_with(
     operation: &OperationId,
     live: LiveOperation,
@@ -44,21 +56,22 @@ fn a_send_counts_in_flight_from_its_marker_until_it_settles() {
             &binding(),
             Some(session("a")),
             ProviderOperationKind::ConversationPrompt,
+            DispatchMark::Deferred,
         ),
     );
     live.admitted();
-    let before_marker = index.in_flight_on(&endpoint(), Some(&session("a")));
+    let before_marker = in_flight_on(&index, &session("a"));
 
     // Act
     live.dispatch_marked();
-    let marked = index.in_flight_on(&endpoint(), Some(&session("a")));
-    let other_session = index.in_flight_on(&endpoint(), Some(&session("b")));
+    let marked = in_flight_on(&index, &session("a"));
+    let other_session = in_flight_on(&index, &session("b"));
     live.completed(AttemptEnding::Unknown);
-    let settling_unknown = index.in_flight_on(&endpoint(), Some(&session("a")));
+    let settling_unknown = in_flight_on(&index, &session("a"));
     live.uncertainty_recorded();
-    let recorded = index.in_flight_on(&endpoint(), Some(&session("a")));
+    let recorded = in_flight_on(&index, &session("a"));
     live.finish_write(CustodyEnd::Written);
-    let persisted = index.in_flight_on(&endpoint(), Some(&session("a")));
+    let persisted = in_flight_on(&index, &session("a"));
 
     // Assert
     assert!(before_marker.is_empty(), "admitted, not yet marked");
@@ -95,13 +108,22 @@ fn an_undone_marker_and_a_dropped_reservation_leave_nothing_in_flight() {
     let undone = OperationId::generate();
     let (index, live) = index_with(
         &undone,
-        LiveOperation::reserving(&binding(), None, ProviderOperationKind::ConversationPrompt),
+        LiveOperation::reserving(
+            &binding(),
+            None,
+            ProviderOperationKind::ConversationPrompt,
+            DispatchMark::Deferred,
+        ),
     );
     live.admitted();
     live.dispatch_marked();
-    let binding_wide = index.in_flight_on(&endpoint(), Some(&session("any")));
-    let dropped =
-        LiveOperation::reserving(&binding(), None, ProviderOperationKind::ConversationPrompt);
+    let binding_wide = in_flight_on(&index, &session("any"));
+    let dropped = LiveOperation::reserving(
+        &binding(),
+        None,
+        ProviderOperationKind::ConversationPrompt,
+        DispatchMark::Deferred,
+    );
 
     // Act
     live.undispatched();
@@ -113,11 +135,7 @@ fn an_undone_marker_and_a_dropped_reservation_leave_nothing_in_flight() {
         vec![undone],
         "a targetless send blocks every session"
     );
-    assert!(
-        index
-            .in_flight_on(&endpoint(), Some(&session("any")))
-            .is_empty()
-    );
+    assert!(in_flight_on(&index, &session("any")).is_empty());
     assert_eq!(live.record(), OperationRecord::Admitted { queued: false });
     assert_eq!(dropped.record(), OperationRecord::Dropped);
     assert!(!dropped.is_reserving());
@@ -128,8 +146,12 @@ fn an_undone_marker_and_a_dropped_reservation_leave_nothing_in_flight() {
 #[test]
 fn an_undispatched_operation_settles_not_sent() {
     // Arrange
-    let live =
-        LiveOperation::reserving(&binding(), None, ProviderOperationKind::ConversationPrompt);
+    let live = LiveOperation::reserving(
+        &binding(),
+        None,
+        ProviderOperationKind::ConversationPrompt,
+        DispatchMark::Deferred,
+    );
     live.admitted();
 
     // Act
@@ -156,6 +178,7 @@ fn lane_receipts_are_bound_to_the_reserved_operation_generation_and_target() {
             &binding,
             Some(target.clone()),
             ProviderOperationKind::ConversationPrompt,
+            DispatchMark::Deferred,
         ),
     );
     let lookup = |index: &LiveOperations,
@@ -173,6 +196,7 @@ fn lane_receipts_are_bound_to_the_reserved_operation_generation_and_target() {
         &replacement_binding,
         Some(target.clone()),
         ProviderOperationKind::ConversationPrompt,
+        DispatchMark::Deferred,
     ));
     index
         .operations
