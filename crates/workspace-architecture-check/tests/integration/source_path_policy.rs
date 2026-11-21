@@ -82,11 +82,7 @@ pub(super) fn check_source_paths(root: &Path, packages: &[&CargoPackage]) -> Pol
     Ok(())
 }
 
-pub(super) fn collect_rust_sources(
-    home: &Path,
-    directory: &Path,
-    files: &mut Vec<PathBuf>,
-) -> PolicyResult {
+fn collect_rust_sources(home: &Path, directory: &Path, files: &mut Vec<PathBuf>) -> PolicyResult {
     if directory != home && directory.join("Cargo.toml").is_file() {
         return Ok(());
     }
