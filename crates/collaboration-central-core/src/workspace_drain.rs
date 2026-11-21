@@ -3,8 +3,6 @@ use crate::{
     WorkspaceRuntime,
     central_statement_values::{applied, timestamp},
     engine::query_registry::alarm_update,
-    notification_windows::{parse, parse_time},
-    workspace_notice_plans::DrainResult,
 };
 use central_storage::{SqlValue, Statement, StatementBatch, StoreFailure};
 use fleet_contracts::LegacyUnitOutcome;
@@ -16,6 +14,14 @@ use fleet_runtime_ports::{
 };
 use fleet_workspace_access::workspace_row_codec::WorkspaceRows;
 use workspace_model::{ChangePosition, Timestamp, WorkspaceId};
+#[derive(Default, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DrainResult {
+    pub through: ChangePosition,
+    pub notices_queued: usize,
+    pub window_items_added: usize,
+    pub skipped_recipients: usize,
+}
 impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     /// The caller holds central admission through this deadline and the workspace batch.
     pub(crate) async fn preset_workspace_drain_held(
@@ -144,7 +150,24 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         let now = self.execution.now()?;
         let _central = self.execution.take_central_turn().await;
 
-        let (mut statements, result) = self.plan_workspace_notices(workspace, &rows, now).await?;
+        let fleet_notices::WorkspaceNoticePlan {
+            mut statements,
+            window_items_added,
+            skipped_recipients,
+        } = fleet_notices::plan_workspace_notices_held(
+            &self.execution,
+            &crate::notice_mailbox::NoticeMailbox(&self.execution),
+            workspace,
+            &rows,
+            now,
+        )
+        .await?;
+        let result = DrainResult {
+            through: rows.high_water,
+            window_items_added,
+            skipped_recipients,
+            ..DrainResult::default()
+        };
         statements.push(exact("UPDATE mail_workspace_drains SET drained_through_position=?,drain_due_at=NULL,updated_at=? WHERE workspace_id=? AND drained_through_position=?",vec![position_value(rows.high_water)?,text(timestamp(now)),text(workspace),position_value(through)?]));
         #[cfg(feature = "test-support")]
         self.execution
@@ -226,6 +249,16 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
     }
 }
 
+fn parse<T: std::str::FromStr>(value: &str, field: &str) -> Result<T, StoreFailure> {
+    value.parse().map_err(|_| corrupt(field))
+}
+fn parse_time(value: &str, field: &str) -> Result<Timestamp, StoreFailure> {
+    let time: Timestamp = parse(value, field)?;
+    if !central_engine_model::supported_time(time) {
+        return Err(corrupt(field));
+    }
+    Ok(time)
+}
 fn position_value(position: ChangePosition) -> Result<SqlValue, StoreFailure> {
     let value = i64::try_from(position.get()).map_err(|_| corrupt("position"))?;
     Ok(SqlValue::Integer(

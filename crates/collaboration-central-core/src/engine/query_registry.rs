@@ -76,11 +76,7 @@ pub(crate) const ALARM_INPUTS: &str = concat!(
     all_grid_inputs!(),
     "),9223372036855) ELSE NULL END AS on_grid_due,",
     "CASE WHEN (SELECT COUNT(*) FROM signin_organization_identity)=1 THEN NULLIF(min(COALESCE(",
-    controlled_legacy!(
-        "legacy_notice_windows",
-        "mail_notification_windows",
-        "due_at"
-    ),
+    fleet_notices::notice_window_alarm_input!(),
     ",9223372036855),COALESCE(",
     controlled_legacy!(
         "legacy_workspace_drains",

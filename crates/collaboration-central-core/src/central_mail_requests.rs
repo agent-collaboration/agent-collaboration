@@ -112,68 +112,53 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         }
         let actor = self.access().resolve_identity(&identity).await?;
         let mut delivery_ready = None;
-        let decision = if let mail::CentralMailOperation::SetNoticeCadence { cadence } =
-            &request.operation
-        {
-            if !matches!(caller.caller(), m::Caller::Session(_)) {
-                Err(Refusal::NotSession)
-            } else {
-                let mut statements = vec![fleet_workspace_access::plan_notice_cadence(
-                    &actor, *cadence, now,
-                )?];
-                // Recompute the pending deadline from now on the new epoch cadence;
-                // the actual policy and deadline writes share this request's ledger batch.
-                for window in self
-                    .notification_windows()
-                    .await?
-                    .into_iter()
-                    .filter(|window| window.recipient == actor)
-                {
-                    let due = Self::notice_due_with_cadence(now, *cadence)?;
-                    statements.push(fleet_runtime_ports::guarded_statements::exact(
-                        "UPDATE mail_notification_windows SET due_at=?,updated_at=? WHERE window_id=?",
-                        vec![
-                            fleet_runtime_ports::guarded_statements::text(central_statement_values::timestamp(due)),
-                            fleet_runtime_ports::guarded_statements::text(central_statement_values::timestamp(now)),
-                            fleet_runtime_ports::guarded_statements::text(&window.id),
-                        ],
-                    ));
+        let decision =
+            if let mail::CentralMailOperation::SetNoticeCadence { cadence } = &request.operation {
+                if !matches!(caller.caller(), m::Caller::Session(_)) {
+                    Err(Refusal::NotSession)
+                } else {
+                    let statements = fleet_notices::plan_notice_cadence_held(
+                        self.execution.statement_host(),
+                        &actor,
+                        *cadence,
+                        now,
+                    )
+                    .await?;
+                    Ok((
+                        statements,
+                        mail::CentralMailAnswer::NoticeCadenceSet { cadence: *cadence },
+                    ))
                 }
-                Ok((
-                    statements,
-                    mail::CentralMailAnswer::NoticeCadenceSet { cadence: *cadence },
-                ))
-            }
-        } else if let mail::CentralMailOperation::SendMessage {
-            to,
-            body,
-            delivery,
-            reply_to,
-            sent_at,
-        } = &request.operation
-        {
-            if !self.known_session(to).await? {
-                Err(Refusal::UnknownSession { target: to.clone() })
+            } else if let mail::CentralMailOperation::SendMessage {
+                to,
+                body,
+                delivery,
+                reply_to,
+                sent_at,
+            } = &request.operation
+            {
+                if !self.known_session(to).await? {
+                    Err(Refusal::UnknownSession { target: to.clone() })
+                } else {
+                    let plan = fleet_mail::plan_direct_send(
+                        &request.request_id,
+                        actor.clone(),
+                        mail::SendMessageRequest {
+                            to: to.clone(),
+                            body: body.clone(),
+                            delivery: *delivery,
+                            reply_to: reply_to.clone(),
+                        },
+                        *sent_at,
+                        now,
+                        || self.execution.mint(),
+                    )?;
+                    delivery_ready = Some(plan.delivery_ready);
+                    Ok((vec![plan.insert], plan.answer))
+                }
             } else {
-                let plan = fleet_mail::plan_direct_send(
-                    &request.request_id,
-                    actor.clone(),
-                    mail::SendMessageRequest {
-                        to: to.clone(),
-                        body: body.clone(),
-                        delivery: *delivery,
-                        reply_to: reply_to.clone(),
-                    },
-                    *sent_at,
-                    now,
-                    || self.execution.mint(),
-                )?;
-                delivery_ready = Some(plan.delivery_ready);
-                Ok((vec![plan.insert], plan.answer))
-            }
-        } else {
-            self.plan_timer_request(&request.operation, now).await?
-        };
+                self.plan_timer_request(&request.operation, now).await?
+            };
         let (mut statements, answer) = match decision {
             Ok((statements, answer)) => (statements, Result::Done(answer)),
             Err(reason) => (vec![], Result::Refused(reason)),

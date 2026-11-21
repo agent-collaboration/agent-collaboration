@@ -43,6 +43,7 @@ const LAYER_POLICY: [(&str, &[&str]); 36] = [
         &[
             "fleet-engine",
             "fleet-mail",
+            "fleet-notices",
             "fleet-wakes",
             "fleet-schedules",
             "fleet-timer-policy",
@@ -240,7 +241,10 @@ fn layer_policy() -> impl Iterator<Item = (&'static str, &'static [&'static str]
         .into_iter()
         .chain(workspace_boundaries::FLEET_PURE_CRATES)
         .chain(workspace_boundaries::TIMER_CRATES)
-        .chain([workspace_boundaries::MAIL_LAYER])
+        .chain([
+            workspace_boundaries::MAIL_LAYER,
+            workspace_boundaries::NOTICES_LAYER,
+        ])
 }
 
 #[derive(Deserialize)]
