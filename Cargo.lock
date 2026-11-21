@@ -1486,6 +1486,7 @@ dependencies = [
  "fleet-engine",
  "fleet-identity-protocol",
  "fleet-mail",
+ "fleet-notices",
  "fleet-runtime",
  "fleet-runtime-ports",
  "fleet-schedules",
@@ -2464,6 +2465,23 @@ dependencies = [
  "fleet-workspace-access",
  "hegeltest",
  "serde",
+ "serde_json",
+ "workspace-ids",
+ "workspace-model",
+]
+
+[[package]]
+name = "fleet-notices"
+version = "0.1.157"
+dependencies = [
+ "central-engine-model",
+ "central-storage",
+ "chrono",
+ "fleet-contracts",
+ "fleet-engine",
+ "fleet-runtime",
+ "fleet-runtime-ports",
+ "fleet-workspace-access",
  "serde_json",
  "workspace-ids",
  "workspace-model",

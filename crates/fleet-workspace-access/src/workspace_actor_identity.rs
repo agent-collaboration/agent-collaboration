@@ -232,6 +232,28 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceAccess<'_, Host, Stor
     }
 }
 
+/// Read the stored cadence used to validate and schedule notice windows.
+pub async fn read_notice_cadence(
+    host: &impl CentralStore,
+    recipient: &ActorIdentityId,
+) -> Result<NoticeCadence, StoreFailure> {
+    let rows = host
+        .read(Statement {
+            sql: "SELECT notice_cadence FROM access_actor_identities WHERE actor_identity_id=?",
+            args: vec![text(recipient)],
+        })
+        .await?;
+    let row = rows
+        .rows
+        .first()
+        .ok_or_else(|| corrupt("mail_notification_windows.recipient_actor"))?;
+    let cadence: NoticeCadence = serde_json::from_value(serde_json::Value::String(
+        string(&rows, row, "notice_cadence")?.to_owned(),
+    ))
+    .map_err(|_| corrupt("access_actor_identities.notice_cadence"))?;
+    Ok(cadence)
+}
+
 /// Plans the guarded write of an admitted session's notice cadence.
 pub fn plan_notice_cadence(
     actor: &ActorIdentityId,
