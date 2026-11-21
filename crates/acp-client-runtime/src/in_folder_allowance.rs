@@ -83,15 +83,6 @@ pub(crate) fn session_folders(
     folders
 }
 
-/// A session's in-folder roots, and whether Router auto is its current mode.
-/// The roots outlive a change to a named mode, so a later change back to auto
-/// restores the same bounded grant.
-#[derive(Clone, Debug)]
-pub(crate) struct SessionInFolderGrant {
-    pub(crate) grant: InFolderGrant,
-    pub(crate) router_auto: bool,
-}
-
 impl InFolderGrant {
     /// `None` when the working or scratch folder cannot be resolved; such a
     /// session asks for everything rather than allowing against a path it
@@ -112,35 +103,60 @@ impl InFolderGrant {
         })
     }
 
-    /// Whether a path lies in one of the folders a shell operand may name:
-    /// the scratch folder or a work root.
-    fn in_command_folders(&self, path: &Path) -> bool {
-        within(path, &self.scratch_folder) || self.work_roots.iter().any(|root| within(path, root))
+    /// Check the normalized request against this run's folders without I/O.
+    pub(crate) fn select(&self, permission: InFolderPermission) -> Option<PermissionOptionId> {
+        permission
+            .paths
+            .iter()
+            .all(|path| {
+                (permission.scope == PermissionPathScope::File
+                    && path.starts_with(&self.working_folder))
+                    || path.starts_with(&self.scratch_folder)
+                    || self.work_roots.iter().any(|root| path.starts_with(root))
+            })
+            .then_some(permission.option)
     }
 
-    /// The agent's allow-once option when the request lies within the grant.
-    pub(crate) fn allow_once(
+    #[cfg(test)]
+    fn allow_once(
         &self,
         tool_call: &ToolCallUpdate,
         options: &[PermissionOption],
         read_title: &StatedTargetReader<'_>,
     ) -> Option<PermissionOptionId> {
-        if !self.covers(tool_call, read_title) {
-            return None;
-        }
+        self.select(InFolderPermission::from_offer(
+            tool_call, options, read_title,
+        )?)
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PermissionPathScope {
+    File,
+    Command,
+}
+
+/// A sole allow-once option and the request's canonical paths, resolved before
+/// the transport locks the route to make its permission decision.
+pub(crate) struct InFolderPermission {
+    option: PermissionOptionId,
+    paths: Vec<PathBuf>,
+    scope: PermissionPathScope,
+}
+
+impl InFolderPermission {
+    pub(crate) fn from_offer(
+        tool_call: &ToolCallUpdate,
+        options: &[PermissionOption],
+        read_title: &StatedTargetReader<'_>,
+    ) -> Option<Self> {
         let mut allow_once = options
             .iter()
             .filter(|option| option.kind == PermissionOptionKind::AllowOnce);
-        let option = allow_once.next()?;
-        allow_once
-            .next()
-            .is_none()
-            .then(|| option.option_id.clone())
-    }
-
-    /// Every path or command the request names, from any of its fields, must
-    /// stay inside, and it must name at least one.
-    fn covers(&self, tool_call: &ToolCallUpdate, read_title: &StatedTargetReader<'_>) -> bool {
+        let option = allow_once.next()?.option_id.clone();
+        if allow_once.next().is_some() {
+            return None;
+        }
         let fields = &tool_call.fields;
         let stated = |action| {
             fields
@@ -148,11 +164,11 @@ impl InFolderGrant {
                 .as_deref()
                 .and_then(|title| read_title(action, title))
         };
-        match fields.kind {
+        let (paths, scope) = match fields.kind {
             Some(ToolKind::Read | ToolKind::Edit | ToolKind::Delete | ToolKind::Move) => {
                 let stated_file = match stated(PermissionRequestAction::FileAccess) {
                     Some(StatedPermissionTarget::File(path)) => Some(path),
-                    Some(StatedPermissionTarget::Command(_)) => return false,
+                    Some(StatedPermissionTarget::Command(_)) => return None,
                     None => None,
                 };
                 let located = fields
@@ -168,19 +184,17 @@ impl InFolderGrant {
                         ToolCallContent::Diff(diff) => Some(diff.path.as_path()),
                         _ => None,
                     });
-                let paths: Vec<&Path> = located
+                let paths: Vec<PathBuf> = located
                     .chain(diffed)
                     .chain(stated_file.as_deref())
-                    .collect();
-                !paths.is_empty()
-                    && paths.iter().all(|path| {
-                        within(path, &self.working_folder) || self.in_command_folders(path)
-                    })
+                    .map(permission_path)
+                    .collect::<Option<_>>()?;
+                (paths, PermissionPathScope::File)
             }
             Some(ToolKind::Execute) => {
                 let stated_command = match stated(PermissionRequestAction::ShellCommand) {
                     Some(StatedPermissionTarget::Command(command)) => Some(command),
-                    Some(StatedPermissionTarget::File(_)) => return false,
+                    Some(StatedPermissionTarget::File(_)) => return None,
                     None => None,
                 };
                 let raw_command = fields
@@ -188,78 +202,58 @@ impl InFolderGrant {
                     .as_ref()
                     .and_then(|input| input.get("command"))
                     .and_then(serde_json::Value::as_str);
-                let commands: Vec<&str> = raw_command
-                    .into_iter()
-                    .chain(stated_command.as_deref())
-                    .collect();
-                !commands.is_empty()
-                    && commands
-                        .iter()
-                        .all(|command| self.command_stays_inside(command))
-            }
-            _ => false,
-        }
-    }
-
-    /// A file utility from [`FILE_UTILITIES`] with only its own options, no
-    /// shell syntax that could reach another path or program, and operands
-    /// that are all paths in the scratch folder or a work root, with at least
-    /// one.
-    fn command_stays_inside(&self, command: &str) -> bool {
-        const SHELL_SYNTAX: &[char] = &[
-            '$', '`', '|', ';', '&', '<', '>', '(', ')', '{', '}', '*', '?', '[', ']', '~', '\\',
-            '"', '\'', '\n', '\r', '#', '!', '=',
-        ];
-        if command.contains(SHELL_SYNTAX) {
-            return false;
-        }
-        let mut words = command.split_whitespace();
-        let Some(program) = words.next() else {
-            return false;
-        };
-        // Only file utilities that run no code given to them: an interpreter,
-        // `env` or `xargs` would run a script the agent first wrote to scratch,
-        // and that script could act anywhere (owner Q3).
-        let Some((_, options)) = FILE_UTILITIES
-            .iter()
-            .find(|(utility, _)| *utility == program)
-        else {
-            return false;
-        };
-        // Every operand is an absolute path in the scratch folder or a work
-        // root; a bare word
-        // could name a file in the project, so it is not allowed here.
-        let mut named_a_path = false;
-        for word in words {
-            if word.starts_with('-') {
-                // An option's meaning is not read from its characters: only
-                // this utility's listed options pass, so a path glued onto an
-                // option (`-ooutside.txt`) or an indirect one (`file -f`) asks.
-                if !options.contains(&word) {
-                    return false;
+                let mut paths = Vec::new();
+                for command in raw_command.into_iter().chain(stated_command.as_deref()) {
+                    paths.extend(command_paths(command)?);
                 }
-                continue;
+                (paths, PermissionPathScope::Command)
             }
-            if !self.in_command_folders(Path::new(word)) {
-                return false;
-            }
-            named_a_path = true;
-        }
-        named_a_path
+            _ => return None,
+        };
+        (!paths.is_empty()).then_some(Self {
+            option,
+            paths,
+            scope,
+        })
     }
 }
 
-/// Whether an absolute path, with no `..`, resolves inside `folder` once its
-/// existing part is canonical (so a symlink out of the folder is outside).
-fn within(path: &Path, folder: &Path) -> bool {
+/// A named file utility with its own options and at least one canonical path.
+fn command_paths(command: &str) -> Option<Vec<PathBuf>> {
+    const SHELL_SYNTAX: &[char] = &[
+        '$', '`', '|', ';', '&', '<', '>', '(', ')', '{', '}', '*', '?', '[', ']', '~', '\\', '"',
+        '\'', '\n', '\r', '#', '!', '=',
+    ];
+    if command.contains(SHELL_SYNTAX) {
+        return None;
+    }
+    let mut words = command.split_whitespace();
+    let program = words.next()?;
+    let (_, options) = FILE_UTILITIES
+        .iter()
+        .find(|(utility, _)| *utility == program)?;
+    let mut paths = Vec::new();
+    for word in words {
+        if word.starts_with('-') {
+            if !options.contains(&word) {
+                return None;
+            }
+        } else {
+            paths.push(permission_path(Path::new(word))?);
+        }
+    }
+    (!paths.is_empty()).then_some(paths)
+}
+
+fn permission_path(path: &Path) -> Option<PathBuf> {
     if !path.is_absolute()
         || path
             .components()
             .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
     {
-        return false;
+        return None;
     }
-    canonical_existing_prefix(path).is_some_and(|resolved| resolved.starts_with(folder))
+    canonical_existing_prefix(path)
 }
 
 /// Canonicalizes the longest existing ancestor and appends the absent rest, so

@@ -204,31 +204,40 @@ impl OwnerTransition {
         {
             return Ok(());
         }
-        self.setting_on_wire(setting, SettingObservation::Applied(value))?;
-        if let (Some(readback), Some(current)) =
-            (catalogue, &mut self.next.ports.settings_catalogue)
-        {
-            Arc::make_mut(current).apply_late_setting_readback(setting.kind, &readback);
-            let catalogue = Arc::clone(current);
-            self.publish_accepted_catalogue(run.generation, catalogue);
+        self.setting_on_wire(setting, SettingObservation::Applied(value), None)?;
+        if let Some(catalogue) = catalogue {
+            self.publish_late_setting_readback(setting, &catalogue);
         }
         Ok(())
+    }
+
+    fn publish_late_setting_readback(
+        &mut self,
+        setting: OwnerSetting,
+        readback: &ProviderSettingsCatalog,
+    ) {
+        if let Some(current) = &mut self.next.ports.settings_catalogue {
+            Arc::make_mut(current).apply_late_setting_readback(setting.kind, readback);
+            let catalogue = Arc::clone(current);
+            self.publish_accepted_catalogue(setting.change.generation, catalogue);
+        }
     }
 
     pub(super) fn setting_on_wire(
         &mut self,
         setting: OwnerSetting,
         observation: SettingObservation,
+        mode_request: Option<bool>,
     ) -> OwnerResult {
         let current_run = matches!(self.next.lifecycle(), SessionLifecycle::Live { generation } | SessionLifecycle::Closing { generation, .. } if generation == setting.change.generation);
         if self.next.setting != Some((setting, SettingWait::Wire)) || !current_run {
-            let reported = match observation {
-                SettingObservation::Applied(value)
-                | SettingObservation::Refused {
-                    current: Some(value),
-                } => Some(value),
-                SettingObservation::AppliedWithReadback(readback) => Some(readback.value),
-                _ => None,
+            let (reported, catalogue, confirmed) = match observation {
+                SettingObservation::Applied(value) => (Some(value), None, true),
+                SettingObservation::Refused { current, catalogue } => (current, catalogue, false),
+                SettingObservation::AppliedWithReadback(readback) => {
+                    (Some(readback.value), Some(readback.catalogue), true)
+                }
+                SettingObservation::Unknown => (None, None, false),
             };
             if current_run
                 && self.next.ports.latest_setting.get(&setting.kind) == Some(&setting)
@@ -247,6 +256,12 @@ impl OwnerTransition {
                         cause: None,
                     },
                 );
+                if confirmed && let Some(requested) = mode_request {
+                    self.next.ports.router_auto_requested = requested;
+                }
+                if let Some(catalogue) = catalogue {
+                    self.publish_late_setting_readback(setting, &catalogue);
+                }
             }
             return Ok(());
         }
@@ -279,9 +294,9 @@ impl OwnerTransition {
                 self.wait_for_setting(setting, SettingWait::Store);
             }
             SettingObservation::AppliedWithReadback(readback) => {
-                self.apply_confirmed_readback(setting, *readback)?;
+                self.apply_confirmed_readback(setting, *readback, mode_request)?;
             }
-            SettingObservation::Refused { current } => {
+            SettingObservation::Refused { current, catalogue } => {
                 let confirmed_current =
                     current.is_some() && setting.kind != ProviderSettingKind::Fast;
                 if let Some(value) = current {
@@ -311,6 +326,9 @@ impl OwnerTransition {
                     SessionSettingEvent::Refused { application }
                 };
                 self.apply_setting(setting, event)?;
+                if let Some(catalogue) = catalogue {
+                    self.publish_late_setting_readback(setting, &catalogue);
+                }
                 self.reply_setting(setting, RemoteEffect::None, false);
             }
             SettingObservation::Unknown => {
@@ -341,10 +359,11 @@ impl OwnerTransition {
         &mut self,
         setting: OwnerSetting,
         readback: SettingReadback,
+        mode_request: Option<bool>,
     ) -> OwnerResult {
         let SettingReadback {
             value,
-            settings,
+            catalogue,
             fast,
             mode_reason,
         } = readback;
@@ -355,11 +374,7 @@ impl OwnerTransition {
                 value: value.clone(),
             },
         )?;
-        self.observe_stream(
-            setting.change.generation,
-            None,
-            session_event_model::SessionEvent::SettingsChanged { settings },
-        )?;
+        self.observe_catalogue_values(&catalogue.to_session_settings())?;
         self.next.ports.observed.insert(
             setting.kind,
             SettingEvidence {
@@ -368,6 +383,10 @@ impl OwnerTransition {
             },
         );
         self.observe_companion_fast(&fast);
+        if let Some(requested) = mode_request {
+            self.next.ports.router_auto_requested = requested;
+        }
+        self.publish_accepted_catalogue(setting.change.generation, catalogue);
         if setting.kind == ProviderSettingKind::Mode {
             self.next.ports.mode_reason = mode_reason;
             self.release(SessionOwnerEffect::Store(
@@ -463,7 +482,7 @@ impl OwnerTransition {
         }
         match wait {
             SettingWait::Enqueue => Err(OwnerRejection::IgnoredLate),
-            SettingWait::Wire => self.setting_on_wire(setting, SettingObservation::Unknown),
+            SettingWait::Wire => self.setting_on_wire(setting, SettingObservation::Unknown, None),
             SettingWait::Store => self.setting_recorded(setting, EffectOutcome::Unknown),
         }
     }

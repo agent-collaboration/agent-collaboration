@@ -34,9 +34,8 @@ pub struct RestoreSettingPlan {
 
 impl OwnerOpenedSession {
     #[must_use]
-    pub fn restore_setting_plan(&mut self, requested_mode: Option<&str>) -> RestoreSettingPlan {
+    pub fn restore_setting_plan(&self, requested_mode: Option<&str>) -> RestoreSettingPlan {
         let current = self.catalog.effective_settings().mode;
-        self.refresh_restored_allowance(requested_mode);
         let (mode, accepted_mode_fallback) = if let Some(requested) = requested_mode {
             match plan_permission_mode(
                 RequestedPermissionMode::from_request(Some(requested)),
@@ -79,23 +78,8 @@ impl OwnerOpenedSession {
         }
     }
 
-    pub fn accept_restore_catalogue(
-        &mut self,
-        catalogue: &ProviderSettingsCatalog,
-        requested_mode: Option<&str>,
-    ) {
+    pub fn accept_restore_catalogue(&mut self, catalogue: &ProviderSettingsCatalog) {
         self.catalog.clone_from(catalogue);
-        self.refresh_restored_allowance(requested_mode);
-    }
-
-    fn refresh_restored_allowance(&mut self, requested_mode: Option<&str>) {
-        // Router Auto requires both saved consent and the reported mode
-        // selected by the adapter's Auto plan.
-        self.router_auto_active = crate::provider_setting_application::current_mode_grants_auto(
-            requested_mode,
-            &self.catalog,
-            self.behavior.as_ref(),
-        );
     }
 }
 
@@ -116,7 +100,6 @@ struct SettingResponseShape {
 
 #[derive(Clone, Copy)]
 pub(crate) struct ModeConfirmation {
-    pub(crate) router_auto: bool,
     pub(crate) reason: Option<crate::PermissionModeReason>,
 }
 
@@ -213,24 +196,11 @@ impl OwnerSettingWirePlan {
 }
 
 impl CorrelatedSetting {
-    pub(crate) fn mode_confirmation(&self) -> Option<ModeConfirmation> {
-        self.shape.mode_confirmation
-    }
-
-    pub(crate) fn authorization(&self) -> Option<&DispatchAuthorization> {
-        match &self.correlation {
-            SettingCorrelation::Explicit(authorization) => Some(authorization),
-            SettingCorrelation::RestoreMode { .. } | SettingCorrelation::RestoreFastOff { .. } => {
-                None
-            }
-        }
-    }
-
     pub(crate) fn settle(
         self,
         reply: Option<Result<serde_json::Value, Error>>,
         behavior: &dyn crate::ProviderBehavior,
-    ) -> (OwnerEvent, Option<ProviderSettingsCatalog>) {
+    ) -> OwnerEvent {
         let Self {
             mut shape,
             correlation,
@@ -304,24 +274,22 @@ impl CorrelatedSetting {
                     };
                     SettingObservation::AppliedWithReadback(Box::new(SettingReadback {
                         value,
-                        settings: shape.catalog.to_session_settings(),
+                        catalogue: Arc::new(shape.catalog),
                         fast,
                         mode_reason,
                     }))
                 } else if refused || fast_refusal {
-                    SettingObservation::Refused { current }
+                    SettingObservation::Refused {
+                        current,
+                        catalogue: fast_refusal.then(|| Arc::new(shape.catalog)),
+                    }
                 } else {
                     SettingObservation::Unknown
                 };
-                let retain = matches!(observation, SettingObservation::AppliedWithReadback(_))
-                    || fast_refusal;
-                (
-                    OwnerEvent::Dispatch(DispatchResult::SettingFinished {
-                        authorization,
-                        observation,
-                    }),
-                    retain.then_some(shape.catalog),
-                )
+                OwnerEvent::Dispatch(DispatchResult::SettingFinished {
+                    authorization,
+                    observation,
+                })
             }
             SettingCorrelation::RestoreMode { run, setting } => {
                 let outcome = match observed {
@@ -335,16 +303,13 @@ impl CorrelatedSetting {
                     },
                     None => RestoreModeOutcome::Unconfirmed,
                 };
-                (
-                    OwnerEvent::Wire(SessionWireResult::RestoreMode {
-                        run,
-                        setting,
-                        outcome,
-                        catalogue: (catalogue_reported || confirmed_legacy_mode)
-                            .then(|| Arc::new(shape.catalog)),
-                    }),
-                    None,
-                )
+                OwnerEvent::Wire(SessionWireResult::RestoreMode {
+                    run,
+                    setting,
+                    outcome,
+                    catalogue: (catalogue_reported || confirmed_legacy_mode)
+                        .then(|| Arc::new(shape.catalog)),
+                })
             }
             SettingCorrelation::RestoreFastOff { run, setting } => {
                 let cause = match &observed {
@@ -359,19 +324,16 @@ impl CorrelatedSetting {
                     None if refused => Some(ObservationCause::Refused),
                     None => Some(ObservationCause::Unconfirmed),
                 };
-                (
-                    OwnerEvent::Prepare(RestorePreparation::FastOff {
-                        run,
-                        setting,
-                        catalogue: catalogue_reported.then(|| Arc::new(shape.catalog)),
-                        observation: SettingEvidence {
-                            value: observed
-                                .map_or(ObservedSetting::Unknown, ObservedSetting::Confirmed),
-                            cause,
-                        },
-                    }),
-                    None,
-                )
+                OwnerEvent::Prepare(RestorePreparation::FastOff {
+                    run,
+                    setting,
+                    catalogue: catalogue_reported.then(|| Arc::new(shape.catalog)),
+                    observation: SettingEvidence {
+                        value: observed
+                            .map_or(ObservedSetting::Unknown, ObservedSetting::Confirmed),
+                        cause,
+                    },
+                })
             }
         }
     }

@@ -11,10 +11,11 @@ use acp_client_runtime::{
     ApprovalPortOutcome, EventSinkClosed, ExternalProviderApprovalRefusalReason,
     ExternalProviderLaunch, ExternalProviderPromptOutcome, ExternalProviderRuntimeError,
     FastRequest, HistoryReplayFuture, InteractionFuture, InteractionPort,
-    InvalidSettingSessionDisposition, ProviderPersistenceTarget, RefusedApprovalOffer,
-    RequestedProviderSettings, SessionEventSink, SessionRestoreSetup, SessionWorkRoots,
+    InvalidSettingSessionDisposition, ProviderPersistenceTarget, ProviderSettingRequest,
+    RefusedApprovalOffer, RequestedProviderSettings, SessionEventSink, SessionRestoreSetup,
+    SessionWorkRoots,
 };
-use provider_session_machines::FastObserved;
+use provider_session_machines::{EffectiveProviderSettings, FastObserved};
 use provider_session_machines::{
     ProviderSettingKind,
     session_lifecycle_machine::RestoreVia,
@@ -22,7 +23,7 @@ use provider_session_machines::{
 };
 use serde_json::{Value, json};
 use session_event_model::{
-    ApprovalRequest, InputId, SessionEvent, StopReason,
+    ApprovalRequest, InputId, SessionEvent, SettingApplicationIntent, StopReason,
     managed_interaction_refusal::ManagedInteractionRefusal,
 };
 use std::path::{Path, PathBuf};
@@ -203,6 +204,24 @@ impl Fixture {
         self.prompt_edit(session, &self.scratch.join("note.txt"))
             .await
             .map(|_| ())
+    }
+
+    async fn set_mode(
+        &self,
+        session: &str,
+        mode: &str,
+    ) -> Result<EffectiveProviderSettings, ExternalProviderRuntimeError> {
+        self.client
+            .set_setting(
+                session.to_owned(),
+                ProviderSettingRequest {
+                    kind: ProviderSettingKind::Mode,
+                    value: mode.to_owned(),
+                    intent: SettingApplicationIntent::ExplicitChange,
+                    expected_model: None,
+                },
+            )
+            .await
     }
 
     async fn prompt_edit(
@@ -477,6 +496,74 @@ async fn default_refuses_in_folder_edits_under_managed_refusal() {
         .assert_managed_refusal(&session, &fixture.scratch.join("note.txt"))
         .await;
     fixture.client.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_live_mode_update_off_auto_disables_the_in_folder_allowance() {
+    let fixture = Fixture::start_managed("claude", &["leave-auto-after-first-edit"]).await;
+    let session = fixture
+        .create("auto")
+        .await
+        .expect("created in Auto")
+        .provider_session_id;
+    fixture.assert_managed_allowance(&session).await;
+    assert_eq!(fixture.current_mode(&session), "default");
+
+    fixture
+        .assert_managed_refusal(&session, &fixture.scratch.join("note.txt"))
+        .await;
+    fixture.client.shutdown().await;
+}
+
+#[tokio::test]
+async fn only_confirmed_explicit_mode_sets_change_the_runs_auto_request() {
+    let fixture = Fixture::start_managed("claude", &["advertise-restore"]).await;
+    let session = "restored-default";
+    fixture
+        .restore(session, fixture.saved_setup("default"), RestoreVia::Resume)
+        .await;
+    assert_eq!(fixture.grant(session), Some(false));
+
+    let auto = fixture
+        .set_mode(session, "auto")
+        .await
+        .expect("Auto confirmed");
+    assert_eq!(auto.mode.as_deref(), Some("auto"));
+    fixture.assert_managed_allowance(session).await;
+
+    let default = fixture
+        .set_mode(session, "default")
+        .await
+        .expect("default confirmed");
+    assert_eq!(default.mode.as_deref(), Some("default"));
+    fixture
+        .assert_managed_refusal(session, &fixture.scratch.join("note.txt"))
+        .await;
+    fixture.client.shutdown().await;
+}
+
+#[tokio::test]
+async fn refused_and_unconfirmed_explicit_auto_sets_leave_the_prior_request() {
+    for behaviour in ["reject-mode", "malformed-mode-reply"] {
+        let fixture = Fixture::start_managed("claude", &["advertise-restore", behaviour]).await;
+        let session = "restored-default";
+        fixture
+            .restore(session, fixture.saved_setup("default"), RestoreVia::Resume)
+            .await;
+        let result = fixture.set_mode(session, "auto").await;
+        match behaviour {
+            "reject-mode" => assert!(matches!(
+                result,
+                Err(ExternalProviderRuntimeError::SettingFailed { .. })
+            )),
+            _ => assert!(matches!(
+                result,
+                Err(ExternalProviderRuntimeError::SettingOutcomeUnknown { .. })
+            )),
+        }
+        assert_eq!(fixture.grant(session), Some(false), "{behaviour}");
+        fixture.client.shutdown().await;
+    }
 }
 
 #[tokio::test]

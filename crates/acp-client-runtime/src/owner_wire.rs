@@ -32,7 +32,7 @@ use provider_session_machines::tool_ownership::{ToolObservation, ToolOwnershipEf
 use std::{
     collections::BTreeMap,
     num::NonZeroUsize,
-    sync::{Arc, Mutex, PoisonError},
+    sync::{Arc, Mutex},
 };
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
@@ -72,20 +72,9 @@ pub enum OwnerWireRefusal {
 pub struct OwnerAcpWire {
     transport: AcpTransport<AcpFrame>,
     readers: Mutex<BTreeMap<TransportRun, mpsc::Sender<PromptTerminal>>>,
-    grants: WireGrants,
-    catalogs: WireCatalogues,
     restore_updates: Arc<crate::owner_restore_updates::RestoreUpdates>,
     cursor_plans: Arc<crate::provider_cursor_plan_items::CursorPlanItems>,
     behavior: Arc<dyn crate::ProviderBehavior>,
-}
-
-type WireCatalogues = Arc<Mutex<BTreeMap<TransportRun, WireCatalogue>>>;
-type WireGrants =
-    Arc<Mutex<BTreeMap<TransportRun, crate::in_folder_allowance::SessionInFolderGrant>>>;
-
-struct WireCatalogue {
-    current: provider_session_machines::ProviderSettingsCatalog,
-    latest_setting: Option<DispatchAuthorization>,
 }
 
 pub(crate) struct PromptTerminal {
@@ -152,8 +141,6 @@ impl PromptTerminal {
 
 pub(crate) struct OwnerAcpOutput {
     output: mpsc::Receiver<OrderedOutput<AcpFrame>>,
-    catalogs: WireCatalogues,
-    grants: WireGrants,
     restore_updates: Arc<crate::owner_restore_updates::RestoreUpdates>,
 }
 
@@ -163,23 +150,17 @@ impl OwnerAcpWire {
         behavior: Arc<dyn crate::ProviderBehavior>,
     ) -> (Self, OwnerAcpOutput) {
         let (transport, output) = AcpTransport::new(capacity);
-        let catalogs = Arc::new(Mutex::default());
-        let grants = Arc::new(Mutex::default());
         let restore_updates = Arc::new(crate::owner_restore_updates::RestoreUpdates::default());
         (
             Self {
                 transport,
                 readers: Mutex::default(),
-                grants: grants.clone(),
-                catalogs: catalogs.clone(),
                 restore_updates: restore_updates.clone(),
                 cursor_plans: Arc::default(),
                 behavior,
             },
             OwnerAcpOutput {
                 output,
-                catalogs,
-                grants,
                 restore_updates,
             },
         )
@@ -286,14 +267,6 @@ impl OwnerAcpWire {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .remove(&run);
-            self.grants
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .remove(&run);
-            self.catalogs
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .remove(&run);
         }
     }
 
@@ -303,36 +276,34 @@ impl OwnerAcpWire {
         self.cursor_plans.clone()
     }
 
-    pub(crate) fn register_grant(
+    pub(crate) fn register_folders(
         &self,
         run: TransportRun,
-        grant: crate::in_folder_allowance::SessionInFolderGrant,
+        grant: crate::in_folder_allowance::InFolderGrant,
     ) {
-        self.grants
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(run, grant);
+        self.transport.install_folders(run, grant);
     }
 
-    pub(crate) fn in_folder_grant(
-        &self,
-        run: TransportRun,
-    ) -> Option<crate::in_folder_allowance::InFolderGrant> {
-        self.grants
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .get(&run)
-            .filter(|grant| grant.router_auto)
-            .map(|grant| grant.grant.clone())
-    }
-
-    #[cfg(feature = "test-support")]
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn router_auto_grant_for_test(&self, run: TransportRun) -> Option<bool> {
-        self.grants
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .get(&run)
-            .map(|grant| grant.router_auto)
+        self.transport
+            .router_auto_grant_for_test(run, self.behavior.auto_permission_mode())
+    }
+
+    pub(crate) fn select_in_folder_permission(
+        &self,
+        session: &str,
+        tool: &str,
+        scope: (TransportRun, TurnId),
+        permission: crate::in_folder_allowance::InFolderPermission,
+    ) -> Option<agent_client_protocol::schema::v1::PermissionOptionId> {
+        self.transport.select_in_folder_permission(
+            session,
+            tool,
+            scope,
+            permission,
+            self.behavior.auto_permission_mode(),
+        )
     }
 
     pub(crate) fn register_reader(&self, run: TransportRun) -> mpsc::Receiver<PromptTerminal> {
@@ -353,48 +324,24 @@ impl OwnerAcpWire {
         self.transport.observe_tool(run, tool_id, observation)
     }
 
-    /// The provider's encoding catalogue for a specific route.
+    /// The last settings accepted by the owner for this route.
     pub fn session_catalog(
         &self,
         run: TransportRun,
     ) -> Option<provider_session_machines::ProviderSettingsCatalog> {
-        self.catalogs
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .get(&run)
-            .map(|catalog| catalog.current.clone())
+        self.transport.catalogue(run)
     }
 
-    pub fn install_catalog(
+    pub fn publish_run_settings(
         &self,
         run: TransportRun,
-        catalog: provider_session_machines::ProviderSettingsCatalog,
+        settings: provider_session_machines::session_owner::AcceptedRunSettings,
     ) {
-        self.catalogs
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(
-                run,
-                WireCatalogue {
-                    current: catalog,
-                    latest_setting: None,
-                },
-            );
+        self.transport.accept_settings(run, settings);
     }
 
-    pub fn update_catalog(
-        &self,
-        run: TransportRun,
-        catalog: &provider_session_machines::ProviderSettingsCatalog,
-    ) {
-        if let Some(current) = self
-            .catalogs
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .get_mut(&run)
-        {
-            current.current.clone_from(catalog);
-        }
+    pub(crate) fn current_scope(&self, session: &str) -> Option<(TransportRun, TurnId)> {
+        self.transport.current_scope(session)
     }
 
     pub fn resolve_callback(&self, tool_id: &str, kind: CallbackKind) -> CallbackResolution {
@@ -542,7 +489,6 @@ impl OwnerAcpWire {
             .map_err(|_| OwnerWireRefusal::Encoding)?;
             match plan {
                 PermissionModePlan::Keep { reason, .. } => {
-                    set_router_auto(&self.grants, run, false);
                     return Ok(Some(DispatchResult::SettingKept {
                         authorization,
                         reason,
@@ -552,15 +498,8 @@ impl OwnerAcpWire {
                     mode,
                     accepted_fallback,
                     reason,
-                    requested,
-                } => (
-                    mode,
-                    accepted_fallback,
-                    Some(ModeConfirmation {
-                        router_auto: requested == RequestedPermissionMode::Auto,
-                        reason,
-                    }),
-                ),
+                    ..
+                } => (mode, accepted_fallback, Some(ModeConfirmation { reason })),
             }
         } else {
             (wanted, None, None)
@@ -733,21 +672,7 @@ impl OwnerAcpOutput {
                     completion,
                     correlation,
                 } => {
-                    let catalogs = self.catalogs.clone();
-                    let grants = self.grants.clone();
                     let behavior = configuration.behavior.clone();
-                    if let ResponseKind::Setting(setting) = &correlation
-                        && let Some(authorization) = setting.authorization()
-                        && let Some(catalogue) = catalogs
-                            .lock()
-                            .unwrap_or_else(PoisonError::into_inner)
-                            .get_mut(&TransportRun {
-                                incarnation: authorization.incarnation,
-                                generation: authorization.run,
-                            })
-                    {
-                        catalogue.latest_setting = Some(authorization.clone());
-                    }
                     let request = connection.send_request(message).block_task();
                     let shutdown = shutdown.clone();
                     let input_ended = input_ended.clone();
@@ -764,8 +689,6 @@ impl OwnerAcpOutput {
                             response,
                             completion,
                             connection_lost,
-                            &catalogs,
-                            &grants,
                             behavior.as_ref(),
                         );
                     });
@@ -806,8 +729,6 @@ impl ResponseKind {
         reply: Option<Result<serde_json::Value, Error>>,
         completion: OwnerCompletion,
         connection_lost: bool,
-        catalogs: &WireCatalogues,
-        grants: &WireGrants,
         behavior: &dyn crate::ProviderBehavior,
     ) {
         match self {
@@ -825,33 +746,8 @@ impl ResponseKind {
             }
             .route(reader, connection_lost),
             Self::Setting(setting) => {
-                let authorization = setting.authorization().cloned();
-                let mode = setting.mode_confirmation();
-                let (event, observed) =
-                    setting.settle(if connection_lost { None } else { reply }, behavior);
-                if let (Some(authorization), Some(observed)) = (authorization, observed) {
-                    let run = TransportRun {
-                        incarnation: authorization.incarnation,
-                        generation: authorization.run,
-                    };
-                    if let Some(catalogue) = catalogs
-                        .lock()
-                        .unwrap_or_else(PoisonError::into_inner)
-                        .get_mut(&run)
-                        && catalogue.latest_setting.as_ref() == Some(&authorization)
-                    {
-                        catalogue.current = observed;
-                        if let Some(mode) = mode
-                            && matches!(event, OwnerEvent::Dispatch(DispatchResult::SettingFinished {
-                                observation: provider_session_machines::session_owner::SettingObservation::AppliedWithReadback(_),
-                                ..
-                            }))
-                        {
-                            set_router_auto(grants, run, mode.router_auto);
-                        }
-                    }
-                }
-                completion.send(event);
+                completion
+                    .send(setting.settle(if connection_lost { None } else { reply }, behavior));
             }
             other => {
                 if let Some(event) = other.settle(reply) {
@@ -908,16 +804,6 @@ impl ResponseKind {
 #[cfg(test)]
 #[path = "owner_wire_test.rs"]
 mod tests;
-
-fn set_router_auto(grants: &WireGrants, run: TransportRun, active: bool) {
-    if let Some(grant) = grants
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .get_mut(&run)
-    {
-        grant.router_auto = active;
-    }
-}
 
 pub(crate) fn definite_refusal(error: &Error) -> bool {
     !agent_client_protocol::is_incoming_transport_closed(error)

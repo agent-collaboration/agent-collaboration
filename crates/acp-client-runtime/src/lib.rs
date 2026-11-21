@@ -80,10 +80,6 @@ mod transport_run;
 extern crate self as acp_client_runtime;
 #[cfg(test)]
 #[path = "../tests/support/provider_behavior.rs"]
-#[expect(
-    dead_code,
-    reason = "The shared Claude behavior is used by the integration harness."
-)]
 mod test_behavior;
 
 pub use acp_protocol_version::AcpProtocolVersion;

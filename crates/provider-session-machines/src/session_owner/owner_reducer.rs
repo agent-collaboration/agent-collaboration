@@ -117,6 +117,9 @@ impl OwnerTransition {
                 expected_turn,
                 event,
             } => self.observe_stream(run, expected_turn, event),
+            OwnerEvent::CatalogueObserved { run, update } => {
+                self.observe_live_catalogue(run, update)
+            }
             OwnerEvent::SubmittedInput { input, item } => {
                 self.observe_submitted_input(&input, item)
             }

@@ -215,8 +215,8 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                             }
                             return result;
                         }
+                        let scope = permission_callbacks.current_scope(request.session_id.0.as_ref());
                         let context = callback_approval_contexts.lock().ok().and_then(|contexts| {
-                            let scope = permission_callbacks.current_scope(request.session_id.0.as_ref());
                             contexts.get(request.session_id.0.as_ref()).filter(|context| {
                                 scope.is_some_and(|(run, turn)| {
                                     context.incarnation == run.incarnation
@@ -227,11 +227,18 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                         });
                         // A scoped grant can answer without sending the request to a person.
                         if context.is_some()
-                            && let Some(option) = permission_callbacks.in_folder_grant(request.session_id.0.as_ref()).and_then(|grant| {
-                                grant.allow_once(&request.tool_call, &request.options, &|action, title| {
+                            && let Some(scope) = scope
+                            && let Some(permission) = crate::in_folder_allowance::InFolderPermission::from_offer(
+                                &request.tool_call, &request.options, &|action, title| {
                                     permission_behavior.stated_permission_target(action, title)
-                                })
-                            })
+                                },
+                            )
+                            && let Some(option) = permission_callbacks.select_in_folder_permission(
+                                request.session_id.0.as_ref(),
+                                request.tool_call.tool_call_id.0.as_ref(),
+                                scope,
+                                permission,
+                            )
                         {
                             return responder.respond(
                                 agent_client_protocol::schema::v1::RequestPermissionResponse::new(

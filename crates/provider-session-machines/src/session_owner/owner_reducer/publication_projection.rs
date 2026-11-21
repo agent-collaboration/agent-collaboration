@@ -1,13 +1,14 @@
 //! Committed presentation facts carried into a publication rebase.
 
 use super::{OwnerRejection, OwnerResult, OwnerTransition};
+use crate::provider_settings_catalog::ProviderSettingsUpdate;
 use crate::session_lifecycle_machine::{LoadAttempt, RestoreVia};
 use crate::session_owner::{
-    PublicationFact, RunAttempt, SessionLifecycle, SessionOwnerState, SessionProjection,
-    SessionPublication,
+    AcceptedRunSettings, PublicationFact, RunAttempt, SessionLifecycle, SessionOwnerState,
+    SessionProjection, SessionPublication,
 };
 use crate::session_turn_machine::{SessionTurn, TurnId};
-use crate::{ProviderSettingsCatalog, SessionGeneration};
+use crate::{ProviderSettingKind, ProviderSettingsCatalog, SessionGeneration};
 use session_event_model::{
     CapabilityReport, PendingInteraction, PendingInteractions, SessionEvent, SessionSettings,
     SessionState, SkillView,
@@ -78,8 +79,46 @@ impl OwnerTransition {
             run,
             settings,
             observed: self.next.ports.observed.clone(),
-            catalogue: Some(catalogue),
+            accepted: Some(AcceptedRunSettings {
+                catalogue,
+                router_auto_requested: self.next.ports.router_auto_requested,
+            }),
         }]);
+    }
+
+    pub(super) fn observe_live_catalogue(
+        &mut self,
+        run: SessionGeneration,
+        update: ProviderSettingsUpdate,
+    ) -> OwnerResult {
+        if !self.is_live(run) {
+            return Err(OwnerRejection::IgnoredLate);
+        }
+        let current = self
+            .next
+            .ports
+            .settings_catalogue
+            .as_ref()
+            .ok_or(OwnerRejection::IgnoredLate)?;
+        let mut catalogue = current.as_ref().clone();
+        catalogue.apply_update(update);
+        if !self.accepts_stream_setting(ProviderSettingKind::Mode) {
+            catalogue.apply_late_setting_readback(ProviderSettingKind::Mode, current);
+        }
+        let settings = catalogue.to_session_settings();
+        self.observe_catalogue_values(&settings)?;
+        self.publish_accepted_catalogue(run, Arc::new(catalogue));
+        Ok(())
+    }
+
+    fn accepts_stream_setting(&self, kind: ProviderSettingKind) -> bool {
+        !self.setting_fenced(kind)
+            && self.next.cell.settings.get(&kind).is_none_or(|setting| {
+                matches!(
+                    setting,
+                    crate::session_setting_machine::SessionSetting::Current { .. }
+                )
+            })
     }
 
     pub(super) fn resolve_previous_turn_interactions(&mut self, run: SessionGeneration) {
@@ -172,21 +211,14 @@ impl OwnerTransition {
             ProviderSettingKind,
             session_cell_machine::SessionCellEvent,
             session_owner::{ObservedSetting, SettingEvidence},
-            session_setting_machine::{SessionSetting, SessionSettingEvent, SettingValueId},
+            session_setting_machine::{SessionSettingEvent, SettingValueId},
         };
         for (kind, value) in [
             (ProviderSettingKind::Mode, settings.mode.as_ref()),
             (ProviderSettingKind::Model, settings.model.as_ref()),
             (ProviderSettingKind::Effort, settings.effort.as_ref()),
         ] {
-            if self.setting_fenced(kind)
-                || self
-                    .next
-                    .cell
-                    .settings
-                    .get(&kind)
-                    .is_some_and(|setting| !matches!(setting, SessionSetting::Current { .. }))
-            {
+            if !self.accepts_stream_setting(kind) {
                 continue;
             }
             if let Some(value) = value {

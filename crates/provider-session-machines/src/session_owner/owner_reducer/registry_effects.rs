@@ -60,6 +60,8 @@ impl OwnerTransition {
                     return Err(OwnerRejection::IgnoredLate);
                 };
                 self.next.ports.observed = facts.observed;
+                self.next.ports.settings_catalogue = Some(facts.catalogue);
+                self.next.ports.router_auto_requested = facts.router_auto_requested;
                 self.next.ports.mode_reason = facts.mode_reason;
                 self.cell_move(SessionCellEvent::KeepFastOff(facts.keep_fast_off))?;
                 if let Some(failed) = facts.failed_setting {

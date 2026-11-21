@@ -51,10 +51,6 @@ pub(crate) struct InitialSettingsOutcome {
     pub(crate) failure: Option<SettingSetupFailure>,
     /// Finished as soon as the mode is known, so a later failure carries it.
     pub(crate) permission_mode: crate::PermissionModeReport,
-    /// True only when `auto` was requested, the plan was `Set`, the mode
-    /// setting succeeded, and the agent confirmed the planned mode or its
-    /// accepted fallback.
-    pub(crate) router_auto_active: bool,
 }
 
 /// The mode value to send, and how its outcome is judged and reported.
@@ -81,7 +77,6 @@ pub(crate) async fn apply_initial_settings(
     clock: &dyn router_clock::RuntimeClock,
 ) -> InitialSettingsOutcome {
     let requested_mode = crate::RequestedPermissionMode::from_request(requested.mode.as_deref());
-    let router_auto_requested = requested_mode == crate::RequestedPermissionMode::Auto;
     let mut outcome = InitialSettingsOutcome {
         applied: Vec::new(),
         failure: None,
@@ -90,7 +85,6 @@ pub(crate) async fn apply_initial_settings(
             actual: None,
             reason: None,
         },
-        router_auto_active: false,
     };
     let planned_mode = if requested_mode == crate::RequestedPermissionMode::Unspecified {
         outcome.permission_mode.actual = catalog.effective_settings().mode;
@@ -182,7 +176,7 @@ pub(crate) async fn apply_initial_settings(
         if kind == ProviderSettingKind::Mode
             && let Some(planned) = &planned_mode
         {
-            record_confirmed_mode(&mut outcome, planned, catalog, router_auto_requested);
+            record_confirmed_mode(&mut outcome, planned, catalog);
         }
     }
     outcome
@@ -305,39 +299,15 @@ fn record_confirmed_mode(
     outcome: &mut InitialSettingsOutcome,
     planned: &PlannedMode,
     catalog: &ProviderSettingsCatalog,
-    router_auto_requested: bool,
 ) {
     let actual = catalog.effective_settings().mode;
-    let judged = judge_agent_mode(planned, actual.as_deref(), router_auto_requested);
-    outcome.permission_mode.reason = judged.reason;
-    outcome.router_auto_active = judged.router_auto_active;
-    outcome.permission_mode.actual = actual;
-}
-
-/// How the mode an agent reports answers a planned mode.
-struct JudgedMode {
-    reason: Option<crate::PermissionModeReason>,
-    /// Router auto was asked for and the agent runs the planned mode or its
-    /// accepted fallback.
-    router_auto_active: bool,
-}
-
-fn judge_agent_mode(
-    planned: &PlannedMode,
-    actual: Option<&str>,
-    router_auto_requested: bool,
-) -> JudgedMode {
-    let fell_back =
-        planned.accepted_fallback.is_some() && actual == planned.accepted_fallback.as_deref();
-    JudgedMode {
-        reason: if fell_back {
+    outcome.permission_mode.reason =
+        if planned.accepted_fallback.is_some() && actual == planned.accepted_fallback {
             Some(crate::PermissionModeReason::AgentFellBack)
         } else {
             planned.reason
-        },
-        router_auto_active: router_auto_requested
-            && (fell_back || actual == Some(planned.value.as_str())),
-    }
+        };
+    outcome.permission_mode.actual = actual;
 }
 
 async fn apply_one_setting(
@@ -504,35 +474,27 @@ async fn send_setting_request(
 }
 
 pub(crate) fn current_mode_grants_auto(
-    requested: Option<&str>,
-    catalog: &ProviderSettingsCatalog,
-    behavior: &dyn crate::ProviderBehavior,
+    settings: &provider_session_machines::session_owner::AcceptedRunSettings,
+    auto: crate::AutoPermissionMode,
 ) -> bool {
-    let requested_mode = crate::RequestedPermissionMode::from_request(requested);
-    if requested_mode != crate::RequestedPermissionMode::Auto {
+    if !settings.router_auto_requested {
         return false;
     }
+    let catalog = &settings.catalogue;
     let Ok(crate::PermissionModePlan::Set {
         mode,
         accepted_fallback,
-        reason,
         ..
     }) = crate::plan_permission_mode(
-        requested_mode,
+        crate::RequestedPermissionMode::Auto,
         &catalog.advertised_values(ProviderSettingKind::Mode),
-        behavior.auto_permission_mode(),
+        auto,
     )
     else {
         return false;
     };
-    judge_agent_mode(
-        &PlannedMode {
-            value: mode,
-            accepted_fallback,
-            reason,
-        },
-        catalog.effective_settings().mode.as_deref(),
-        true,
-    )
-    .router_auto_active
+    catalog
+        .effective_settings()
+        .mode
+        .is_some_and(|actual| actual == mode || accepted_fallback.as_ref() == Some(&actual))
 }

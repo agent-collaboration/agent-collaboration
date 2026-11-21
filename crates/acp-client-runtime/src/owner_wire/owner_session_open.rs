@@ -36,7 +36,6 @@ pub struct OwnerOpenedSession {
     pub(crate) buffer: Arc<ProjectionBuffer>,
     pub(crate) projection: Option<ProviderItemProjection>,
     pub(crate) in_folder: Option<crate::in_folder_allowance::InFolderGrant>,
-    pub(crate) router_auto_active: bool,
     #[cfg(any(test, feature = "test-observation"))]
     pub(crate) observed_tool_calls: crate::owner_session_stream::TestToolCallRecords,
 }
@@ -82,7 +81,6 @@ impl OwnerOpenedSession {
             buffer: Arc::default(),
             projection: None,
             in_folder,
-            router_auto_active: false,
             #[cfg(any(test, feature = "test-observation"))]
             observed_tool_calls: config.observed_tool_calls.clone(),
         }
@@ -99,13 +97,7 @@ impl OwnerOpenedSession {
         run: crate::acp_transport::TransportRun,
     ) {
         if let Some(grant) = self.in_folder.take() {
-            wire.register_grant(
-                run,
-                crate::in_folder_allowance::SessionInFolderGrant {
-                    grant,
-                    router_auto: self.router_auto_active,
-                },
-            );
+            wire.register_folders(run, grant);
         }
     }
 }

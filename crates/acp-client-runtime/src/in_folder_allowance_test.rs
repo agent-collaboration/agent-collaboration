@@ -556,7 +556,7 @@ fn an_ended_runs_mode_change_never_turns_on_the_newer_runs_grant() {
     let folders = folders();
     let (wire, _output) = crate::owner_wire::OwnerAcpWire::new(
         NonZeroUsize::MIN,
-        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
+        std::sync::Arc::new(crate::test_behavior::ClaudeLikeAutoBehavior),
     );
     let first = TransportRun {
         incarnation: OwnerIncarnation(uuid::Uuid::now_v7()),
@@ -571,28 +571,102 @@ fn an_ended_runs_mode_change_never_turns_on_the_newer_runs_grant() {
     wire.open_route(second, "session-a".into());
     wire.activate_route(second);
     let grant = InFolderGrant::new(&folders.project, &folders.scratch, &[]).expect("grant");
-    wire.register_grant(
-        second,
-        super::SessionInFolderGrant {
-            grant: grant.clone(),
-            router_auto: false,
-        },
-    );
+    wire.register_folders(second, grant);
+    wire.publish_run_settings(second, run_auto_settings(false));
 
-    wire.register_grant(
-        first,
-        super::SessionInFolderGrant {
-            grant: grant.clone(),
-            router_auto: true,
-        },
+    wire.publish_run_settings(first, run_auto_settings(true));
+    assert_eq!(wire.router_auto_grant_for_test(second), Some(false));
+    wire.publish_run_settings(second, run_auto_settings(true));
+    assert_eq!(wire.router_auto_grant_for_test(second), Some(true));
+}
+
+#[test]
+fn a_replaced_prompt_scope_cannot_use_its_successors_allowance() {
+    use crate::acp_transport::TransportRun;
+    use crate::owner_callback_routing::OwnerCallbackRouting;
+    use provider_session_machines::{
+        SessionGeneration,
+        session_owner::{OwnerIncarnation, TurnMembership},
+        session_turn_machine::TurnId,
+    };
+    use std::{num::NonZeroUsize, sync::Arc};
+
+    let folders = folders();
+    let (wire, _output) = crate::owner_wire::OwnerAcpWire::new(
+        NonZeroUsize::MIN,
+        Arc::new(crate::test_behavior::ClaudeLikeAutoBehavior),
     );
-    assert!(wire.in_folder_grant(second).is_none());
-    wire.register_grant(
-        second,
-        super::SessionInFolderGrant {
-            grant,
-            router_auto: true,
-        },
+    let wire = Arc::new(wire);
+    let routing = OwnerCallbackRouting::new(wire.clone());
+    let first = TransportRun {
+        incarnation: OwnerIncarnation(uuid::Uuid::now_v7()),
+        generation: SessionGeneration::from_number(1),
+    };
+    let next = TransportRun {
+        generation: SessionGeneration::from_number(2),
+        ..first
+    };
+    let attach_turn = |run: TransportRun, turn: TurnId| {
+        wire.open_route(run, "session-a".into());
+        wire.activate_route(run);
+        wire.apply_membership(
+            run.incarnation,
+            TurnMembership::ObservedEligible {
+                run: run.generation,
+                turn,
+            },
+        );
+    };
+    let first_turn = TurnId(uuid::Uuid::now_v7());
+    attach_turn(first, first_turn);
+    let checked_scope = routing
+        .current_scope("session-a")
+        .expect("checked prompt context");
+    assert_eq!(checked_scope, (first, first_turn));
+
+    wire.apply_membership(first.incarnation, TurnMembership::Retire(first.generation));
+    let next_turn = TurnId(uuid::Uuid::now_v7());
+    attach_turn(next, next_turn);
+    wire.register_folders(
+        next,
+        InFolderGrant::new(&folders.project, &folders.scratch, &[]).expect("grant"),
     );
-    assert!(wire.in_folder_grant(second).is_some());
+    wire.publish_run_settings(next, run_auto_settings(true));
+
+    let target = folders.scratch.join("note.txt");
+    let tool_call = file_call(ToolKind::Edit, &[&target]);
+    let permission = || {
+        super::InFolderPermission::from_offer(&tool_call, &options(), &NO_TITLES)
+            .expect("valid in-folder request")
+    };
+    assert!(
+        routing
+            .select_in_folder_permission("session-a", "call", checked_scope, permission())
+            .is_none(),
+        "the checked prompt scope {checked_scope:?} cannot inherit the successor's grant"
+    );
+    assert!(
+        routing
+            .select_in_folder_permission("session-a", "call", (next, next_turn), permission())
+            .is_some()
+    );
+}
+
+fn run_auto_settings(
+    router_auto_requested: bool,
+) -> provider_session_machines::session_owner::AcceptedRunSettings {
+    use provider_session_machines::{
+        ProviderSettingChoice, ProviderSettingsCatalog, session_owner::AcceptedRunSettings,
+    };
+    AcceptedRunSettings {
+        router_auto_requested,
+        catalogue: std::sync::Arc::new(ProviderSettingsCatalog {
+            current_mode: Some("auto".into()),
+            modes: vec![ProviderSettingChoice {
+                value: "auto".into(),
+                label: "Auto".into(),
+            }],
+            ..ProviderSettingsCatalog::default()
+        }),
+    }
 }

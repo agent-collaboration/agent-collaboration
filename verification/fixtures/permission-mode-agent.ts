@@ -32,6 +32,7 @@
 //     records each restore's additionalDirectories and _meta, and answers it
 //     with the session in its profile's start mode.
 //   restored-in-auto: with advertise-restore, a restored session is in auto.
+//   leave-auto-after-first-edit: report default after the first permission reply.
 //   restored-in-accept-edits: the restored mode is the provider's acceptEdits fallback.
 //   narrow-restore-modes: after a restore, advertise only default and plan.
 //   restore-fast-on: with advertise-restore and offer-fast, a restored
@@ -65,6 +66,7 @@ const known = [
   "refuse-fast-once",
   "advertise-restore",
   "restored-in-auto",
+  "leave-auto-after-first-edit",
   "restored-in-accept-edits",
   "narrow-restore-modes",
   "restore-fast-on",
@@ -252,6 +254,20 @@ requests: for (;;) {
       const answer = await agent.read();
       observed.permissionAnswers.push({ sessionId, answer: field(answer, "result") });
       agent.receipt(receipt, observed);
+      if (
+        behaviours.has("leave-auto-after-first-edit") &&
+        observed.permissionAnswers.length === 1
+      ) {
+        currentMode.set(sessionId, "default");
+        agent.send({
+          jsonrpc: "2.0",
+          method: "session/update",
+          params: {
+            sessionId,
+            update: { sessionUpdate: "current_mode_update", currentModeId: "default" },
+          },
+        });
+      }
       agent.endTurn(request);
       break;
     }

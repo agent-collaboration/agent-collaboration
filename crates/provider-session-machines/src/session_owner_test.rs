@@ -122,6 +122,7 @@ fn restore_reply(run: RunAttempt<LoadAttempt>) -> OwnerEvent {
         run,
         outcome: WireOutcome::Confirmed(RestoreLoadReadback {
             catalogue: Arc::default(),
+            router_auto_requested: false,
             mode: RestoredMode::Observed,
             fast_on: None,
         }),

@@ -4,6 +4,7 @@ use super::{
     SessionPublication, SessionStoreRequest, SessionStoreResult, SessionTurn, SessionWireRequest,
     SessionWireResult, TurnId,
 };
+use crate::provider_settings_catalog::ProviderSettingsUpdate;
 use crate::session_lifecycle_machine::{CloseAttempt, LoadAttempt};
 use crate::session_setting_machine::{SettingApplication, SettingValueId};
 use crate::{ProviderSettingKind, ProviderSettingsCatalog};
@@ -55,6 +56,10 @@ pub enum OwnerEvent {
         run: SessionGeneration,
         expected_turn: Option<TurnId>,
         event: SessionEvent,
+    },
+    CatalogueObserved {
+        run: SessionGeneration,
+        update: ProviderSettingsUpdate,
     },
     SubmittedInput {
         input: OwnerInput,
@@ -313,6 +318,8 @@ pub struct CreatedSessionFacts {
     pub capabilities: CapabilityReport,
     pub settings: SessionSettings,
     pub observed: BTreeMap<ProviderSettingKind, SettingEvidence>,
+    pub catalogue: Arc<ProviderSettingsCatalog>,
+    pub router_auto_requested: bool,
     pub mode_reason: Option<PermissionModeReason>,
     pub keep_fast_off: bool,
     pub failed_setting: Option<InitialSettingFailure>,
@@ -340,7 +347,7 @@ pub enum PermissionModeReason {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SettingReadback {
     pub value: SettingValueId,
-    pub settings: SessionSettings,
+    pub catalogue: Arc<ProviderSettingsCatalog>,
     pub fast: FastReadback,
     pub mode_reason: Option<PermissionModeReason>,
 }
@@ -654,7 +661,7 @@ pub enum PublicationFact {
         run: SessionGeneration,
         settings: SessionSettings,
         observed: BTreeMap<ProviderSettingKind, SettingEvidence>,
-        catalogue: Option<Arc<ProviderSettingsCatalog>>,
+        accepted: Option<AcceptedRunSettings>,
     },
     Live(SessionPublication),
     Stream {
@@ -665,6 +672,12 @@ pub enum PublicationFact {
         run: SessionGeneration,
         view: SkillView,
     },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AcceptedRunSettings {
+    pub catalogue: Arc<ProviderSettingsCatalog>,
+    pub router_auto_requested: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -817,6 +830,7 @@ pub(in crate::session_owner) struct PendingPorts {
     pub replay: Vec<SessionEvent>,
     pub observed: BTreeMap<ProviderSettingKind, SettingEvidence>,
     pub settings_catalogue: Option<Arc<ProviderSettingsCatalog>>,
+    pub router_auto_requested: bool,
     pub mode_reason: Option<PermissionModeReason>,
     pub last_live_turn: Option<LastLiveTurn>,
     pub projection: super::owner_reducer::OwnerProjection,
@@ -862,6 +876,7 @@ impl PendingPorts {
             replay: Vec::new(),
             observed: BTreeMap::new(),
             settings_catalogue: None,
+            router_auto_requested: false,
             mode_reason: None,
             last_live_turn: None,
             projection: super::owner_reducer::OwnerProjection::default(),

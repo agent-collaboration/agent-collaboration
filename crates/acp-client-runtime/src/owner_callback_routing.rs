@@ -2,6 +2,7 @@
 
 use crate::{
     acp_transport::{CallbackKind, CallbackResolution, TransportRun},
+    in_folder_allowance::InFolderPermission,
     owner_wire::OwnerAcpWire,
 };
 use agent_client_protocol::{Agent, ConnectionTo, Dispatch, Error, HandleDispatchFrom, Handled};
@@ -46,16 +47,18 @@ impl OwnerCallbackRouting {
     }
 
     pub(crate) fn current_scope(&self, session: &str) -> Option<(TransportRun, TurnId)> {
-        let run = self.wire.route_for_session(session)?;
-        Some((run, self.wire.current_turn(run)?))
+        self.wire.current_scope(session)
     }
 
-    pub(crate) fn in_folder_grant(
+    pub(crate) fn select_in_folder_permission(
         &self,
         session: &str,
-    ) -> Option<crate::in_folder_allowance::InFolderGrant> {
-        let run = self.wire.route_for_session(session)?;
-        self.wire.in_folder_grant(run)
+        tool: &str,
+        scope: (TransportRun, TurnId),
+        permission: InFolderPermission,
+    ) -> Option<agent_client_protocol::schema::v1::PermissionOptionId> {
+        self.wire
+            .select_in_folder_permission(session, tool, scope, permission)
     }
 }
 

@@ -171,6 +171,7 @@ pub enum RestoredMode {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RestoreLoadReadback {
     pub catalogue: Arc<ProviderSettingsCatalog>,
+    pub router_auto_requested: bool,
     pub mode: RestoredMode,
     pub fast_on: Option<SettingApplication>,
 }
@@ -188,7 +189,10 @@ pub enum RestoreModeOutcome {
 pub enum SettingObservation {
     Applied(SettingValueId),
     AppliedWithReadback(Box<SettingReadback>),
-    Refused { current: Option<SettingValueId> },
+    Refused {
+        current: Option<SettingValueId>,
+        catalogue: Option<Arc<ProviderSettingsCatalog>>,
+    },
     Unknown,
 }
 

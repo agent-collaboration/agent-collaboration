@@ -472,7 +472,10 @@ fn definite_fast_retry_without_readback_preserves_the_previous_unknown_write() {
         &mut state,
         OwnerEvent::Dispatch(DispatchResult::SettingFinished {
             authorization: retry,
-            observation: SettingObservation::Refused { current: None },
+            observation: SettingObservation::Refused {
+                current: None,
+                catalogue: None,
+            },
         }),
     );
 

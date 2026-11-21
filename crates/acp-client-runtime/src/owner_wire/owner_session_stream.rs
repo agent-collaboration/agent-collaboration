@@ -10,7 +10,7 @@ use crate::{
     owner_session_replay::replay_queued_session_updates,
     owner_wire::{OwnerAcpWire, PromptTerminal},
     provider_item_projection::ProviderItemProjection,
-    provider_settings_catalog_codec::apply_settings_update,
+    provider_settings_catalog_codec::decode_settings_update,
     provider_update_kind::{is_known_update_kind, safe_update_kind},
     session_owner_task::OwnerCompletionPort,
 };
@@ -20,6 +20,7 @@ use agent_client_protocol::{
 };
 use futures_util::FutureExt as _;
 use provider_session_machines::ProviderSettingsCatalog;
+use provider_session_machines::provider_settings_catalog::ProviderSettingsUpdate;
 use provider_session_machines::session_owner::{OwnerAddress, OwnerEvent};
 use provider_session_machines::session_turn_machine::TurnId;
 use session_event_model::session_profile_codec::{ProfileState, STATE_METHOD, StateNotification};
@@ -34,6 +35,7 @@ pub(crate) type TestToolCallRecords =
 
 enum StreamFact {
     Event(SessionEvent),
+    Catalogue(ProviderSettingsUpdate),
     Skills(SkillView),
 }
 
@@ -108,6 +110,10 @@ impl OwnerStreamTarget {
                     run: self.run.generation,
                     expected_turn: turn,
                     event,
+                },
+                StreamFact::Catalogue(update) => OwnerEvent::CatalogueObserved {
+                    run: self.run.generation,
+                    update,
                 },
                 StreamFact::Skills(view) => OwnerEvent::SkillView {
                     run: self.run.generation,
@@ -261,6 +267,9 @@ impl OwnerOpenedSession {
             match fact {
                 StreamFact::Event(event) => result.events.push(event),
                 StreamFact::Skills(view) => result.skills = Some(view),
+                StreamFact::Catalogue(_) => {
+                    return Err(ExternalProviderRuntimeError::HistoryReplayUnavailable);
+                }
             }
         }
         Ok(result)
@@ -423,10 +432,9 @@ impl OwnerOpenedSession {
             projection.discard_turn_local_cursors();
         }
         let mut current = turn.map(|turn| captured.turns.entry(turn).or_default());
-        let (text, settings_updated) = project_update(
+        let text = project_update(
             update,
             projection,
-            &mut self.catalog,
             self.behavior.as_ref(),
             &self.buffer,
             |tool| target.wire.transport.tool_in_current_turn(target.run, tool),
@@ -437,9 +445,6 @@ impl OwnerOpenedSession {
                 }
             },
         )?;
-        if settings_updated {
-            target.wire.update_catalog(target.run, &self.catalog);
-        }
         if let (Some(turn), Some(text), Some(response)) = (turn, text, current.take())
             && response.append(&text)
             && target
@@ -464,20 +469,19 @@ impl OwnerOpenedSession {
 fn project_update(
     update: SessionMessage,
     projection: &mut ProviderItemProjection,
-    catalog: &mut ProviderSettingsCatalog,
     behavior: &dyn ProviderBehavior,
     buffer: &ProjectionBuffer,
     tool_in_current_turn: impl FnOnce(&str) -> bool,
     #[cfg(any(test, feature = "test-observation"))] observe_tool: impl FnOnce(&SessionUpdate),
-) -> Result<(Option<String>, bool), ExternalProviderRuntimeError> {
+) -> Result<Option<String>, ExternalProviderRuntimeError> {
     let SessionMessage::SessionMessage(dispatch) = update else {
-        return Ok((None, false));
+        return Ok(None);
     };
     let Dispatch::Notification(notification) = &dispatch else {
-        return Ok((None, false));
+        return Ok(None);
     };
     if notification.method() != "session/update" {
-        return Ok((None, false));
+        return Ok(None);
     }
     let params = notification.params();
     let raw_update = params.get("update");
@@ -494,7 +498,7 @@ fn project_update(
         projection
             .observe_unknown(safe_update_kind(kind).unwrap_or("unrecognized"), content)
             .map_err(|_| ExternalProviderRuntimeError::FrameDecodeFailure)?;
-        return Ok((None, false));
+        return Ok(None);
     }
     let Ok(typed) = serde_json::from_value::<SessionNotification>(params.clone()) else {
         if crate::provider_update_kind::has_unknown_informational_value(&dispatch) {
@@ -505,27 +509,20 @@ fn project_update(
                 )
                 .map_err(|_| ExternalProviderRuntimeError::FrameDecodeFailure)?;
         }
-        return Ok((None, false));
+        return Ok(None);
     };
     if let SessionUpdate::ToolCallUpdate(tool) = &typed.update {
         let id = tool.tool_call_id.0.as_ref();
         // A continuation without an exact current-turn claim can only
         // update an item this run's projection already retains.
         if !projection.has_tool_item(id) && !tool_in_current_turn(id) {
-            return Ok((None, false));
+            return Ok(None);
         }
     }
     #[cfg(any(test, feature = "test-observation"))]
     observe_tool(&typed.update);
-    let prior = catalog.to_session_settings();
-    let settings_updated = apply_settings_update(catalog, &typed.update, behavior);
-    let settings = catalog.to_session_settings();
-    if prior != settings {
-        buffer
-            .facts()
-            .push(StreamFact::Event(SessionEvent::SettingsChanged {
-                settings,
-            }));
+    if let Some(update) = decode_settings_update(&typed.update, behavior) {
+        buffer.facts().push(StreamFact::Catalogue(update));
     }
     let text = match &typed.update {
         SessionUpdate::AgentMessageChunk(chunk) => match &chunk.content {
@@ -539,5 +536,5 @@ fn project_update(
     {
         return Err(ExternalProviderRuntimeError::SinkClosed);
     }
-    Ok((text, settings_updated))
+    Ok(text)
 }

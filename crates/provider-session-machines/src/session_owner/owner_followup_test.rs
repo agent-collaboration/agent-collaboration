@@ -454,6 +454,7 @@ fn t4_unoffered_saved_mode_still_commits_with_not_offered_delta() {
             run,
             outcome: WireOutcome::Confirmed(RestoreLoadReadback {
                 catalogue: Arc::default(),
+                router_auto_requested: false,
                 mode: RestoredMode::NotOffered {
                     current: Some(SettingValueId("default".into())),
                 },
@@ -480,6 +481,7 @@ fn report_restore_mode(
             run,
             outcome: WireOutcome::Confirmed(RestoreLoadReadback {
                 catalogue: Arc::default(),
+                router_auto_requested: false,
                 mode: RestoredMode::Reapply {
                     application,
                     value: SettingValueId("auto".into()),

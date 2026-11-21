@@ -100,6 +100,7 @@ impl Mailbox {
                     run,
                     outcome: WireOutcome::Confirmed(RestoreLoadReadback {
                         catalogue: Arc::default(),
+                        router_auto_requested: false,
                         mode: RestoredMode::Reapply {
                             application: SettingApplication(run.attempt.0),
                             value: SettingValueId("auto".into()),

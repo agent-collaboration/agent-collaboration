@@ -56,7 +56,6 @@ pub struct SessionOwnerExecution {
 
 struct OpenedRestore {
     session: OwnerOpenedSession,
-    requested_mode: Option<String>,
     fallback: Option<String>,
     skills: Option<session_event_model::SkillView>,
 }
@@ -274,7 +273,6 @@ impl SessionOwnerExecution {
                 run.attempt,
                 OpenedRestore {
                     session,
-                    requested_mode: saved.resume.requested_mode,
                     fallback: accepted_mode_fallback,
                     skills,
                 },
@@ -283,6 +281,8 @@ impl SessionOwnerExecution {
                 run,
                 outcome: WireOutcome::Confirmed(RestoreLoadReadback {
                     catalogue,
+                    router_auto_requested: saved.resume.requested_mode.as_deref()
+                        == Some(acp_client_runtime::AUTO_PERMISSION_MODE),
                     mode,
                     fast_on: fast_off,
                 }),
@@ -475,7 +475,6 @@ impl SessionOwnerExecution {
         let Some(held) = self.routes.get_mut(&generation) else {
             return;
         };
-        self.wire.install_catalog(route, session.catalog().clone());
         session.register_in_folder_scope(&self.wire, route);
         let retired = held.cancel.clone();
         let completion = completions.clone();
@@ -567,9 +566,7 @@ impl SessionOwnerPorts for SessionOwnerExecution {
                 let mut openings = lock(&self.opens);
                 let preparation = match openings.get_mut(&run.attempt) {
                     Some(entry) => {
-                        entry
-                            .session
-                            .accept_restore_catalogue(&catalogue, entry.requested_mode.as_deref());
+                        entry.session.accept_restore_catalogue(&catalogue);
                         RestorePreparation::HostReady {
                             run,
                             capabilities: entry.session.capabilities().to_session_model(),
@@ -670,14 +667,6 @@ impl SessionOwnerPorts for SessionOwnerExecution {
                 if let PublicationBatch::Commit { facts, .. } = &batch {
                     for fact in facts {
                         match fact {
-                            PublicationFact::Settings {
-                                run,
-                                catalogue: Some(catalogue),
-                                ..
-                            } => {
-                                self.wire
-                                    .update_catalog(Self::transport_run(owner, *run), catalogue);
-                            }
                             PublicationFact::Live(SessionPublication::Activated {
                                 run, ..
                             }) => {
@@ -687,6 +676,19 @@ impl SessionOwnerPorts for SessionOwnerExecution {
                                 self.activate_created(owner, *run, completions);
                             }
                             _ => {}
+                        }
+                    }
+                    for fact in facts {
+                        if let PublicationFact::Settings {
+                            run,
+                            accepted: Some(accepted),
+                            ..
+                        } = fact
+                        {
+                            self.wire.publish_run_settings(
+                                Self::transport_run(owner, *run),
+                                accepted.clone(),
+                            );
                         }
                     }
                 }

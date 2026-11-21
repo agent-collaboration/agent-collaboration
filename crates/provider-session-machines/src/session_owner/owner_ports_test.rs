@@ -496,6 +496,7 @@ fn t5_late_restore_mode_correlation_releases_only_its_own_fence() {
             run: first,
             outcome: WireOutcome::Confirmed(RestoreLoadReadback {
                 catalogue: Arc::default(),
+                router_auto_requested: false,
                 mode: RestoredMode::Reapply {
                     application,
                     value: SettingValueId("auto".into()),
@@ -581,8 +582,8 @@ fn t5_late_restore_fast_confirmation_updates_value_and_keeps_the_existing_hold()
         effect,
         OwnerEffect::Publish(PublicationBatch::Commit { facts, .. })
             if facts.iter().any(|fact| matches!(fact,
-                PublicationFact::Settings { run: generation, catalogue: Some(catalogue), .. }
-                    if *generation == run.generation && catalogue.fast_observed() == crate::FastObserved::Off))
+                PublicationFact::Settings { run: generation, accepted: Some(settings), .. }
+                    if *generation == run.generation && settings.catalogue.fast_observed() == crate::FastObserved::Off))
     )));
     assert!(matches!(
         decide(
@@ -644,6 +645,7 @@ fn time_out_restore_fast_off(
             run,
             outcome: WireOutcome::Confirmed(RestoreLoadReadback {
                 catalogue: fast_catalogue(true),
+                router_auto_requested: false,
                 mode: RestoredMode::Observed,
                 fast_on: Some(SettingApplication(uuid(2))),
             }),

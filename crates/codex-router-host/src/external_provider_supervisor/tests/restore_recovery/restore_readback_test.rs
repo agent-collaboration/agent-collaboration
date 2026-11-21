@@ -254,19 +254,17 @@ async fn assert_restore_mode_reply(
         Some("agent"),
         "the same live run accepts its still-current mode observation",
     );
-    if matches!(timing, RestoreModeReplyTiming::BeforeDeadline) {
-        let edit =
-            serde_json::json!({"kind":"edit","locations":[{"path":scratch.join("note.txt")}]});
-        let input = OperationId::generate();
-        host.prompt(rig.prompt_request(input.clone(), &edit.to_string()))
-            .await
-            .expect("prompt admitted");
-        host.wait(wait_request(input)).await.expect("edit settles");
-        assert_eq!(
-            rig.wire_receipt()
-                .pointer("/permissionAnswers/0/answer/outcome"),
-            Some(&serde_json::json!({"outcome":"selected","optionId":"allow"})),
-        );
-    }
+    let edit = serde_json::json!({"kind":"edit","locations":[{"path":scratch.join("note.txt")}]});
+    let input = OperationId::generate();
+    host.prompt(rig.prompt_request(input.clone(), &edit.to_string()))
+        .await
+        .expect("prompt admitted");
+    host.wait(wait_request(input)).await.expect("edit settles");
+    assert_eq!(
+        rig.wire_receipt()
+            .pointer("/permissionAnswers/0/answer/outcome"),
+        Some(&serde_json::json!({"outcome":"selected","optionId":"allow"})),
+        "the active run has the requested Auto and an owner-confirmed mode",
+    );
     host.shutdown().await.expect("fixture shutdown");
 }

@@ -75,6 +75,7 @@ impl OwnerTransition {
         self.cell_move(SessionCellEvent::LoadRequested { attempt, via })?;
         self.next.ports.observed.clear();
         self.next.ports.settings_catalogue = None;
+        self.next.ports.router_auto_requested = false;
         self.next.ports.mode_reason = None;
         self.next.ports.admitted_inputs.clear();
         self.next.ports.replay.clear();
@@ -171,6 +172,7 @@ impl OwnerTransition {
         }
         let RestoreLoadReadback {
             catalogue,
+            router_auto_requested,
             mode,
             fast_on,
         } = match outcome {
@@ -183,6 +185,7 @@ impl OwnerTransition {
             }
         };
         self.next.ports.settings_catalogue = Some(Arc::clone(&catalogue));
+        self.next.ports.router_auto_requested = router_auto_requested;
         self.next.ports.fast_reapply = fast_on.map(|application| OwnerSetting {
             change: RunAttempt {
                 generation: run.generation,

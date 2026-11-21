@@ -2,13 +2,15 @@
 
 use crate::callback_router::CallbackRouter;
 pub use crate::callback_router::{CallbackKind, CallbackResolution};
+use crate::in_folder_allowance::{InFolderGrant, InFolderPermission};
 pub use crate::transport_run::TransportRun;
+use agent_client_protocol::schema::v1::PermissionOptionId;
 use provider_session_machines::{
     SessionGeneration,
     session_lifecycle_machine::CloseAttempt,
     session_owner::{
-        AuthorizationTarget, DispatchAuthorization, DispatchResult, OwnerIncarnation,
-        TurnMembership,
+        AcceptedRunSettings, AuthorizationTarget, DispatchAuthorization, DispatchResult,
+        OwnerIncarnation, TurnMembership,
     },
     session_turn_machine::TurnId,
     tool_ownership::{ToolObservation, ToolOwnershipEffect},
@@ -50,6 +52,8 @@ pub struct OrderedOutput<Frame> {
 struct ConnectionRoute {
     session: String,
     closing: Option<CloseAttempt>,
+    folders: Option<InFolderGrant>,
+    settings: Option<AcceptedRunSettings>,
 }
 
 enum AuthorizationSlot<Frame> {
@@ -87,6 +91,17 @@ struct TransportState<Frame> {
     callbacks: CallbackRouter,
 }
 
+impl<Frame> TransportState<Frame> {
+    fn route_for_session(&self, session: &str) -> Option<TransportRun> {
+        let mut matches = self
+            .routes
+            .iter()
+            .filter(|(_, route)| route.session == session);
+        let (run, _) = matches.next()?;
+        matches.next().is_none().then_some(*run)
+    }
+}
+
 /// One instance and output receiver per ACP connection. The same short lock
 /// protects route, slot, callback membership and enqueue. It never spans I/O.
 pub struct AcpTransport<Frame> {
@@ -121,6 +136,8 @@ impl<Frame> AcpTransport<Frame> {
         state.routes.entry(run).or_insert(ConnectionRoute {
             session,
             closing: None,
+            folders: None,
+            settings: None,
         });
         state.callbacks.open(run);
     }
@@ -139,13 +156,7 @@ impl<Frame> AcpTransport<Frame> {
     }
 
     pub(crate) fn route_for_session(&self, session: &str) -> Option<TransportRun> {
-        let state = self.state();
-        let mut matches = state
-            .routes
-            .iter()
-            .filter(|(_, route)| route.session == session);
-        let (run, _) = matches.next()?;
-        matches.next().is_none().then_some(*run)
+        self.state().route_for_session(session)
     }
 
     pub(crate) fn session_for_route(&self, run: TransportRun) -> Option<String> {
@@ -164,12 +175,83 @@ impl<Frame> AcpTransport<Frame> {
     }
 
     pub(crate) fn allows_explicit_tool_request(&self, session: &str, tool: &str) -> bool {
-        let Some(run) = self.route_for_session(session) else {
+        let state = self.state();
+        let Some(run) = state.route_for_session(session) else {
             return false;
         };
-        self.state()
+        state
             .callbacks
             .allows_explicit_tool_request(session, run, tool)
+    }
+
+    pub(crate) fn current_scope(&self, session: &str) -> Option<(TransportRun, TurnId)> {
+        let state = self.state();
+        let run = state.route_for_session(session)?;
+        Some((run, state.callbacks.current_turn(run)?))
+    }
+
+    pub(crate) fn install_folders(&self, run: TransportRun, folders: InFolderGrant) {
+        if let Some(route) = self.state().routes.get_mut(&run) {
+            route.folders = Some(folders);
+        }
+    }
+
+    pub(crate) fn accept_settings(&self, run: TransportRun, settings: AcceptedRunSettings) {
+        if let Some(route) = self.state().routes.get_mut(&run) {
+            route.settings = Some(settings);
+        }
+    }
+
+    pub(crate) fn catalogue(
+        &self,
+        run: TransportRun,
+    ) -> Option<provider_session_machines::ProviderSettingsCatalog> {
+        let state = self.state();
+        let settings = state.routes.get(&run)?.settings.as_ref()?;
+        Some(settings.catalogue.as_ref().clone())
+    }
+
+    pub(crate) fn select_in_folder_permission(
+        &self,
+        session: &str,
+        tool: &str,
+        (run, turn): (TransportRun, TurnId),
+        permission: InFolderPermission,
+        auto: crate::AutoPermissionMode,
+    ) -> Option<PermissionOptionId> {
+        let state = self.state();
+        let route = state.routes.get(&run)?;
+        if route.closing.is_some()
+            || state.route_for_session(session) != Some(run)
+            || state.callbacks.current_turn(run) != Some(turn)
+            || !state
+                .callbacks
+                .allows_explicit_tool_request(session, run, tool)
+        {
+            return None;
+        }
+        let settings = route.settings.as_ref()?;
+        if !crate::provider_setting_application::current_mode_grants_auto(settings, auto) {
+            return None;
+        }
+        route.folders.as_ref()?.select(permission)
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn router_auto_grant_for_test(
+        &self,
+        run: TransportRun,
+        auto: crate::AutoPermissionMode,
+    ) -> Option<bool> {
+        let state = self.state();
+        let route = state.routes.get(&run)?;
+        route.folders.as_ref()?;
+        Some(
+            crate::provider_setting_application::current_mode_grants_auto(
+                route.settings.as_ref()?,
+                auto,
+            ),
+        )
     }
 
     pub fn apply_membership(&self, incarnation: OwnerIncarnation, change: TurnMembership) {

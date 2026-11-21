@@ -35,7 +35,6 @@ use uuid::Uuid;
 
 struct OpenedRestore {
     opened: OwnerOpenedSession,
-    requested_mode: Option<String>,
     generation: SessionGeneration,
     replay: ReplayedSessionFacts,
     fallback: Option<String>,
@@ -100,7 +99,6 @@ impl<P: InteractionPort> FixturePorts<P> {
         let run = Self::transport_run(address, generation);
         self.wire.activate_route(run);
         opened.register_in_folder_scope(&self.wire, run);
-        self.wire.install_catalog(run, opened.catalog().clone());
         {
             let mut shared = lock(&self.shared);
             shared.capabilities = opened.capabilities().clone();
@@ -179,7 +177,6 @@ impl<P: InteractionPort> FixturePorts<P> {
                             run.attempt,
                             OpenedRestore {
                                 opened,
-                                requested_mode: setup.requested_mode,
                                 generation: run.generation,
                                 replay,
                                 fallback: planned.accepted_mode_fallback,
@@ -189,6 +186,8 @@ impl<P: InteractionPort> FixturePorts<P> {
                             run,
                             outcome: WireOutcome::Confirmed(RestoreLoadReadback {
                                 catalogue,
+                                router_auto_requested: setup.requested_mode.as_deref()
+                                    == Some(crate::AUTO_PERMISSION_MODE),
                                 mode: planned.mode,
                                 fast_on: planned.fast_off,
                             }),
@@ -428,14 +427,6 @@ impl<P: InteractionPort> FixturePorts<P> {
         let mut restored_skills = None;
         for fact in &facts {
             match fact {
-                PublicationFact::Settings {
-                    run,
-                    catalogue: Some(catalogue),
-                    ..
-                } => {
-                    self.wire
-                        .update_catalog(Self::transport_run(address, *run), catalogue);
-                }
                 PublicationFact::Live(SessionPublication::Created(run)) => {
                     if let Some((opened, _)) = self.created.take() {
                         self.wire
@@ -451,6 +442,17 @@ impl<P: InteractionPort> FixturePorts<P> {
                     }
                 }
                 _ => {}
+            }
+        }
+        for fact in &facts {
+            if let PublicationFact::Settings {
+                run,
+                accepted: Some(accepted),
+                ..
+            } = fact
+            {
+                self.wire
+                    .publish_run_settings(Self::transport_run(address, *run), accepted.clone());
             }
         }
         let applied = facts.into_iter().try_for_each(|fact| match fact {
@@ -635,9 +637,7 @@ impl<P: InteractionPort> SessionOwnerPorts for FixturePorts<P> {
                 let opened = pending
                     .get_mut(&run.attempt)
                     .ok_or(OwnerTaskError::ExecutorStopped)?;
-                opened
-                    .opened
-                    .accept_restore_catalogue(&catalogue, opened.requested_mode.as_deref());
+                opened.opened.accept_restore_catalogue(&catalogue);
                 Ok(Some(OwnerEvent::Prepare(RestorePreparation::HostReady {
                     run,
                     capabilities: opened.opened.capabilities().to_session_model(),

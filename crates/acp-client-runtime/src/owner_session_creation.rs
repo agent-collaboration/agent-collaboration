@@ -18,6 +18,7 @@ use provider_session_machines::{
 use router_clock::RuntimeClock;
 use session_event_model::ProviderSettingFailureReason;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 use uuid::Uuid;
 
 pub struct OwnerCreatedSetup {
@@ -34,6 +35,9 @@ impl OwnerCreatedSetup {
             capabilities: session.capabilities().to_session_model(),
             settings: session.settings(),
             observed: catalogue_evidence(session.catalog()),
+            catalogue: Arc::new(session.catalog().clone()),
+            router_auto_requested: self.created.permission_mode.requested.as_deref()
+                == Some(crate::AUTO_PERMISSION_MODE),
             mode_reason: self.created.permission_mode.reason,
             keep_fast_off: self.keep_fast_off,
             failed_setting: self.failed_setting.clone(),
@@ -53,7 +57,6 @@ impl OwnerOpenedSession {
             applied,
             failure,
             permission_mode,
-            router_auto_active,
         } = apply_initial_settings(
             InitialSettingTarget {
                 connection: &self.connection,
@@ -65,7 +68,6 @@ impl OwnerOpenedSession {
             clock,
         )
         .await;
-        self.router_auto_active = router_auto_active;
         let failed_setting = failure.as_ref().map(|failure| {
             let (kind, attempted, unknown, confirmed_current) = match failure {
                 SettingSetupFailure::Invalid { kind, value, .. } => (*kind, value, false, false),

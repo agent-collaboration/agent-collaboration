@@ -176,6 +176,7 @@ impl SessionOwnerPorts for ScenarioPorts {
                     run,
                     outcome: WireOutcome::Confirmed(RestoreLoadReadback {
                         catalogue: Arc::default(),
+                        router_auto_requested: false,
                         mode: RestoredMode::Observed,
                         fast_on: None,
                     }),

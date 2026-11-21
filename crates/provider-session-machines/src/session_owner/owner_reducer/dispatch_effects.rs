@@ -292,11 +292,13 @@ impl OwnerTransition {
                 observation,
             } => {
                 let pending = self.pending_wire(&authorization)?;
-                let AuthorizedWork::Setting { setting, .. } = pending.work else {
+                let AuthorizedWork::Setting { setting, value, .. } = pending.work else {
                     return Err(OwnerRejection::IgnoredLate);
                 };
                 self.next.ports.authorizations.remove(&authorization);
-                self.setting_on_wire(setting, observation)?;
+                let mode_request =
+                    (setting.kind == crate::ProviderSettingKind::Mode).then_some(value.0 == "auto");
+                self.setting_on_wire(setting, observation, mode_request)?;
                 self.continue_close()
             }
             DispatchResult::SettingKept {

@@ -289,7 +289,15 @@ impl OwnerTransition {
                 run,
                 settings: setup.settings,
                 observed: self.next.ports.observed.clone(),
-                catalogue: self.next.ports.settings_catalogue.clone(),
+                accepted: self
+                    .next
+                    .ports
+                    .settings_catalogue
+                    .as_ref()
+                    .map(|catalogue| crate::session_owner::AcceptedRunSettings {
+                        catalogue: std::sync::Arc::clone(catalogue),
+                        router_auto_requested: self.next.ports.router_auto_requested,
+                    }),
             });
         }
     }

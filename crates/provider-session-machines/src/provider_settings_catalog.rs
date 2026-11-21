@@ -56,7 +56,48 @@ pub struct ProviderSettingsCatalog {
     pub model_reasoning: ModelReasoningMetadata,
 }
 
+/// A live provider notification decoded before the owner receives it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ProviderSettingsUpdate {
+    CurrentMode(String),
+    ConfigOptions {
+        options: Vec<ProviderConfigOption>,
+        model_reasoning: Option<ModelReasoningMetadata>,
+    },
+}
+
 impl ProviderSettingsCatalog {
+    pub fn apply_update(&mut self, update: ProviderSettingsUpdate) {
+        match update {
+            ProviderSettingsUpdate::CurrentMode(mode) => {
+                self.current_mode = Some(mode.clone());
+                self.mode_observation = ProviderModeObservation::FromCatalogue;
+                if let Some(option) = self
+                    .config_options
+                    .iter_mut()
+                    .find(|option| option.category == Some(ProviderSettingKind::Mode))
+                {
+                    option.current_value = ProviderConfigValue::Select(mode);
+                }
+            }
+            ProviderSettingsUpdate::ConfigOptions {
+                options,
+                model_reasoning,
+            } => {
+                self.config_options = options;
+                if let Some(option) = self.config_option(ProviderSettingKind::Mode)
+                    && let ProviderConfigValue::Select(mode) = &option.current_value
+                {
+                    self.current_mode = Some(mode.clone());
+                    self.mode_observation = ProviderModeObservation::FromCatalogue;
+                }
+                if let Some(reasoning) = model_reasoning {
+                    self.model_reasoning = reasoning;
+                }
+            }
+        }
+    }
+
     pub(crate) fn apply_late_setting_readback(
         &mut self,
         kind: ProviderSettingKind,
