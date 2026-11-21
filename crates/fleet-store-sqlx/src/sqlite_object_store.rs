@@ -149,6 +149,11 @@ impl SqliteObjectStore {
             .map_err(|_| StoreFailure::Unavailable)?;
         read_rows(&mut connection, statement).await
     }
+
+    /// The owning database's existing migrated pool for local repositories.
+    pub fn pool(&self) -> &SqlitePool {
+        &self.pool
+    }
 }
 
 fn bind_arguments(args: Vec<SqlValue>) -> Result<SqliteArguments, StoreFailure> {

@@ -1,0 +1,16 @@
+error[E0277]: the trait bound `i64: From<String>` is not satisfied
+ --> tests/integration/schema_controls/wrong_type.rs:7:18
+  |
+7 |     let _query = sqlx::query_as!(Receipt, "SELECT caller, answer FROM workspace_request_log");
+  |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `From<String>` is not implemented for `i64`
+  |
+  = help: `i64` implements trait `From<T>`:
+            From<bool>
+            From<i16>
+            From<i32>
+            From<i8>
+            From<u16>
+            From<u32>
+            From<u8>
+  = note: required for `String` to implement `Into<i64>`
+  = note: this error originates in the macro `$crate::sqlx_macros::expand_query` which comes from the expansion of the macro `sqlx::query_as` (in Nightly builds, run with -Z macro-backtrace for more info)

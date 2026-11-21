@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT caller, answer\nFROM workspace_request_log\nWHERE request_id = ? AND created_at > ?\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "caller",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "workspace_request_log",
+            "name": "caller"
+          }
+        }
+      },
+      {
+        "name": "answer",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "workspace_request_log",
+            "name": "answer"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "0a770d62da0ccf261238498678bd92b8b6d841285bbda8d3f1eb547376fce4fe"
+}

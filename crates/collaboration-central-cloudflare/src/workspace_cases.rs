@@ -10,12 +10,21 @@ use worker::{Env, Request, Response, Result};
 use worker::{Headers, Method, RequestInit, js_sys};
 #[path = "workspace_fixture_admission.rs"]
 mod fixture_admission;
+#[path = "workspace_rpc_fixture.rs"]
+mod workspace_rpc_fixture;
+
+#[derive(Default)]
+pub(super) struct WorkspaceCallCounts {
+    pub(super) legacy: std::sync::atomic::AtomicUsize,
+    pub(super) rpc: std::sync::atomic::AtomicUsize,
+}
 
 #[derive(Default)]
 pub(crate) struct Controls {
     pub(super) faults: std::sync::Arc<fleet_runtime::TestFaults>,
     pub(super) zero_next_write_alarm: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub(super) lose_read: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    pub(super) workspace_calls: std::sync::Arc<WorkspaceCallCounts>,
     observations: RefCell<BTreeMap<workspace_ids::WorkspaceId, HeldPause>>,
     holds: RefCell<BTreeMap<(workspace_ids::WorkspaceId, Point), HeldPause>>,
     central_holds: RefCell<BTreeMap<Point, HeldPause>>,
@@ -568,6 +577,14 @@ enum AlarmReceiptResult {
 pub(super) async fn raw_control(object: &CentralObject, mut request: Request) -> Result<Response> {
     let storage = object.state.storage();
     match request.path().as_str() {
+        "/test/raw-workspace-call-counts" => {
+            use std::sync::atomic::Ordering::SeqCst;
+            let counts = &object.controls.workspace_calls;
+            Response::from_json(&[counts.legacy.load(SeqCst), counts.rpc.load(SeqCst)])
+        }
+        "/test/raw-workspace-rpc-probe" => {
+            workspace_rpc_fixture::probe(&object.env, request.json().await?).await
+        }
         "/test/raw-alarm-count" => {
             Response::from_json(&storage.get::<u64>(ALARM_COUNT_KEY).await?.unwrap_or(0))
         }

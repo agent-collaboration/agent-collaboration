@@ -5,6 +5,10 @@ use central_link_protocol::{
     ReplyPayload, RequestRefusal, RequestScope, RequestStatusAnswer, RequestStatusQuery,
 };
 use central_storage::{ReadOutcome, StoreFailure};
+use fleet_contracts::{
+    ReadWorkspaceRequestStatus, RetainedWorkspaceStatus, WorkspaceRequest, WorkspaceServiceRpc,
+};
+use fleet_rpc::{RpcClient, Transport};
 use fleet_runtime::workspace_request_log::{RequestLogStore, lookup};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_runtime_ports::{
@@ -23,10 +27,9 @@ enum OrganizationDecision {
     PrivateAdmin(OrganizationAdminResult),
 }
 
-fn retained_decision(
+fn retained_organization_decision(
     rows: &ReadOutcome,
     caller: &ActorIdentityId,
-    scope: &RequestScope,
 ) -> Result<Option<OrganizationDecision>, StoreFailure> {
     let row = match rows.rows.as_slice() {
         [] => return Ok(None),
@@ -39,14 +42,7 @@ fn retained_decision(
     if &stored_actor != caller {
         return Ok(None);
     }
-    let answer = string(rows, row, "answer")?;
-    match scope {
-        RequestScope::Organization => json(answer, "runtime_request_log.answer"),
-        RequestScope::Workspace(_) => {
-            json(answer, "workspace_request_log.answer").map(OrganizationDecision::Workspace)
-        }
-    }
-    .map(Some)
+    json(string(rows, row, "answer")?, "runtime_request_log.answer").map(Some)
 }
 
 impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
@@ -55,7 +51,10 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         &self,
         caller: &WorkspaceCaller,
         query: &RequestStatusQuery,
-    ) -> Result<RequestStatusAnswer, StoreFailure> {
+    ) -> Result<RequestStatusAnswer, StoreFailure>
+    where
+        Stores: Transport<WorkspaceRequest>,
+    {
         let _turn = self.execution.take_central_turn().await;
         let scope_workspace = match &query.scope {
             RequestScope::Organization => None,
@@ -77,25 +76,41 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         let Some(actor) = self.access().existing_caller_actor(caller.caller()).await? else {
             return Ok(RequestStatusAnswer::NotFound);
         };
-        let cutoff = (self.execution.now()? - chrono::Duration::hours(24)).to_rfc3339();
-        let rows = if let Some(workspace) = scope_workspace {
-            self.execution
-                .read_workspace(
-                    workspace,
-                    lookup(RequestLogStore::Workspace, &query.request_id, &cutoff),
-                )
+        let cutoff = self.execution.now()? - chrono::Duration::hours(24);
+        let decision = if let Some(workspace) = scope_workspace {
+            let client = RpcClient::<WorkspaceRequest, _>::new(
+                workspace.clone(),
+                self.execution.workspace_stores(),
+            );
+            match client
+                .read_request_status(ReadWorkspaceRequestStatus {
+                    request_id: query.request_id.clone(),
+                    actor,
+                    cutoff,
+                })
                 .await?
+            {
+                RetainedWorkspaceStatus::NotFound => None,
+                RetainedWorkspaceStatus::Refused(reason) => Some(OrganizationDecision::Workspace(
+                    WorkspaceResult::Refused(reason),
+                )),
+                RetainedWorkspaceStatus::Answered(result) => {
+                    Some(OrganizationDecision::Workspace(*result))
+                }
+            }
         } else {
-            self.execution
+            let rows = self
+                .execution
                 .statement_host()
                 .read(lookup(
                     RequestLogStore::Organization,
                     &query.request_id,
-                    &cutoff,
+                    &cutoff.to_rfc3339(),
                 ))
-                .await?
+                .await?;
+            retained_organization_decision(&rows, &actor)?
         };
-        Ok(match retained_decision(&rows, &actor, &query.scope)? {
+        Ok(match decision {
             None
             | Some(OrganizationDecision::PrivateAdmin(
                 OrganizationAdminResult::Applied { .. }

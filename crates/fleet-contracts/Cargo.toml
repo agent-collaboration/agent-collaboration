@@ -13,6 +13,7 @@ workspace = true
 [dependencies]
 central-engine-model.workspace = true
 central-storage.workspace = true
+fleet-rpc.workspace = true
 fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.156" }
 fleet-runtime-ports.workspace = true
 message-board = { version = "0.1.93", path = "../message-board" }

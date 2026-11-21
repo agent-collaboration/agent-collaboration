@@ -1,6 +1,8 @@
 //! Durable Object addressing and byte transport, without caller policy.
 
 use crate::object_location::ObjectAddress;
+use fleet_rpc::CallFailure;
+use serde::{Serialize, de::DeserializeOwned};
 use worker::{Env, Headers, Method, Request, RequestInit, Result, Stub, js_sys};
 
 pub(crate) use crate::object_location::location;
@@ -37,33 +39,50 @@ async fn store_call(
     fixture: Option<&str>,
 ) -> std::result::Result<central_storage::StoreReply, central_storage::StoreFailure> {
     use central_storage::StoreFailure;
+    workspace_exchange::<_, crate::store_wire::StoreAnswer>(
+        env, workspace, "/store", &call, fixture,
+    )
+    .await
+    .map_err(|failure| match failure {
+        CallFailure::NeverReached => StoreFailure::Unavailable,
+        CallFailure::AnswerLost => StoreFailure::AnswerLost,
+    })?
+}
+
+pub(crate) async fn workspace_exchange<Body: Serialize, Reply: DeserializeOwned>(
+    env: &Env,
+    workspace: workspace_ids::WorkspaceId,
+    path: &str,
+    call: &Body,
+    fixture: Option<&str>,
+) -> std::result::Result<Reply, CallFailure> {
     let address = ObjectAddress::WorkspaceStore(workspace);
-    let stub = stub(env, &address).map_err(|_| StoreFailure::Unavailable)?;
-    let body = serde_json::to_vec(&call).map_err(|_| StoreFailure::Unavailable)?;
+    let stub = stub(env, &address).map_err(|_| CallFailure::NeverReached)?;
+    let body = serde_json::to_vec(call).map_err(|_| CallFailure::NeverReached)?;
     let headers = Headers::new();
-    address_header(&headers, &address).map_err(|_| StoreFailure::Unavailable)?;
+    address_header(&headers, &address).map_err(|_| CallFailure::NeverReached)?;
     if let Some(fixture) = fixture {
         headers
             .set("x-workspace-fixture", fixture)
-            .map_err(|_| StoreFailure::Unavailable)?;
+            .map_err(|_| CallFailure::NeverReached)?;
     }
     let mut init = RequestInit::new();
     init.with_method(Method::Post)
         .with_headers(headers)
         .with_body(Some(js_sys::Uint8Array::from(body.as_slice()).into()));
-    let request = Request::new_with_init("https://central.internal/store", &init)
-        .map_err(|_| StoreFailure::Unavailable)?;
+    let request = Request::new_with_init(&format!("https://central.internal{path}"), &init)
+        .map_err(|_| CallFailure::NeverReached)?;
     let mut response = stub
         .fetch_with_request(request)
         .await
-        .map_err(|_| StoreFailure::AnswerLost)?;
+        .map_err(|_| CallFailure::AnswerLost)?;
     if response.status_code() != 200 {
-        return Err(StoreFailure::AnswerLost);
+        return Err(CallFailure::AnswerLost);
     }
     response
-        .json::<crate::store_wire::StoreAnswer>()
+        .json::<Reply>()
         .await
-        .map_err(|_| StoreFailure::AnswerLost)?
+        .map_err(|_| CallFailure::AnswerLost)
 }
 
 #[cfg(feature = "test-support")]

@@ -32,6 +32,11 @@ export const sqlitePreparationTargets: readonly SqlitePreparationTarget[] = [
     migrationSources: ["crates/ui-preference-store/migrations"],
     databaseFilename: "ui-preferences-schema.sqlite",
   },
+  {
+    packageName: "fleet-workspace-service",
+    migrationSources: ["crates/fleet-storage-schema/migrations/workspace"],
+    databaseFilename: "fleet-workspace-schema.sqlite",
+  },
 ];
 
 export interface PreparationOptions {

@@ -4,6 +4,9 @@ use crate::{
     sign_in_trust::NativeSignInTrust,
 };
 use collaboration_central_core::WorkspaceCaller;
+use fleet_contracts::{WorkspaceRequest as WorkspaceRpcRequest, WorkspaceResponse};
+use fleet_rpc::{CallFailure, Envelope, Transport, dispatch};
+use fleet_workspace_service::WorkspaceService;
 #[path = "workspace_alarm_owner.rs"]
 mod workspace_alarm_owner;
 use central_storage::{
@@ -58,6 +61,15 @@ pub struct TokioWorkspaceStores {
     stores: Arc<Mutex<BTreeMap<WorkspaceId, Arc<ObjectStorage>>>>,
 }
 impl TokioWorkspaceStores {
+    /// Use the fixture's existing object storage for both legacy and typed calls.
+    #[cfg(feature = "test-support")]
+    pub fn with_fixture_store(root: PathBuf, id: WorkspaceId, store: Arc<ObjectStorage>) -> Self {
+        Self {
+            root,
+            stores: Arc::new(Mutex::new(BTreeMap::from([(id, store)]))),
+        }
+    }
+
     async fn store(&self, id: &WorkspaceId) -> Result<Arc<ObjectStorage>, StoreFailure> {
         let mut stores = self.stores.lock().await;
         if let Some(store) = stores.get(id) {
@@ -90,6 +102,30 @@ impl WorkspaceStores for TokioWorkspaceStores {
         }
     }
 }
+impl Transport<WorkspaceRpcRequest> for TokioWorkspaceStores {
+    async fn exchange(
+        &self,
+        request: Envelope<WorkspaceId, WorkspaceRpcRequest>,
+    ) -> Result<Envelope<WorkspaceId, WorkspaceResponse>, CallFailure> {
+        let workspace = request.target.clone();
+        dispatch::<WorkspaceRpcRequest, _, _>(&workspace, request, |call| async {
+            let store = match self.store(&workspace).await {
+                Ok(store) => store,
+                Err(failure) => return WorkspaceResponse::ReadRequestStatus(Err(failure)),
+            };
+            match store.workspace_pool().await {
+                Ok(pool) => {
+                    fleet_contracts::dispatch_workspace_request(&WorkspaceService::new(pool), call)
+                        .await
+                }
+                Err(failure) => WorkspaceResponse::ReadRequestStatus(Err(failure)),
+            }
+        })
+        .await
+        .map_err(|_| CallFailure::NeverReached)
+    }
+}
+
 /// One process-local owner of each org, with workspace stores shared by their UUID.
 pub struct TokioWorkspaceHost {
     root: PathBuf,

@@ -1422,9 +1422,11 @@ dependencies = [
  "fleet-contracts",
  "fleet-identity-protocol",
  "fleet-mail",
+ "fleet-rpc",
  "fleet-runtime",
  "fleet-runtime-ports",
  "fleet-storage-schema",
+ "fleet-workspace-service",
  "futures-channel",
  "futures-util",
  "http",
@@ -1487,6 +1489,7 @@ dependencies = [
  "fleet-identity-protocol",
  "fleet-mail",
  "fleet-notices",
+ "fleet-rpc",
  "fleet-runtime",
  "fleet-runtime-ports",
  "fleet-runtime-test-support",
@@ -1535,10 +1538,12 @@ dependencies = [
  "fleet-contracts",
  "fleet-identity-protocol",
  "fleet-mail",
+ "fleet-rpc",
  "fleet-runtime",
  "fleet-runtime-ports",
  "fleet-storage-schema",
  "fleet-store-sqlx",
+ "fleet-workspace-service",
  "futures-util",
  "hegeltest",
  "reqwest 0.12.28",
@@ -2410,6 +2415,7 @@ dependencies = [
  "central-engine-model",
  "central-storage",
  "fleet-identity-protocol",
+ "fleet-rpc",
  "fleet-runtime-ports",
  "message-board",
  "schemars 1.2.2",
@@ -2485,6 +2491,13 @@ dependencies = [
  "fleet-workspace-access",
  "workspace-ids",
  "workspace-model",
+]
+
+[[package]]
+name = "fleet-rpc"
+version = "0.1.157"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -2619,6 +2632,21 @@ dependencies = [
  "fleet-contracts",
  "fleet-runtime-ports",
  "message-board",
+ "workspace-model",
+]
+
+[[package]]
+name = "fleet-workspace-service"
+version = "0.1.157"
+dependencies = [
+ "central-storage",
+ "fleet-contracts",
+ "fleet-storage-schema",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "tokio",
+ "trybuild",
  "workspace-model",
 ]
 

@@ -1,0 +1,5 @@
+error[E0063]: missing field `answer` in initializer of `Receipt`
+ --> tests/integration/schema_controls/missing_field.rs:7:34
+  |
+7 |     let _query = sqlx::query_as!(Receipt, "SELECT caller FROM workspace_request_log");
+  |                                  ^^^^^^^ missing `answer`

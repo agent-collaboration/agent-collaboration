@@ -2,7 +2,9 @@ use super::*;
 use central_link_protocol::{ReplyPayload, RequestScope, RequestStatusAnswer, RequestStatusQuery};
 use central_storage::{StoreCall, StoreFailure, StoreReply};
 use collaboration_central_core::WorkspaceRuntime;
-use collaboration_central_tokio::ObjectStorage;
+use collaboration_central_tokio::{ObjectStorage, TokioWorkspaceStores};
+use fleet_contracts::{WorkspaceRequest, WorkspaceResponse};
+use fleet_rpc::{CallFailure, Envelope, Transport};
 use fleet_runtime::{ClockIds, FleetRuntime};
 use fleet_runtime_ports::{Clock, SyncTime, WorkspaceStores};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -15,26 +17,34 @@ impl Clock for ArcClock {
 }
 #[derive(Clone)]
 struct LoseFirstRead {
-    store: Arc<ObjectStorage>,
+    stores: TokioWorkspaceStores,
     lose: Arc<AtomicBool>,
 }
 impl WorkspaceStores for LoseFirstRead {
     async fn call_workspace(
         &self,
-        _workspace: &m::WorkspaceId,
+        workspace: &m::WorkspaceId,
         call: StoreCall,
     ) -> Result<StoreReply, StoreFailure> {
-        match call {
-            StoreCall::Read(statement) => {
-                let answer = self.store.read(statement).await?;
-                if self.lose.swap(false, Ordering::SeqCst) {
-                    Err(StoreFailure::AnswerLost)
-                } else {
-                    Ok(StoreReply::Read(answer))
-                }
-            }
-            StoreCall::Batch(batch) => self.store.run_batch(batch).await.map(StoreReply::Batch),
+        let is_read = matches!(call, StoreCall::Read(_));
+        let reply = self.stores.call_workspace(workspace, call).await?;
+        if is_read && self.lose.swap(false, Ordering::SeqCst) {
+            return Err(StoreFailure::AnswerLost);
         }
+        Ok(reply)
+    }
+}
+
+impl Transport<WorkspaceRequest> for LoseFirstRead {
+    async fn exchange(
+        &self,
+        request: Envelope<m::WorkspaceId, WorkspaceRequest>,
+    ) -> Result<Envelope<m::WorkspaceId, WorkspaceResponse>, CallFailure> {
+        let reply = self.stores.exchange(request).await?;
+        if self.lose.swap(false, Ordering::SeqCst) {
+            return Err(CallFailure::AnswerLost);
+        }
+        Ok(reply)
     }
 }
 #[tokio::test]
@@ -69,7 +79,11 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
         f.caller.organization_id().clone(),
         central.clone(),
         LoseFirstRead {
-            store: store.clone(),
+            stores: TokioWorkspaceStores::with_fixture_store(
+                f.root.path().join("workspace-stores"),
+                f.workspace.clone(),
+                store.clone(),
+            ),
             lose: lose.clone(),
         },
         Arc::new(clock.clone()),
