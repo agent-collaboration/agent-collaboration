@@ -3,6 +3,9 @@
 #[path = "restore_recovery/admission_budget_test.rs"]
 mod admission_budget_tests;
 
+#[path = "restore_recovery/prompt_custody_test.rs"]
+mod prompt_custody_tests;
+
 #[path = "restore_recovery/shutdown_drain_test.rs"]
 mod shutdown_drain_tests;
 

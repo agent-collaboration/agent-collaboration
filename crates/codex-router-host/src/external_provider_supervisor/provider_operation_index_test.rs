@@ -1,3 +1,4 @@
+use super::super::tests::binding;
 use super::*;
 use collaboration_protocol::{EndpointId, SessionId};
 use provider_session_machines::operation_record_machine::{Reconciliation, SettledEffect};
@@ -31,10 +32,8 @@ fn index_with(
     (index, live)
 }
 
-/// Oracle: design note §11.5 and §14.1: a send counts as in flight from its
-/// dispatch marker until its record settles; an unknown outcome stays live
-/// (SettlingUnknown) until the uncertainty cell holds it; an undone marker
-/// stops it counting.
+/// The marked send stays in flight through recording uncertainty, until its
+/// writer settles. An undone marker stops it counting immediately.
 #[test]
 fn a_send_counts_in_flight_from_its_marker_until_it_settles() {
     // Arrange
@@ -42,7 +41,7 @@ fn a_send_counts_in_flight_from_its_marker_until_it_settles() {
     let (index, live) = index_with(
         &operation,
         LiveOperation::reserving(
-            endpoint(),
+            &binding(),
             Some(session("a")),
             ProviderOperationKind::ConversationPrompt,
         ),
@@ -58,6 +57,8 @@ fn a_send_counts_in_flight_from_its_marker_until_it_settles() {
     let settling_unknown = index.in_flight_on(&endpoint(), Some(&session("a")));
     live.uncertainty_recorded();
     let recorded = index.in_flight_on(&endpoint(), Some(&session("a")));
+    live.finish_write(CustodyEnd::Written);
+    let persisted = index.in_flight_on(&endpoint(), Some(&session("a")));
 
     // Assert
     assert!(before_marker.is_empty(), "admitted, not yet marked");
@@ -68,10 +69,15 @@ fn a_send_counts_in_flight_from_its_marker_until_it_settles() {
     );
     assert_eq!(
         settling_unknown,
-        vec![operation],
+        vec![operation.clone()],
         "still live until recorded"
     );
-    assert!(recorded.is_empty());
+    assert_eq!(
+        recorded,
+        vec![operation],
+        "the terminal write is still held"
+    );
+    assert!(persisted.is_empty());
     assert_eq!(
         live.record(),
         OperationRecord::Settled {
@@ -89,17 +95,17 @@ fn an_undone_marker_and_a_dropped_reservation_leave_nothing_in_flight() {
     let undone = OperationId::generate();
     let (index, live) = index_with(
         &undone,
-        LiveOperation::reserving(endpoint(), None, ProviderOperationKind::ConversationPrompt),
+        LiveOperation::reserving(&binding(), None, ProviderOperationKind::ConversationPrompt),
     );
     live.admitted();
     live.dispatch_marked();
     let binding_wide = index.in_flight_on(&endpoint(), Some(&session("any")));
     let dropped =
-        LiveOperation::reserving(endpoint(), None, ProviderOperationKind::ConversationPrompt);
+        LiveOperation::reserving(&binding(), None, ProviderOperationKind::ConversationPrompt);
 
     // Act
     live.undispatched();
-    dropped.dropped(true);
+    dropped.dropped(true, CustodyEnd::Dropped);
 
     // Assert
     assert_eq!(
@@ -123,7 +129,7 @@ fn an_undone_marker_and_a_dropped_reservation_leave_nothing_in_flight() {
 fn an_undispatched_operation_settles_not_sent() {
     // Arrange
     let live =
-        LiveOperation::reserving(endpoint(), None, ProviderOperationKind::ConversationPrompt);
+        LiveOperation::reserving(&binding(), None, ProviderOperationKind::ConversationPrompt);
     live.admitted();
 
     // Act
@@ -137,4 +143,71 @@ fn an_undispatched_operation_settles_not_sent() {
             reconciliation: Reconciliation::Confirmed,
         }
     );
+}
+
+#[test]
+fn lane_receipts_are_bound_to_the_reserved_operation_generation_and_target() {
+    let binding = binding();
+    let target = session("reserved");
+    let operation = OperationId::generate();
+    let (mut index, old) = index_with(
+        &operation,
+        LiveOperation::reserving(
+            &binding,
+            Some(target.clone()),
+            ProviderOperationKind::ConversationPrompt,
+        ),
+    );
+    let lookup = |index: &LiveOperations,
+                  operation: &OperationId,
+                  binding: &ProviderBindingIdentity,
+                  target: &SessionRef| {
+        index.begin_lane_write(operation, &binding.generation, target, Arc::new(|| {}))
+    };
+    assert!(lookup(&index, &OperationId::generate(), &binding, &target).is_none());
+    assert!(lookup(&index, &operation, &binding, &session("other")).is_none());
+    let old_ticket = lookup(&index, &operation, &binding, &target).expect("the old writer");
+    let mut replacement_binding = binding.clone();
+    replacement_binding.generation.generation = 2.try_into().unwrap();
+    let replacement = Arc::new(LiveOperation::reserving(
+        &replacement_binding,
+        Some(target.clone()),
+        ProviderOperationKind::ConversationPrompt,
+    ));
+    index
+        .operations
+        .insert(operation.clone(), Arc::clone(&replacement));
+    assert!(lookup(&index, &operation, &binding, &target).is_none());
+    let ticket =
+        lookup(&index, &operation, &replacement_binding, &target).expect("the current writer");
+    old.finish_write(CustodyEnd::NoWrite);
+    replacement.finish_write(CustodyEnd::NoWrite);
+
+    old_ticket.settle(CustodyEnd::Written);
+    assert!(!old.holds_custody());
+    assert!(replacement.holds_custody());
+    ticket.settle(CustodyEnd::Written);
+    assert!(!replacement.holds_custody());
+}
+
+#[test]
+fn a_published_writer_survives_result_window_eviction_until_its_receipt() {
+    let operation = OperationId::generate();
+    let (mut index, live) = index_with(&operation, LiveOperation::pending());
+    index.retain_result(operation.clone(), Retention::PersistenceFailed);
+
+    for _ in 0..=MAX_RETAINED_SETTLEMENTS {
+        let operation = OperationId::generate();
+        let later = LiveOperation::pending();
+        later.finish_write(CustodyEnd::Failed);
+        index.operations.insert(operation.clone(), Arc::new(later));
+        index.retain_result(operation, Retention::PersistenceFailed);
+    }
+    assert!(index.operations.contains_key(&operation));
+    assert_eq!(index.operations.len(), MAX_RETAINED_SETTLEMENTS + 1);
+
+    live.finish_write(CustodyEnd::Written);
+    index.trim_results();
+    assert!(!index.operations.contains_key(&operation));
+    assert_eq!(index.operations.len(), MAX_RETAINED_SETTLEMENTS);
 }

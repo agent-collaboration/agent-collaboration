@@ -1,6 +1,7 @@
 //! Ordered operation and saved-setup stores for a single provider session.
 
 use crate::binding_dispatch_permit::{BindingUncertainty, UnknownRecovery, lock};
+use crate::provider_operation_custody::{CustodyEnd, LaneWriteCustody};
 use collaboration_protocol::{
     OperationId, ProviderOperationEffect, ProviderPromptStopReason, ProviderReconciliationState,
     SessionRef,
@@ -171,10 +172,29 @@ enum LaneRequest {
     Handover,
 }
 
+impl LaneRequest {
+    fn written_operation(&self) -> Option<&OperationId> {
+        match self {
+            Self::Write(
+                SessionStoreWrite::MarkDispatch(marked) | SessionStoreWrite::UndoDispatch(marked),
+            )
+            | Self::FirstQueuedDispatch { marked, .. }
+            | Self::SettleFailedOwnerMark(marked) => Some(&marked.operation),
+            Self::Write(
+                SessionStoreWrite::Terminal { operation, .. }
+                | SessionStoreWrite::ActivatedSession { operation, .. }
+                | SessionStoreWrite::ReconcileLateCancelledPrompt(operation),
+            ) => Some(operation),
+            Self::Write(SessionStoreWrite::SaveMode(_)) | Self::ReadSetup | Self::Handover => None,
+        }
+    }
+}
+
 struct LaneEntry {
     owner: OwnerIncarnation,
     offered_at_ms: i64,
     request: LaneRequest,
+    custody: Option<LaneWriteCustody>,
     reply: oneshot::Sender<Result<SessionStoreSettlement, ProviderOperationStoreError>>,
 }
 
@@ -357,6 +377,7 @@ impl SessionStoreLane {
                 );
             }
         }
+        entry.custody = self.borrow_write_custody(&entry.request);
         state.queue.push_back(entry);
         drop(outcomes);
         self.inner.ready.notify_one();
@@ -414,8 +435,9 @@ impl SessionStoreLane {
         // may still be pending and is checked in the lane when cleanup runs.
         let mut cleanups = Vec::with_capacity(known_unsent.len());
         for marked in known_unsent {
-            let (entry, ticket) =
+            let (mut entry, ticket) =
                 self.entry(previous, LaneRequest::SettleFailedOwnerMark(marked.clone()));
+            entry.custody = self.borrow_write_custody(&entry.request);
             state.queue.push_back(entry);
             cleanups.push((marked, ticket));
         }
@@ -427,6 +449,12 @@ impl SessionStoreLane {
             barrier: ticket,
             cleanups,
         })
+    }
+
+    fn borrow_write_custody(&self, request: &LaneRequest) -> Option<LaneWriteCustody> {
+        let operation = request.written_operation()?;
+        let lookup = self.inner.binding.get()?.lane_custody.get()?;
+        lookup(&self.inner.target, operation)
     }
 
     fn entry(
@@ -442,6 +470,7 @@ impl SessionStoreLane {
                 owner,
                 offered_at_ms,
                 request,
+                custody: None,
                 reply,
             },
             SessionStoreTicket {
@@ -501,6 +530,7 @@ impl SessionStoreLaneTask {
             owner,
             offered_at_ms,
             request,
+            custody,
             reply,
         } = entry;
         let result = match request {
@@ -569,6 +599,13 @@ impl SessionStoreLaneTask {
                 }
             }
         };
+        if let Some(custody) = custody {
+            custody.settle(match &result {
+                Ok(SessionStoreSettlement::MarkNeverWritten) => CustodyEnd::NoWrite,
+                Ok(_) => CustodyEnd::Written,
+                Err(_) => CustodyEnd::Failed,
+            });
+        }
         let _caller_stopped_waiting = reply.send(result);
     }
 

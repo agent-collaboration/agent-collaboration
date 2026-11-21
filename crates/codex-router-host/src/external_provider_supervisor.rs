@@ -7,6 +7,7 @@ pub(crate) use provider_operation_index::HeldResult;
 use provider_operation_index::{LiveOperation, LiveOperations, UncertaintyCells};
 mod provider_operation_failure;
 mod provider_operation_finish;
+mod provider_operation_handoff;
 mod provider_owner_operations;
 mod provider_owner_prompt;
 pub(crate) use provider_owner_prompt::{SessionQueuePlan, WarmRun};
@@ -28,6 +29,7 @@ use provider_operation_failure::{
     admission_failure, invalid_setting_failure, prompt_runtime_failure, runtime_failure,
 };
 
+use crate::provider_operation_custody::CustodyEnd;
 use crate::provider_operation_settlement::{
     ProviderOperationCompletion, effective_settings, optional_message_text,
     provider_applied_setting, provider_failed_setting, provider_session_record,
@@ -60,7 +62,7 @@ use collaboration_service::conversation_operation_snapshot as snapshot_from_reco
 use std::{
     collections::HashMap,
     path::PathBuf,
-    sync::{Arc, Mutex as StdMutex, atomic::Ordering},
+    sync::{Arc, Mutex as StdMutex},
     time::Duration,
 };
 use tokio::sync::Mutex;
@@ -83,14 +85,13 @@ struct SupervisorInner {
     bindings: HashMap<EndpointRef, RuntimeBinding>,
     store: Arc<Mutex<ProviderOperationStore>>,
     clock: Arc<dyn router_clock::RuntimeClock>,
-    live_operations: StdMutex<LiveOperations>,
+    live_operations: Arc<StdMutex<LiveOperations>>,
     operation_tasks: TaskTracker,
     operation_cleanup_cancel: tokio_util::sync::CancellationToken,
     /// Each binding's unknown outcomes: the one place admission asks
     /// whether an earlier send's outcome is unknown (design note §14.1).
     uncertainty: UncertaintyCells,
-    /// Moves each time a live operation publishes its result, so schedulers and
-    /// provider retention wake on an ACP completion that writes no row.
+    /// Wakes schedulers on publication and retention when custody ends.
     completions: tokio::sync::watch::Sender<u64>,
     queued_operations: ProviderQueueOperationRegistry,
     /// `<router root>/scratch`: each Claude or Cursor session created here gets
@@ -326,6 +327,7 @@ impl ExternalProviderSupervisor {
             return false;
         };
         let result = Err(unavailable_failure(operation_id.clone(), None));
+        live.finish_write(CustodyEnd::NoWrite);
         self.inner
             .publish_result(
                 operation_id.clone(),
@@ -352,7 +354,7 @@ impl ExternalProviderSupervisor {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .operations
             .iter()
-            .filter(|(_, operation)| !operation.published.load(Ordering::Acquire))
+            .filter(|(_, operation)| operation.holds_custody())
             .map(|(operation_id, _)| operation_id.clone())
             .collect()
     }
@@ -384,6 +386,21 @@ impl ExternalProviderSupervisor {
             ))
         });
         let mut runtimes = HashMap::with_capacity(bindings.len());
+        let live_operations = Arc::new(StdMutex::new(LiveOperations::default()));
+        let completions = tokio::sync::watch::channel(0_u64).0;
+        let on_custody_end: Arc<dyn Fn() + Send + Sync> = {
+            let operations = Arc::downgrade(&live_operations);
+            let completions = completions.clone();
+            Arc::new(move || {
+                if let Some(operations) = operations.upgrade() {
+                    operations
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .trim_results();
+                    completions.send_modify(|revision| *revision = revision.wrapping_add(1));
+                }
+            })
+        };
         let uncertainty = UncertaintyCells::default();
         let settings_catalogs = Arc::new(Mutex::new(HashMap::new()));
         for binding in bindings {
@@ -393,7 +410,25 @@ impl ExternalProviderSupervisor {
             }
             let runtime = Arc::new(binding.runtime);
             let owners = runtime.session_owner_door(Arc::clone(&store), Arc::clone(&owner_hub));
-            owners.install_binding_permit(uncertainty.slot(&endpoint));
+            let permit = uncertainty.slot(&endpoint);
+            let operations = Arc::downgrade(&live_operations);
+            let on_custody_end = Arc::clone(&on_custody_end);
+            let generation = binding.identity.generation.clone();
+            permit.lane_custody.get_or_init(|| {
+                Arc::new(move |target, operation| {
+                    operations
+                        .upgrade()?
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .begin_lane_write(
+                            operation,
+                            &generation,
+                            target,
+                            Arc::clone(&on_custody_end),
+                        )
+                })
+            });
+            owners.install_binding_permit(permit);
             runtimes.insert(
                 endpoint,
                 RuntimeBinding {
@@ -408,11 +443,11 @@ impl ExternalProviderSupervisor {
                 bindings: runtimes,
                 store,
                 clock,
-                live_operations: StdMutex::new(LiveOperations::default()),
+                live_operations,
                 operation_tasks: TaskTracker::new(),
                 operation_cleanup_cancel: tokio_util::sync::CancellationToken::new(),
                 uncertainty,
-                completions: tokio::sync::watch::channel(0).0,
+                completions,
                 queued_operations,
                 scratch_root,
                 settings_catalogs,
@@ -614,15 +649,13 @@ impl ExternalProviderSupervisor {
             for operation in operations {
                 loop {
                     let changed = operation.changed.notified();
-                    if matches!(operation.record(), provider_session_machines::operation_record_machine::OperationRecord::Dropped)
-                        || operation.result.lock().await.is_some()
-                    {
+                    if !operation.holds_custody() {
                         break;
                     }
                     changed.await;
                 }
             }
-            // Publication can wake a caller before its task drops the store.
+            // A terminal receipt can precede the tracked task's final release.
             self.inner.operation_tasks.wait().await;
         })
         .await
@@ -641,6 +674,17 @@ enum PreparedOperation {
 impl SupervisorInner {
     fn now_ms(&self) -> i64 {
         self.clock.utc_now().timestamp_millis()
+    }
+
+    fn finish_late_write(&self, live: &LiveOperation, reason: CustodyEnd) {
+        if live.finish_write(reason) {
+            self.live_operations
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .trim_results();
+            self.completions
+                .send_modify(|revision| *revision = revision.wrapping_add(1));
+        }
     }
 
     async fn record_settings_catalog(
@@ -674,24 +718,8 @@ impl SupervisorInner {
                 .live_operations
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            let order = match retention {
-                provider_operation_finish::Retention::Settled => &mut operations.terminal_order,
-                provider_operation_finish::Retention::PersistenceFailed => {
-                    &mut operations.persistence_failed_order
-                }
-            };
-            order.push_back(operation_id);
-            let mut expired_operations = Vec::new();
-            while order.len() > MAX_RETAINED_SETTLEMENTS {
-                if let Some(expired) = order.pop_front() {
-                    expired_operations.push(expired);
-                }
-            }
-            for expired in expired_operations {
-                operations.operations.remove(&expired);
-            }
+            operations.retain_result(operation_id, retention);
             *result_slot = Some(result);
-            live.published.store(true, Ordering::Release);
         }
         drop(result_slot);
         live.changed.notify_waiters();

@@ -6,6 +6,7 @@
 
 use super::{LiveOperation, SupervisorInner, failure};
 use crate::{
+    provider_operation_custody::CustodyEnd,
     provider_operation_settlement::ProviderOperationCompletion, session_store_lane::STORE_WAIT,
 };
 use collaboration_protocol::{
@@ -16,13 +17,18 @@ use collaboration_protocol::{
 };
 use std::sync::Arc;
 
+type PersistedResult = (
+    Result<ConversationOperationSettlement, ConversationOperationFailure>,
+    Retention,
+);
+
 impl SupervisorInner {
     pub(super) async fn settle_late_dispatch_mark(
         &self,
         store: &mut collaboration_runtime::ProviderOperationStore,
         operation: &OperationId,
         failure: &ConversationOperationFailure,
-    ) {
+    ) -> CustodyEnd {
         if let Err(error) = self
             .write_terminal_failure(
                 store,
@@ -33,6 +39,9 @@ impl SupervisorInner {
             .await
         {
             tracing::error!(operation = operation.as_str(), %error, "could not settle the late mark of an unsent operation");
+            CustodyEnd::Failed
+        } else {
+            CustodyEnd::Written
         }
     }
 
@@ -63,6 +72,11 @@ impl SupervisorInner {
         live: Arc<LiveOperation>,
         completion: ProviderOperationCompletion,
     ) {
+        let non_terminal_receipt = match &completion {
+            ProviderOperationCompletion::Owned { .. } => Some(CustodyEnd::NoWrite),
+            ProviderOperationCompletion::DispatchMarkNotWritten(_) => Some(CustodyEnd::Failed),
+            _ => None,
+        };
         let prompt_refusal_deadline = match &completion {
             ProviderOperationCompletion::PromptAdmissionRefused { deadline, .. } => Some(*deadline),
             _ => None,
@@ -179,33 +193,19 @@ impl SupervisorInner {
                 if let Some(observed_failure) = observed_failure {
                     let deadline = prompt_refusal_deadline
                         .unwrap_or_else(|| self.clock.monotonic_now().after(STORE_WAIT));
-                    tokio::pin!(persistence);
-                    let bounded = tokio::select! {
-                        biased;
-                        () = self.operation_cleanup_cancel.cancelled() => Err(router_clock::WaitElapsed),
-                        written = router_clock::timeout_at(self.clock.as_ref(), deadline, &mut persistence) => written,
-                    };
-                    match bounded {
+                    match self
+                        .persist_with_early_failure(
+                            &operation_id,
+                            &live,
+                            observed_failure,
+                            deadline,
+                            persistence,
+                        )
+                        .await
+                    {
                         Ok(settled) => settled,
-                        Err(_) => {
-                            self.publish_result(
-                                operation_id.clone(),
-                                &live,
-                                Err(observed_failure),
-                                Retention::PersistenceFailed,
-                            )
-                            .await;
-                            // Keep the write in the same shutdown-tracked task.
-                            // Late persistence cannot replace the delivered failure.
-                            tokio::select! {
-                                biased;
-                                () = self.operation_cleanup_cancel.cancelled() => {}
-                                (_, retention) = &mut persistence => {
-                                    if retention == Retention::PersistenceFailed {
-                                        tracing::error!(operation = operation_id.as_str(), "could not settle the late terminal write for a provider failure");
-                                    }
-                                }
-                            }
+                        Err(late_end) => {
+                            self.finish_late_write(&live, late_end);
                             return;
                         }
                     }
@@ -276,8 +276,48 @@ impl SupervisorInner {
                 }
             }
         };
+        live.finish_write(non_terminal_receipt.unwrap_or_else(|| retention.write_receipt()));
         self.publish_result(operation_id, &live, result, retention)
             .await;
+    }
+
+    async fn persist_with_early_failure(
+        &self,
+        operation: &OperationId,
+        live: &LiveOperation,
+        failure: ConversationOperationFailure,
+        deadline: router_clock::ClockInstant,
+        persistence: impl Future<Output = PersistedResult>,
+    ) -> Result<PersistedResult, CustodyEnd> {
+        tokio::pin!(persistence);
+        let bounded = tokio::select! {
+            biased;
+            () = self.operation_cleanup_cancel.cancelled() => Err(router_clock::WaitElapsed),
+            written = router_clock::timeout_at(self.clock.as_ref(), deadline, &mut persistence) => written,
+        };
+        if let Ok(settled) = bounded {
+            return Ok(settled);
+        }
+        self.publish_result(
+            operation.clone(),
+            live,
+            Err(failure),
+            Retention::PersistenceFailed,
+        )
+        .await;
+        // The tracked write can outlive the answer. Returning also drops
+        // the pinned future before its caller releases custody.
+        let reason = tokio::select! {
+            biased;
+            () = self.operation_cleanup_cancel.cancelled() => CustodyEnd::Released,
+            (_, retention) = &mut persistence => {
+                if retention == Retention::PersistenceFailed {
+                    tracing::error!(operation = operation.as_str(), "could not settle the late terminal write for a provider failure");
+                }
+                retention.write_receipt()
+            }
+        };
+        Err(reason)
     }
 
     async fn persist_failed_operation(
@@ -285,10 +325,7 @@ impl SupervisorInner {
         operation_id: &OperationId,
         operation_failure: ConversationOperationFailure,
         reconciliation: ProviderReconciliationState,
-    ) -> (
-        Result<ConversationOperationSettlement, ConversationOperationFailure>,
-        Retention,
-    ) {
+    ) -> PersistedResult {
         let mut store = self.store.lock().await;
         let target = operation_failure.target.clone();
         let target_record_failed = if operation_failure.effect == ProviderOperationEffect::Applied {
@@ -399,4 +436,13 @@ fn failure_unsaved(
 pub(super) enum Retention {
     Settled,
     PersistenceFailed,
+}
+
+impl Retention {
+    fn write_receipt(self) -> CustodyEnd {
+        match self {
+            Self::Settled => CustodyEnd::Written,
+            Self::PersistenceFailed => CustodyEnd::Failed,
+        }
+    }
 }

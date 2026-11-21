@@ -7,27 +7,28 @@
 //! unknown, and the live operations say which sends are still in flight.
 //! Every lock here is short and never held across an await.
 
+use super::{MAX_RETAINED_SETTLEMENTS, provider_operation_finish::Retention};
 use crate::binding_dispatch_permit::{BindingOutcomes, BindingUncertainty};
+use crate::provider_operation_custody::{CustodyEnd, LaneWriteCustody, OperationLifecycle};
 use collaboration_protocol::{
-    ConversationOperationFailure, ConversationOperationSettlement, EndpointRef, OperationId,
-    ProviderOperationKind, SessionRef,
+    CodexGeneration, ConversationOperationFailure, ConversationOperationSettlement, EndpointRef,
+    OperationId, ProviderBindingIdentity, ProviderOperationKind, SessionRef,
 };
 use provider_session_machines::operation_record_machine::{
     AttemptEnding, DispatchAttempt, OperationRecord, OperationRecordEvent, OperationRecordMachine,
 };
 use state_machine_core::StateMachine;
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, MutexGuard, PoisonError};
 use tokio::sync::{Mutex, Notify};
 
 #[derive(Default)]
 pub(super) struct LiveOperations {
     pub(super) operations: HashMap<OperationId, Arc<LiveOperation>>,
-    pub(super) terminal_order: VecDeque<OperationId>,
+    terminal_order: VecDeque<OperationId>,
     /// Results whose durable write failed, in their own bounded window
     /// (design note §12.5): later settlements never evict them.
-    pub(super) persistence_failed_order: VecDeque<OperationId>,
+    persistence_failed_order: VecDeque<OperationId>,
 }
 
 /// One operation's live owner: its result once published, its binding and
@@ -37,15 +38,12 @@ pub(super) struct LiveOperations {
 pub(super) struct LiveOperation {
     pub(super) result:
         Mutex<Option<Result<ConversationOperationSettlement, ConversationOperationFailure>>>,
-    /// Set once the result is published. Retention reads it without the result lock, which
-    /// a reader of the result may be holding.
-    pub(super) published: AtomicBool,
-    pub(super) changed: Notify,
+    pub(super) changed: Arc<Notify>,
     /// The binding it runs on; none for an operation a test holds.
-    binding: Option<EndpointRef>,
+    binding: Option<(EndpointRef, CodexGeneration)>,
     kind: Option<ProviderOperationKind>,
     target: StdMutex<Option<SessionRef>>,
-    record: StdMutex<OperationRecord>,
+    lifecycle: Arc<OperationLifecycle>,
 }
 
 impl LiveOperation {
@@ -62,7 +60,7 @@ impl LiveOperation {
 
     /// An operation reserved on `binding`, before its durable insert.
     pub(super) fn reserving(
-        binding: EndpointRef,
+        binding: &ProviderBindingIdentity,
         target: Option<SessionRef>,
         kind: ProviderOperationKind,
     ) -> Self {
@@ -74,9 +72,9 @@ impl LiveOperation {
         )
     }
 
-    pub(super) fn queued_prompt(target: SessionRef) -> Self {
+    pub(super) fn queued_prompt(binding: &ProviderBindingIdentity, target: SessionRef) -> Self {
         Self::new(
-            Some(target.endpoint.clone()),
+            Some(binding),
             Some(target),
             Some(ProviderOperationKind::ConversationPrompt),
             OperationRecord::Admitted { queued: true },
@@ -89,19 +87,19 @@ impl LiveOperation {
     }
 
     fn new(
-        binding: Option<EndpointRef>,
+        binding: Option<&ProviderBindingIdentity>,
         target: Option<SessionRef>,
         kind: Option<ProviderOperationKind>,
         record: OperationRecord,
     ) -> Self {
+        let changed = Arc::new(Notify::new());
         Self {
             result: Mutex::new(None),
-            published: AtomicBool::new(false),
-            changed: Notify::new(),
-            binding,
+            changed: Arc::clone(&changed),
+            binding: binding.map(|binding| (binding.endpoint.clone(), binding.generation.clone())),
             kind,
             target: StdMutex::new(target),
-            record: StdMutex::new(record),
+            lifecycle: Arc::new(OperationLifecycle::new(record, changed)),
         }
     }
 
@@ -109,10 +107,12 @@ impl LiveOperation {
     /// longer allows (a stale attempt, an operation already settled) changes
     /// nothing.
     fn advance(&self, event: OperationRecordEvent) -> bool {
-        let mut record = lock(&self.record);
-        match OperationRecordMachine::transition(&record, event) {
+        let mut lifecycle = self.lifecycle.state();
+        let previous = lifecycle.record;
+        match OperationRecordMachine::transition(&previous, event) {
             Ok((next, _effects)) => {
-                *record = next;
+                lifecycle.custody.record_moved(previous, next);
+                lifecycle.record = next;
                 true
             }
             Err(_) => false,
@@ -121,7 +121,32 @@ impl LiveOperation {
 
     /// The operation's record now.
     pub(super) fn record(&self) -> OperationRecord {
-        *lock(&self.record)
+        self.lifecycle.state().record
+    }
+
+    pub(super) fn holds_custody(&self) -> bool {
+        self.lifecycle.state().custody.holds_custody()
+    }
+
+    pub(super) fn finish_write(&self, reason: CustodyEnd) -> bool {
+        self.lifecycle.finish_host(reason)
+    }
+
+    pub(super) fn begin_lane_write(
+        &self,
+        generation: &CodexGeneration,
+        target: &SessionRef,
+        on_end: Arc<dyn Fn() + Send + Sync>,
+    ) -> Option<LaneWriteCustody> {
+        let (endpoint, held_generation) = self.binding.as_ref()?;
+        if endpoint == &target.endpoint
+            && held_generation == generation
+            && self.target().as_ref() == Some(target)
+        {
+            self.lifecycle.begin_lane_write(on_end)
+        } else {
+            None
+        }
     }
 
     pub(super) async fn wait_for_result(
@@ -140,7 +165,7 @@ impl LiveOperation {
     }
 
     pub(super) fn binding(&self) -> Option<&EndpointRef> {
-        self.binding.as_ref()
+        self.binding.as_ref().map(|(endpoint, _)| endpoint)
     }
 
     pub(super) fn is_restore(&self) -> bool {
@@ -160,12 +185,13 @@ impl LiveOperation {
 
     /// The reservation ended without a row of its own: a durable row already
     /// existed (`conflict`), or the insert failed.
-    pub(super) fn dropped(&self, conflict: bool) {
+    pub(super) fn dropped(&self, conflict: bool, end: CustodyEnd) {
         self.advance(if conflict {
             OperationRecordEvent::DurableConflict
         } else {
             OperationRecordEvent::DurableInsertFailed
         });
+        self.finish_write(end);
         self.changed.notify_waiters();
     }
 
@@ -206,25 +232,26 @@ impl LiveOperation {
         }
     }
 
-    /// Its unknown outcome is on the binding's uncertainty cell: it stops
-    /// counting as live.
+    /// Its outcome is on the binding's uncertainty cell. Its writer may
+    /// still hold custody of the operation row.
     pub(super) fn uncertainty_recorded(&self) {
         if let OperationRecord::SettlingUnknown { attempt } = self.record() {
             self.advance(OperationRecordEvent::UncertaintyRecorded { attempt });
         }
     }
 
-    /// A send in handoff custody or already marked, with no published result.
+    /// An admitted handoff or marked send whose writer still holds custody.
     fn in_flight(&self) -> bool {
-        let record = self.record();
-        (matches!(
-            record,
-            OperationRecord::MayHaveDispatched { .. } | OperationRecord::SettlingUnknown { .. }
-        ) || matches!(record, OperationRecord::Admitted { queued: false })
-            && self
-                .kind
-                .is_some_and(|kind| kind != ProviderOperationKind::ConversationPrompt))
-            && !self.published.load(Ordering::Acquire)
+        let lifecycle = self.lifecycle.state();
+        let record = lifecycle.custody.admission_record(lifecycle.record);
+        lifecycle.custody.holds_custody()
+            && (matches!(
+                record,
+                OperationRecord::MayHaveDispatched { .. } | OperationRecord::SettlingUnknown { .. }
+            ) || matches!(record, OperationRecord::Admitted { queued: false })
+                && self
+                    .kind
+                    .is_some_and(|kind| kind != ProviderOperationKind::ConversationPrompt))
     }
 }
 
@@ -241,6 +268,64 @@ impl HeldResult {
 }
 
 impl LiveOperations {
+    pub(super) fn begin_lane_write(
+        &self,
+        operation: &OperationId,
+        generation: &CodexGeneration,
+        target: &SessionRef,
+        on_end: Arc<dyn Fn() + Send + Sync>,
+    ) -> Option<LaneWriteCustody> {
+        self.operations
+            .get(operation)?
+            .begin_lane_write(generation, target, on_end)
+    }
+
+    pub(super) fn retain_result(&mut self, operation: OperationId, retention: Retention) {
+        let order = match retention {
+            Retention::Settled => &mut self.terminal_order,
+            Retention::PersistenceFailed => &mut self.persistence_failed_order,
+        };
+        order.push_back(operation);
+        Self::trim_window(order, &mut self.operations);
+    }
+
+    pub(super) fn trim_results(&mut self) {
+        Self::trim_window(&mut self.terminal_order, &mut self.operations);
+        Self::trim_window(&mut self.persistence_failed_order, &mut self.operations);
+    }
+
+    fn trim_window(
+        order: &mut VecDeque<OperationId>,
+        operations: &mut HashMap<OperationId, Arc<LiveOperation>>,
+    ) {
+        if order.len() <= MAX_RETAINED_SETTLEMENTS {
+            return;
+        }
+        // Held entries do not count against the bounded window of ended results.
+        let ended = order
+            .iter()
+            .filter(|operation| {
+                operations
+                    .get(*operation)
+                    .is_some_and(|live| !live.holds_custody())
+            })
+            .count();
+        let mut excess = ended.saturating_sub(MAX_RETAINED_SETTLEMENTS);
+        order.retain(|operation| {
+            if excess != 0
+                && operations
+                    .get(operation)
+                    .is_some_and(|live| !live.holds_custody())
+            {
+                excess -= 1;
+                operations.remove(operation);
+                false
+            } else {
+                true
+            }
+        });
+    }
+
     /// Sends still in flight on `binding` that an admission on `target`
     /// waits behind: the target's own, and binding-wide ones (no target).
     pub(super) fn in_flight_on(

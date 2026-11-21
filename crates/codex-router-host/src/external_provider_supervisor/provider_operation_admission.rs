@@ -12,7 +12,7 @@ use super::{
     ProviderReconciliationState, SessionRef, admission_failure, failure, snapshot_failure,
     snapshot_from_record, unavailable_failure,
 };
-use crate::provider_operation_settlement::ProviderOperationCompletion;
+use crate::provider_operation_custody::CustodyEnd;
 use router_clock::ClockInstant;
 use std::{future::Future, time::Duration};
 use tokio::sync::oneshot;
@@ -37,20 +37,6 @@ fn admission_expired(
         "the Router was busy and nothing was sent, so send again as a new operation",
         operation.clone(),
         target.cloned(),
-    )
-}
-
-fn dispatch_mark_expired(
-    operation: &OperationId,
-    live: &LiveOperation,
-) -> ConversationOperationFailure {
-    failure(
-        ConversationOperationFailureKind::Unavailable,
-        ConversationOperationFailureStage::Dispatch,
-        ProviderOperationEffect::None,
-        "the store didn't respond in time, so nothing was sent",
-        operation.clone(),
-        live.target(),
     )
 }
 
@@ -134,125 +120,6 @@ pub(super) fn reused_id_failure(
 }
 
 impl ExternalProviderSupervisor {
-    pub(super) async fn run_operation_for_handoff(
-        &self,
-        operation_id: OperationId,
-        live: Arc<LiveOperation>,
-        operation: impl Future<Output = ProviderOperationCompletion>,
-    ) {
-        let deadline = self.admission_deadline();
-        let clock = self.inner.clock.as_ref();
-        let mark = self.mark_operation_for_handoff(&operation_id, &live, deadline);
-        tokio::pin!(mark);
-        let receipt = tokio::select! {
-            biased;
-            () = self.inner.operation_cleanup_cancel.cancelled() => Err(router_clock::WaitElapsed),
-            receipt = router_clock::timeout_at(clock, deadline, &mut mark) => receipt,
-        };
-        let completion = match receipt {
-            Ok(Ok(store)) if clock.monotonic_now() < deadline => {
-                drop(store);
-                live.dispatch_marked();
-                operation.await
-            }
-            Ok(Err(failure)) if clock.monotonic_now() < deadline => {
-                ProviderOperationCompletion::DispatchMarkNotWritten(failure)
-            }
-            late => {
-                let failure = dispatch_mark_expired(&operation_id, &live);
-                self.inner
-                    .finish(
-                        operation_id.clone(),
-                        Arc::clone(&live),
-                        ProviderOperationCompletion::DispatchMarkNotWritten(failure.clone()),
-                    )
-                    .await;
-                // Keep custody of the SQL future, even though the caller's
-                // authorization expired. A committed mark must be settled.
-                let settle_late_mark = async {
-                    if let Ok(mut store) = match late {
-                        Ok(receipt) => receipt,
-                        Err(_) => mark.await,
-                    } {
-                        self.inner
-                            .settle_late_dispatch_mark(&mut store, &operation_id, &failure)
-                            .await;
-                    }
-                };
-                tokio::select! {
-                    biased;
-                    () = self.inner.operation_cleanup_cancel.cancelled() => {}
-                    () = settle_late_mark => {}
-                }
-                return;
-            }
-        };
-        self.inner
-            .finish(operation_id.clone(), Arc::clone(&live), completion)
-            .await;
-    }
-
-    #[expect(
-        clippy::result_large_err,
-        reason = "Retains the operation's typed failure."
-    )]
-    async fn mark_operation_for_handoff<'store>(
-        &'store self,
-        operation: &OperationId,
-        live: &LiveOperation,
-        deadline: ClockInstant,
-    ) -> Result<
-        tokio::sync::MutexGuard<'store, super::ProviderOperationStore>,
-        ConversationOperationFailure,
-    > {
-        let clock = self.inner.clock.as_ref();
-        let target = live.target();
-        let not_sent = |message| {
-            failure(
-                ConversationOperationFailureKind::Unavailable,
-                ConversationOperationFailureStage::Dispatch,
-                ProviderOperationEffect::None,
-                message,
-                operation.clone(),
-                target.clone(),
-            )
-        };
-        let elapsed = || dispatch_mark_expired(operation, live);
-        let acquire_store = async {
-            #[cfg(test)]
-            {
-                let pause = self
-                    .inner
-                    .dispatch_mark_test_pause
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .take();
-                if let Some(pause) = pause {
-                    let _test_ended = pause.entered.send(());
-                    let _test_ended = pause.release.await;
-                }
-            }
-            self.inner.store.lock().await
-        };
-        let mut store = router_clock::timeout_at(clock, deadline, acquire_store)
-            .await
-            .map_err(|_| elapsed())?;
-        if clock.monotonic_now() >= deadline {
-            return Err(elapsed());
-        }
-        let mark = store
-            .mark_may_have_dispatched_if(operation, self.inner.now_ms(), || {
-                clock.monotonic_now() < deadline
-            })
-            .await
-            .map_err(|error| {
-                tracing::warn!(operation = operation.as_str(), %error, "could not mark provider dispatch");
-                not_sent("the store couldn't record the dispatch mark, so nothing was sent")
-            })?;
-        mark.ok_or_else(elapsed)?;
-        Ok(store)
-    }
-
     pub(super) fn admission_deadline(&self) -> ClockInstant {
         self.inner
             .clock
@@ -394,7 +261,7 @@ impl ExternalProviderSupervisor {
                 Some(target.clone()),
             )),
             std::collections::hash_map::Entry::Vacant(entry) => {
-                let live = Arc::new(LiveOperation::queued_prompt(target.clone()));
+                let live = Arc::new(LiveOperation::queued_prompt(binding, target.clone()));
                 entry.insert(Arc::clone(&live));
                 Ok(Some(live))
             }
@@ -477,7 +344,7 @@ impl ExternalProviderSupervisor {
         #[cfg(test)]
         self.pause_before_admission_reservation_for_test().await;
         let live = Arc::new(LiveOperation::reserving(
-            binding.endpoint.clone(),
+            &binding,
             known_target.cloned(),
             operation_kind,
         ));
@@ -607,7 +474,7 @@ impl ExternalProviderSupervisor {
                         let _result = reply.send(result);
                     }
                 }
-                if let Err(error) = store
+                let end = if let Err(error) = store
                     .record_terminal(
                         &operation_id,
                         ProviderOperationEffect::None,
@@ -618,8 +485,11 @@ impl ExternalProviderSupervisor {
                     .await
                 {
                     tracing::error!(operation = operation_id.as_str(), %error, "could not settle unsent provider admission");
-                }
-                self.drop_reservation(&operation_id, &live, false);
+                    CustodyEnd::Failed
+                } else {
+                    CustodyEnd::Written
+                };
+                self.drop_reservation_after(&operation_id, &live, false, end);
             }
             Ok(Some(ProviderOperationAdmissionResult::Existing(record))) => {
                 self.drop_reservation(&operation_id, &live, true);
@@ -631,7 +501,7 @@ impl ExternalProviderSupervisor {
                 let _result = reply.send(Err(admission_expired(&operation_id, target)));
             }
             Err(error) => {
-                self.drop_reservation(&operation_id, &live, false);
+                self.drop_reservation_after(&operation_id, &live, false, CustodyEnd::Failed);
                 tracing::warn!(operation = operation_id.as_str(), %error, "could not persist provider admission");
                 let _result = reply.send(Err(admission_failure(
                     operation_id,
@@ -700,6 +570,16 @@ impl ExternalProviderSupervisor {
         live: &Arc<LiveOperation>,
         conflict: bool,
     ) {
+        self.drop_reservation_after(operation_id, live, conflict, CustodyEnd::Dropped);
+    }
+
+    fn drop_reservation_after(
+        &self,
+        operation_id: &OperationId,
+        live: &Arc<LiveOperation>,
+        conflict: bool,
+        end: CustodyEnd,
+    ) {
         let mut operations = self
             .inner
             .live_operations
@@ -713,7 +593,7 @@ impl ExternalProviderSupervisor {
             operations.operations.remove(operation_id);
         }
         drop(operations);
-        live.dropped(conflict);
+        live.dropped(conflict, end);
     }
 }
 
@@ -788,9 +668,8 @@ impl super::SupervisorInner {
             .map(|binding| binding.identity.clone())
     }
 
-    /// The operation's live owner records its unknown outcome on its
-    /// binding's uncertainty cell, before the operation stops counting as
-    /// live (design note §14.1).
+    /// Record the unknown outcome before releasing row custody. Later
+    /// admissions need to see either the live writer or the uncertainty.
     pub(super) async fn record_became_unknown(
         &self,
         operation_id: &OperationId,
