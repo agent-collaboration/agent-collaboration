@@ -70,6 +70,24 @@ impl ExternalProviderSupervisor {
             .map_err(|error| crate::ExternalProviderRuntimeError::Operation(error.to_string()))
     }
 
+    /// Observe the exact queued offer when it parks or actually commits a mark.
+    pub fn observe_queued_dispatch_fixture(
+        &self,
+        target: &collaboration_protocol::SessionRef,
+        operation: &collaboration_protocol::OperationId,
+    ) -> tokio::sync::oneshot::Receiver<()> {
+        self.inner
+            .uncertainty
+            .slot(&target.endpoint)
+            .fixture
+            .notice_wait(
+                target.clone(),
+                crate::binding_store_fixture::BindingFixtureWait::QueuedDispatchObserved(
+                    operation.clone(),
+                ),
+            )
+    }
+
     /// Pauses a confirmed explicit mode write in the store lane (T5).
     pub fn pause_explicit_mode_record_of(
         &self,

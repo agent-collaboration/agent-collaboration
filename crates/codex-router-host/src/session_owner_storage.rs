@@ -321,9 +321,13 @@ impl SessionOwnerStorage {
                 previous.cancel();
             }
             #[cfg(any(test, feature = "test-support"))]
-            lane.notice_fixture_wait(
-                crate::binding_store_fixture::BindingFixtureWait::QueuedDispatchParked,
-            );
+            {
+                use crate::binding_store_fixture::BindingFixtureWait;
+                lane.notice_fixture_wait(BindingFixtureWait::QueuedDispatchParked);
+                lane.notice_fixture_wait(BindingFixtureWait::QueuedDispatchObserved(
+                    operation.clone(),
+                ));
+            }
             let ready_input = input.clone();
             self.tasks.spawn(async move {
                 let ready = async {

@@ -705,6 +705,16 @@ impl SessionStoreLaneWriter {
         if let Some(dispatch) = dispatch {
             self.project_dispatch_receipt(dispatch, custody.as_ref(), &result)
                 .await;
+            #[cfg(any(test, feature = "test-support"))]
+            if let Ok(SessionStoreSettlement::Operation(row)) = &result
+                && row.stage == ProviderOperationStage::MayHaveDispatched
+            {
+                self.lane.notice_fixture_wait(
+                    crate::binding_store_fixture::BindingFixtureWait::QueuedDispatchObserved(
+                        row.operation_id.clone(),
+                    ),
+                );
+            }
         }
         if let Some(custody) = custody {
             custody.settle(match &result {

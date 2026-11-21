@@ -4,11 +4,12 @@ use collaboration_protocol::{OperationId, SessionRef};
 use std::{collections::BTreeMap, sync::Mutex};
 use tokio::sync::oneshot;
 
-#[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum BindingFixtureWait {
     ExplicitSetting,
     LatePromptRepair,
     QueuedDispatchParked,
+    QueuedDispatchObserved(OperationId),
 }
 
 #[derive(Default)]

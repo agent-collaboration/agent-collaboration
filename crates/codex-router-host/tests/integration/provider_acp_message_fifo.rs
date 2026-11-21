@@ -308,6 +308,8 @@ async fn cursor_queue_drains_after_control_prompt_settles() {
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].input_id, queued_input_id);
     assert_eq!(listed[0].preview, expected_push_preview);
+    let dispatch_observed =
+        supervisor.observe_queued_dispatch_fixture(&target, &queued_operation_id);
 
     first_event
         .write_all(b"x")
@@ -316,10 +318,11 @@ async fn cursor_queue_drains_after_control_prompt_settles() {
     terminal_waiting
         .await
         .expect("Control prompt reached its terminal write");
-    supervisor
-        .wait_for_dispatch_mark_fixture(&target, &queued_operation_id)
-        .await
-        .expect("queued delivery offered its mark behind the held terminal write");
+    tokio::select! {
+        biased;
+        early = listener.accept() => panic!("queued delivery reached the wire before the Control settlement: {early:?}"),
+        observed = dispatch_observed => observed.expect("queued delivery offered its mark behind the held terminal write"),
+    }
     assert!(
         store
             .lock()
