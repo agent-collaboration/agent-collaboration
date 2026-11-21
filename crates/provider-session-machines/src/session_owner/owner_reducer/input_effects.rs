@@ -142,7 +142,7 @@ impl OwnerTransition {
                     PromptAdmission::Auto {
                         steering_supported: true
                     }
-                ) && !queued,
+                ),
             },
         );
         self.drive_prompt_line()
