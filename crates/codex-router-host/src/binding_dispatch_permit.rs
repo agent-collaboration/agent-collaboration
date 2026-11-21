@@ -1,14 +1,14 @@
 //! The binding uncertainty record used at admission and at lane acceptance.
 
+use crate::operation_machines::uncertainty_cell_machine::{
+    UncertaintyCellMachine, UncertaintyEvent, UncertaintyRefusal, UnknownOutcomes,
+};
 use crate::provider_operation_custody::{LaneCustodyLookup, LatePromptRepairLookup};
 use collaboration_protocol::{
     ConversationBindingIdentity, OperationId, ProviderBindingIdentity, ProviderOperationEffect,
     ProviderOperationKind, ProviderReconciliationState, SessionRef,
 };
 use collaboration_runtime::{ProviderOperationRecord, ProviderOperationStoreError};
-use provider_session_machines::uncertainty_cell_machine::{
-    UncertaintyCellMachine, UncertaintyEvent, UncertaintyRefusal, UnknownOutcomes,
-};
 use state_machine_core::{StateMachine, TransitionError};
 use std::{
     collections::BTreeMap,

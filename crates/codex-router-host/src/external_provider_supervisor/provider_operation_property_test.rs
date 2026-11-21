@@ -125,7 +125,7 @@ fn compare_admission(
     }
     if (3..=4).contains(&holder_stage) {
         holder
-            .completed(provider_session_machines::operation_record_machine::AttemptEnding::Applied);
+            .completed(crate::operation_machines::operation_record_machine::AttemptEnding::Applied);
     }
     if holder_stage == 4 {
         holder.finish_write(CustodyEnd::Written);

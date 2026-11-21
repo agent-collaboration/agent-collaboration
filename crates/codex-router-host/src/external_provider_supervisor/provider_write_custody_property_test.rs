@@ -1,11 +1,11 @@
 use super::*;
+use crate::operation_machines::operation_record_machine::{AttemptEnding, OperationRecord};
 use crate::provider_operation_custody::LaneWriteCustody;
 use collaboration_protocol::{
     ConversationOperationFailure, ConversationOperationFailureKind,
     ConversationOperationFailureStage, ProviderOperationEffect,
 };
 use futures_util::FutureExt as _;
-use provider_session_machines::operation_record_machine::{AttemptEnding, OperationRecord};
 use router_clock::{ClockInstant, ManualClock, RuntimeClock as _};
 use std::time::Duration;
 use tokio_util::task::{TaskTracker, task_tracker::TaskTrackerToken};

@@ -108,11 +108,11 @@ fn owner() -> OwnerIncarnation {
 
 #[tokio::test(flavor = "current_thread")]
 async fn lane_stop_releases_backlog_and_retains_a_submitted_commit() {
+    use crate::operation_machines::operation_record_machine::OperationRecord;
     use crate::provider_operation_custody::OperationLifecycle;
     use collaboration_protocol::{
         ConversationBindingIdentity, ProviderOperationKind, ProviderOperationStage,
     };
-    use provider_session_machines::operation_record_machine::OperationRecord;
 
     let fixture = StoreFixture::new().await;
     let target = fixture.record_session("lane-stop").await;

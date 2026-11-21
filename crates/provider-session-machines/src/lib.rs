@@ -3,9 +3,7 @@
 //! core, with no I/O, no locks and no clock reads. The connection, the Host
 //! and their cells hold the state and run the effects.
 
-pub mod cache_warm_machine;
 pub mod monotonic_instant;
-pub mod operation_record_machine;
 mod provider_model_reasoning;
 mod provider_setting_choice;
 pub mod provider_setting_kind;
@@ -21,7 +19,6 @@ pub mod session_refusal_answers;
 pub mod session_setting_machine;
 pub mod session_turn_machine;
 pub mod tool_ownership;
-pub mod uncertainty_cell_machine;
 
 pub use monotonic_instant::MonotonicInstant;
 pub use provider_model_reasoning::{

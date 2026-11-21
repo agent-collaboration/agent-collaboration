@@ -15,6 +15,9 @@ use super::{
     provider_operation_finish::Retention,
 };
 use crate::binding_dispatch_permit::{BindingOutcomes, BindingUncertainty};
+use crate::operation_machines::operation_record_machine::{
+    AttemptEnding, DispatchAttempt, OperationRecord, OperationRecordEvent, OperationRecordMachine,
+};
 use crate::provider_operation_custody::{
     CancelledPromptIdentity, CustodyEnd, LaneWriteCustody, LatePromptRepairAuthority,
     OperationLifecycle,
@@ -22,9 +25,6 @@ use crate::provider_operation_custody::{
 use collaboration_protocol::{
     CodexGeneration, ConversationOperationFailure, ConversationOperationSettlement, EndpointRef,
     OperationId, ProviderBindingIdentity, ProviderOperationKind, SessionRef,
-};
-use provider_session_machines::operation_record_machine::{
-    AttemptEnding, DispatchAttempt, OperationRecord, OperationRecordEvent, OperationRecordMachine,
 };
 use state_machine_core::StateMachine;
 use std::collections::{HashMap, VecDeque};

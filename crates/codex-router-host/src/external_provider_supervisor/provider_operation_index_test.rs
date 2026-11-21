@@ -1,8 +1,8 @@
 use super::super::provider_admission_policy::AdmissionMode;
 use super::super::tests::binding;
 use super::*;
+use crate::operation_machines::operation_record_machine::{Reconciliation, SettledEffect};
 use collaboration_protocol::{EndpointId, SessionId};
-use provider_session_machines::operation_record_machine::{Reconciliation, SettledEffect};
 
 fn endpoint() -> EndpointRef {
     EndpointRef {

@@ -4,13 +4,11 @@ pub(crate) use crate::operation_machines::custody_machine::CustodyEnd;
 use crate::operation_machines::custody_machine::{
     Custodian, CustodyEffect, CustodyEvent, OperationCustody, OperationCustodyMachine,
 };
-use collaboration_protocol::{CodexGeneration, OperationId, SessionRef};
-use provider_session_machines::{
-    operation_record_machine::{
-        DispatchAttempt, OperationRecord, OperationRecordEvent, OperationRecordMachine,
-    },
-    session_owner::{OwnerIncarnation, OwnerInput},
+use crate::operation_machines::operation_record_machine::{
+    DispatchAttempt, OperationRecord, OperationRecordEvent, OperationRecordMachine,
 };
+use collaboration_protocol::{CodexGeneration, OperationId, SessionRef};
+use provider_session_machines::session_owner::{OwnerIncarnation, OwnerInput};
 use state_machine_core::StateMachine;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use tokio::sync::Notify;

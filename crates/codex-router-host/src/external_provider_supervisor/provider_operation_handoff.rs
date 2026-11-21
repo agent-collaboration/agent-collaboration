@@ -6,11 +6,11 @@ use super::{
     ConversationOperationFailureStage, ExternalProviderSupervisor, LiveOperation, OperationId,
     ProviderOperationEffect, failure,
 };
+use crate::operation_machines::operation_record_machine::AttemptEnding;
 use crate::{
     provider_operation_custody::CustodyEnd,
     provider_operation_settlement::ProviderOperationCompletion,
 };
-use provider_session_machines::operation_record_machine::AttemptEnding;
 use router_clock::ClockInstant;
 
 pub(super) fn mark_receipt_is_timely(observed: ClockInstant, deadline: ClockInstant) -> bool {

@@ -103,35 +103,35 @@ impl SupervisorInner {
         live.completed(match &completion {
             ProviderOperationCompletion::Success { .. }
             | ProviderOperationCompletion::FailureWithSession { .. } => {
-                provider_session_machines::operation_record_machine::AttemptEnding::Applied
+                crate::operation_machines::operation_record_machine::AttemptEnding::Applied
             }
             ProviderOperationCompletion::Failure(failure)
             | ProviderOperationCompletion::PromptStartFailed { failure, .. } => {
                 match failure.effect {
                     ProviderOperationEffect::Applied => {
-                        provider_session_machines::operation_record_machine::AttemptEnding::Applied
+                        crate::operation_machines::operation_record_machine::AttemptEnding::Applied
                     }
                     ProviderOperationEffect::None => {
-                        provider_session_machines::operation_record_machine::AttemptEnding::Refused
+                        crate::operation_machines::operation_record_machine::AttemptEnding::Refused
                     }
                     ProviderOperationEffect::Unknown => {
-                        provider_session_machines::operation_record_machine::AttemptEnding::Unknown
+                        crate::operation_machines::operation_record_machine::AttemptEnding::Unknown
                     }
                 }
             }
             ProviderOperationCompletion::DispatchMarkNotWritten(_) => {
-                provider_session_machines::operation_record_machine::AttemptEnding::Refused
+                crate::operation_machines::operation_record_machine::AttemptEnding::Refused
             }
             ProviderOperationCompletion::Owned { result, .. } => {
                 match result.as_ref().err().map(|failure| failure.effect) {
                     None | Some(ProviderOperationEffect::Applied) => {
-                        provider_session_machines::operation_record_machine::AttemptEnding::Applied
+                        crate::operation_machines::operation_record_machine::AttemptEnding::Applied
                     }
                     Some(ProviderOperationEffect::None) => {
-                        provider_session_machines::operation_record_machine::AttemptEnding::Refused
+                        crate::operation_machines::operation_record_machine::AttemptEnding::Refused
                     }
                     Some(ProviderOperationEffect::Unknown) => {
-                        provider_session_machines::operation_record_machine::AttemptEnding::Unknown
+                        crate::operation_machines::operation_record_machine::AttemptEnding::Unknown
                     }
                 }
             }

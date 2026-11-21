@@ -53,7 +53,7 @@ async fn shutdown_completes_when_a_reserved_admission_drops_without_a_result() {
     changed.await;
     assert!(matches!(
         reservation.record(),
-        provider_session_machines::operation_record_machine::OperationRecord::Dropped
+        crate::operation_machines::operation_record_machine::OperationRecord::Dropped
     ));
     assert!(host.held_result_for_test(&operation).is_none());
 

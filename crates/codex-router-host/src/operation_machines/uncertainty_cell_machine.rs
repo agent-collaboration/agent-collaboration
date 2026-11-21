@@ -207,6 +207,13 @@ impl<Operation: UncertaintyKey, Target: UncertaintyKey> StateMachine
 
 /// The start-up seed: today's durable scan of unknown rows, before any
 /// admission on the binding (design note §14.1).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Constructs the existing uncertainty machine test states."
+    )
+)]
 pub fn seeded<'a, Operation: UncertaintyKey + 'a, Target: UncertaintyKey + 'a>(
     rows: impl IntoIterator<Item = (&'a Operation, Option<&'a Target>)>,
 ) -> UnknownOutcomes<Operation, Target> {

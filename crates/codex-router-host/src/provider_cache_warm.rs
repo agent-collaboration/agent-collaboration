@@ -8,15 +8,16 @@
 //! means "not now" and waits for the next turn end. The endpoint keeps only
 //! the cells' index and its timer tasks.
 
+mod cache_warm_machine;
 mod supervisor_submitter;
 
 pub(crate) use supervisor_submitter::SupervisorWarmPromptSubmitter;
 
 use crate::{external_provider_supervisor::WarmRun, provider_settings_section::CacheWarmSetting};
-use collaboration_protocol::{EndpointRef, ProviderKind, SessionId, SessionRef};
-use provider_session_machines::cache_warm_machine::{
+use cache_warm_machine::{
     CacheWarm, CacheWarmEffect, CacheWarmEvent, CacheWarmMachine, WarmCadence,
 };
+use collaboration_protocol::{EndpointRef, ProviderKind, SessionId, SessionRef};
 use router_clock::{ClockInstant, RuntimeClock};
 use session_event_model::{InputId, SessionEvent, SessionState};
 use state_machine_core::StateMachine;

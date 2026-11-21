@@ -4,7 +4,7 @@
 //! window; a turn started by the module's own warm input isn't real work; a
 //! refusal means "not now" and waits for the next turn end.
 
-use crate::monotonic_instant::MonotonicInstant;
+use provider_session_machines::MonotonicInstant;
 use session_event_model::InputId;
 use state_machine_core::{
     EventTag, RefusalTag, StateMachine, StateMachineResult, StateTag, Transition, TransitionError,

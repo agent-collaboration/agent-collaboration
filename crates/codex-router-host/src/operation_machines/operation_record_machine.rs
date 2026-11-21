@@ -23,6 +23,13 @@ pub enum SettledEffect {
 pub enum Reconciliation {
     Unresolved,
     Confirmed,
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Exercised by the declared record transition tests."
+        )
+    )]
     NotReconcilable,
 }
 
@@ -64,6 +71,13 @@ pub enum OperationRecordEvent {
     DurableInserted,
     DurableConflict,
     DurableInsertFailed,
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Exercised by the declared record transition tests."
+        )
+    )]
     Queued,
     DispatchMarked {
         attempt: DispatchAttempt,
@@ -79,6 +93,13 @@ pub enum OperationRecordEvent {
     UncertaintyRecorded {
         attempt: DispatchAttempt,
     },
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Exercised by the declared record transition tests."
+        )
+    )]
     Reconciled {
         reconciliation: Reconciliation,
     },
