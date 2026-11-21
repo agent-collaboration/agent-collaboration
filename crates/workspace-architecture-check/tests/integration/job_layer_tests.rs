@@ -33,6 +33,22 @@ fn timer_job_reachability_rejects_forbidden_edges_through_an_allowed_leaf() {
 }
 
 #[test]
+fn schedules_rejects_a_transitive_host_dependency() {
+    let outcomes = [DependencyKind::Normal, DependencyKind::Build].map(|kind| {
+        let indirect = graph(&[
+            (FLEET_SCHEDULES, "agent-automation", DependencyKind::Normal),
+            ("agent-automation", "codex-router-host", kind),
+        ]);
+        check_boundaries(&indirect).map_err(|failure| failure.to_string())
+    });
+    let forbidden = "BD1: forbidden reachable dependency fleet-schedules -> codex-router-host";
+    assert_eq!(
+        outcomes,
+        [Err(forbidden.to_owned()), Err(forbidden.to_owned())]
+    );
+}
+
+#[test]
 fn mail_rejects_a_direct_sibling_dependency() {
     for kind in [DependencyKind::Normal, DependencyKind::Build] {
         let pure = graph(&[
