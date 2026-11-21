@@ -62,6 +62,16 @@ pub enum WorkspaceRequest {
     ReadRequestStatus(ReadWorkspaceRequestStatus),
 }
 
+impl WorkspaceRequest {
+    /// Encode a service-open failure as the reply for this request.
+    #[doc(hidden)]
+    pub fn unavailable_reply(&self, failure: StoreFailure) -> WorkspaceResponse {
+        match self {
+            Self::ReadRequestStatus(_) => WorkspaceResponse::ReadRequestStatus(Err(failure)),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(
     tag = "kind",

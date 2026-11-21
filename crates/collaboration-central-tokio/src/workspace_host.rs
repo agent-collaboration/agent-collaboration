@@ -113,14 +113,14 @@ impl Transport<WorkspaceServiceProtocol> for TokioWorkspaceStores {
         dispatch::<WorkspaceServiceProtocol, _, _>(&workspace, request, |call| async {
             let store = match self.store(&workspace).await {
                 Ok(store) => store,
-                Err(failure) => return WorkspaceResponse::ReadRequestStatus(Err(failure)),
+                Err(failure) => return call.unavailable_reply(failure),
             };
             match store.workspace_pool().await {
                 Ok(pool) => {
                     fleet_contracts::dispatch_workspace_request(&WorkspaceService::new(pool), call)
                         .await
                 }
-                Err(failure) => WorkspaceResponse::ReadRequestStatus(Err(failure)),
+                Err(failure) => call.unavailable_reply(failure),
             }
         })
         .await

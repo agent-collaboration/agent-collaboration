@@ -3,7 +3,10 @@ use central_link_protocol::{ReplyPayload, RequestScope, RequestStatusAnswer, Req
 use central_storage::{StoreCall, StoreFailure, StoreReply};
 use collaboration_central_core::WorkspaceRuntime;
 use collaboration_central_tokio::{ObjectStorage, TokioWorkspaceStores};
-use fleet_contracts::{WorkspaceRequest, WorkspaceResponse, WorkspaceServiceProtocol};
+use fleet_contracts::{
+    ReadWorkspaceRequestStatus, WorkspaceRequest, WorkspaceResponse, WorkspaceServiceClient,
+    WorkspaceServiceProtocol, WorkspaceServiceRpc,
+};
 use fleet_rpc::{CallFailure, Envelope, Transport};
 use fleet_runtime::{ClockIds, FleetRuntime};
 use fleet_runtime_ports::{Clock, SyncTime, WorkspaceStores};
@@ -146,4 +149,40 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
     );
     central.close().await;
     store.close().await;
+}
+
+#[tokio::test]
+async fn request_status_returns_a_typed_reply_when_the_workspace_store_cannot_open() {
+    let root = tempfile::tempdir().unwrap();
+    let workspace = id::<m::WorkspaceId>(895);
+    let store = Arc::new(ObjectStorage::new(
+        root.path().join("workspace.sqlite"),
+        Arc::new(fleet_storage_schema::workspace_migrations::failing_upgrade(
+            fleet_storage_schema::workspace_migrations::workspace_migrator(),
+        )),
+    ));
+    let stores =
+        TokioWorkspaceStores::with_fixture_store(root.path().into(), workspace.clone(), store);
+    let client = WorkspaceServiceClient::new(
+        workspace,
+        LoseFirstRead {
+            stores,
+            lose: Arc::new(AtomicBool::new(true)),
+        },
+    );
+    let status_call = || ReadWorkspaceRequestStatus {
+        request_id: id(896),
+        actor: id(897),
+        cutoff: "2026-11-20T12:00:00Z".parse().unwrap(),
+    };
+
+    // The fixture can lose the first reply only after the real transport returns an envelope.
+    assert_eq!(
+        client.read_request_status(status_call()).await,
+        Err(StoreFailure::AnswerLost)
+    );
+    assert_eq!(
+        client.read_request_status(status_call()).await,
+        Err(StoreFailure::Unavailable)
+    );
 }

@@ -5,7 +5,7 @@ use crate::object_location::ObjectAddress;
 use crate::statement_store::{self, AlarmPolicy};
 use crate::store_wire::{OwnedStoreCall, StoreAnswer};
 use central_storage::{StoreFailure, StoreReply};
-use fleet_contracts::{WorkspaceRequest, WorkspaceResponse, WorkspaceServiceProtocol};
+use fleet_contracts::{WorkspaceRequest, WorkspaceServiceProtocol};
 use fleet_rpc::{Envelope, dispatch};
 use fleet_workspace_service::WorkspaceService;
 use sqlx_durable_object::DoConnection;
@@ -121,7 +121,7 @@ impl DurableObject for WorkspaceStoreObject {
                             )
                             .await
                         }
-                        Err(failure) => WorkspaceResponse::ReadRequestStatus(Err(failure)),
+                        Err(failure) => call.unavailable_reply(failure),
                     }
                 })
                 .await

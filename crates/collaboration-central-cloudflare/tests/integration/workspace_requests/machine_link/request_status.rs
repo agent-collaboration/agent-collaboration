@@ -7,7 +7,6 @@ use central_storage::{
     SqlValue, Statement, StatementBatch, StoreFailure,
 };
 use collaboration_central_conformance::ConformanceResult as Result;
-use fleet_contracts::WorkspaceResponse;
 use fleet_rpc::Envelope;
 use futures_util::StreamExt;
 use reqwest_websocket::{CloseCode, Message};
@@ -294,15 +293,15 @@ async fn check_corruption(
     assert_eq!(receipt.status, 200, "{}", receipt.body);
     assert_eq!(receipt.storage_before, [true, true]);
     assert_eq!(receipt.storage_after, [true, true]);
-    let envelope: Envelope<WorkspaceId, WorkspaceResponse> = serde_json::from_str(&receipt.body)?;
+    let envelope: Envelope<WorkspaceId, Value> = serde_json::from_str(&receipt.body)?;
     assert_eq!(envelope.target, *workspace);
-    let WorkspaceResponse::ReadRequestStatus(answer) = envelope.body;
     assert_eq!(
-        answer,
-        Err(StoreFailure::Corrupt {
-            reason: CorruptReason::BadValue {
-                column: "answer".into()
-            },
+        envelope.body,
+        json!({
+            "kind": "readRequestStatus",
+            "reply": {"Err": StoreFailure::Corrupt {
+                reason: CorruptReason::BadValue { column: "answer".into() },
+            }}
         })
     );
 
