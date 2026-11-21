@@ -1,3 +1,4 @@
+use super::super::provider_admission_policy::AdmissionMode;
 use super::super::tests::binding;
 use super::*;
 use collaboration_protocol::{EndpointId, SessionId};
@@ -26,7 +27,7 @@ fn in_flight_on(index: &LiveOperations, target: &SessionRef) -> Vec<OperationId>
         AdmissionRequest {
             operation: &OperationId::generate(),
             kind: ProviderOperationKind::ConversationLoad,
-            mark: DispatchMark::BeforeHandoff,
+            mode: AdmissionMode::HANDOFF,
             target: Some(target),
         },
     )

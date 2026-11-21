@@ -1,6 +1,6 @@
 //! Durable provider resume and close operations.
 
-use super::provider_admission_policy::DispatchMark;
+use super::provider_admission_policy::AdmissionMode;
 use super::{
     ConversationOperationFailureKind, ConversationOperationFailureStage,
     ConversationOperationSubmission, ExternalProviderSupervisor, PreparedOperation,
@@ -120,7 +120,7 @@ pub(super) fn close(
                 ProviderOperationKind::ConversationClose,
                 binding,
                 Some(&target),
-                DispatchMark::BeforeHandoff,
+                AdmissionMode::HANDOFF,
             )
             .await?;
         match prepared {

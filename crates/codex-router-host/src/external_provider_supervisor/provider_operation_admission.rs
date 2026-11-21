@@ -10,7 +10,7 @@ use super::{
     ProviderBindingIdentity, ProviderOperationAdmission, ProviderOperationAdmissionResult,
     ProviderOperationEffect, ProviderOperationKind, ProviderOperationRecord,
     ProviderReconciliationState, SessionRef, admission_failure, failure,
-    provider_admission_policy::{AdmissionRequest, DispatchMark},
+    provider_admission_policy::{AdmissionMode, AdmissionRequest},
     provider_operation_index::Reservation,
     snapshot_failure, snapshot_from_record, unavailable_failure,
 };
@@ -223,6 +223,7 @@ impl ExternalProviderSupervisor {
         operation_id: &OperationId,
         target: &SessionRef,
         binding: &ProviderBindingIdentity,
+        mode: AdmissionMode,
     ) -> Result<Option<Arc<LiveOperation>>, ConversationOperationFailure> {
         let kind = ProviderOperationKind::ConversationPrompt;
         let existing = self
@@ -240,7 +241,7 @@ impl ExternalProviderSupervisor {
             operation: operation_id,
             kind,
             target: Some(target),
-            mark: DispatchMark::Deferred,
+            mode,
         };
         let context = self
             .within_admission(
@@ -275,7 +276,7 @@ impl ExternalProviderSupervisor {
         operation_kind: ProviderOperationKind,
         binding: ProviderBindingIdentity,
         known_target: Option<&SessionRef>,
-        mark: DispatchMark,
+        mode: AdmissionMode,
     ) -> Result<PreparedOperation, ConversationOperationFailure> {
         let admitted_at_ms = self.inner.now_ms();
         let failure_target = known_target.cloned();
@@ -293,7 +294,7 @@ impl ExternalProviderSupervisor {
             operation: &operation_id,
             kind: operation_kind,
             target: known_target,
-            mark,
+            mode,
         };
         let context = self
             .within_admission(
@@ -311,7 +312,7 @@ impl ExternalProviderSupervisor {
             &binding,
             known_target.cloned(),
             operation_kind,
-            mark,
+            mode.mark,
         ));
         if matches!(
             self.reserve_operation(deadline, &binding, request, &context, &live)?,

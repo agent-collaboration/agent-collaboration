@@ -6,7 +6,7 @@ use super::{
     OperationId, PreparedOperation, ProviderConversationFuture, ProviderOperationCompletion,
     ProviderOperationEffect, ProviderOperationKind, SessionRef, admitted_submission,
     existing_submission, failure, optional_message_text,
-    provider_admission_policy::DispatchMark,
+    provider_admission_policy::{AdmissionClass, AdmissionMode},
     provider_owner_operations::owner_failure,
     provider_prompt_contents::{PromptBusyPolicy, ProviderPromptContentsRequest},
     runtime_failure,
@@ -77,6 +77,41 @@ impl ExternalProviderSupervisor {
                 &request.operation_id,
                 Some(target.clone()),
             )?;
+            let snapshot = backend.owner_session_snapshot(&target);
+            let class = match request.busy {
+                PromptBusyPolicy::RefuseBusy => snapshot
+                    .as_ref()
+                    .and_then(|owner| {
+                        let SessionTurn::Running { turn } = owner.turn else {
+                            return None;
+                        };
+                        owner
+                            .foreground
+                            .as_ref()
+                            .or(owner.provider_started_turn.as_ref())
+                            .filter(|input| input.turn == turn)
+                            .map(|input| AdmissionClass::RefuseWhileRunning {
+                                foreground: input.operation,
+                            })
+                    })
+                    .unwrap_or(AdmissionClass::Independent),
+                PromptBusyPolicy::Send(MessageDelivery::Queue) => AdmissionClass::LinePlacement,
+                PromptBusyPolicy::Send(MessageDelivery::Auto | MessageDelivery::Steer)
+                    if snapshot
+                        .as_ref()
+                        .is_some_and(|owner| matches!(owner.turn, SessionTurn::Running { .. })) =>
+                {
+                    AdmissionClass::LinePlacement
+                }
+                PromptBusyPolicy::Send(MessageDelivery::Auto)
+                    if snapshot.as_ref().is_some_and(|owner| {
+                        matches!(owner.lifecycle, SessionLifecycle::Loading { .. })
+                    }) =>
+                {
+                    AdmissionClass::LinePlacement
+                }
+                PromptBusyPolicy::Send(_) => AdmissionClass::Independent,
+            };
             let prepared = backend
                 .admit_operation(
                     deadline,
@@ -84,7 +119,7 @@ impl ExternalProviderSupervisor {
                     ProviderOperationKind::ConversationPrompt,
                     binding.clone(),
                     Some(&target),
-                    DispatchMark::Deferred,
+                    AdmissionMode::deferred(class),
                 )
                 .await?;
             match prepared {

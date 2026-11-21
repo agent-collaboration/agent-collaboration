@@ -30,7 +30,7 @@ fn the_live_overlap_matrix_is_directional() {
                 ProviderOperationKind::ConversationCreate
             },
             target,
-            mark: DispatchMark::BeforeHandoff,
+            mode: AdmissionMode::HANDOFF,
         };
         assert_eq!(
             request.blocked_by(
@@ -53,7 +53,7 @@ fn close_can_interrupt_every_live_holder() {
         operation: &operation,
         kind: ProviderOperationKind::ConversationClose,
         target: Some(&target),
-        mark: DispatchMark::BeforeHandoff,
+        mode: AdmissionMode::HANDOFF,
     };
     for holder in [None, Some(&target)] {
         assert!(!request.blocked_by(
@@ -62,6 +62,48 @@ fn close_can_interrupt_every_live_holder() {
             None
         ));
     }
+}
+
+#[test]
+fn refuse_busy_leaves_only_the_exact_running_turn_to_the_owner() {
+    let target = session("running");
+    let requester = OperationId::generate();
+    let foreground = OperationId::generate();
+    let other = OperationId::generate();
+    let request = AdmissionRequest {
+        operation: &requester,
+        kind: ProviderOperationKind::ConversationPrompt,
+        target: Some(&target),
+        mode: AdmissionMode::deferred(AdmissionClass::RefuseWhileRunning {
+            foreground: uuid::Uuid::parse_str(foreground.as_str()).unwrap(),
+        }),
+    };
+    assert!(!request.blocked_by(
+        &foreground,
+        EarlierOperation::InFlight {
+            target: Some(&target)
+        },
+        None
+    ));
+    assert!(request.blocked_by(
+        &other,
+        EarlierOperation::InFlight {
+            target: Some(&target)
+        },
+        None
+    ));
+    assert!(request.blocked_by(&other, EarlierOperation::InFlight { target: None }, None));
+    let independent = AdmissionRequest {
+        mode: AdmissionMode::deferred(AdmissionClass::Independent),
+        ..request
+    };
+    assert!(independent.blocked_by(
+        &foreground,
+        EarlierOperation::InFlight {
+            target: Some(&target)
+        },
+        None
+    ));
 }
 
 #[test]
@@ -74,7 +116,7 @@ fn close_only_excludes_its_exact_unconfirmed_cancel_from_unknown_evidence() {
         operation: &operation,
         kind: ProviderOperationKind::ConversationClose,
         target: Some(&target),
-        mark: DispatchMark::BeforeHandoff,
+        mode: AdmissionMode::HANDOFF,
     };
     let excluded = Some(foreground.as_str());
     assert!(!request.blocked_by(&foreground, EarlierOperation::Unknown, excluded));
@@ -91,14 +133,14 @@ fn cancel_line_placement_and_reused_ids_keep_their_existing_boundaries() {
         operation: &operation,
         kind: ProviderOperationKind::ConversationCancel,
         target: Some(&target),
-        mark: DispatchMark::BeforeHandoff,
+        mode: AdmissionMode::HANDOFF,
     };
     assert!(!cancel.blocked_by(&earlier, EarlierOperation::Unknown, None));
     assert!(!cancel.blocked_by(&earlier, EarlierOperation::InFlight { target: None }, None));
 
     let placement = AdmissionRequest {
         kind: ProviderOperationKind::ConversationPrompt,
-        mark: DispatchMark::Deferred,
+        mode: AdmissionMode::deferred(AdmissionClass::LinePlacement),
         ..cancel
     };
     assert!(placement.blocked_by(&earlier, EarlierOperation::Unknown, None));

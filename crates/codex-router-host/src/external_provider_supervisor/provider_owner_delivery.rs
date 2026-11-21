@@ -4,7 +4,7 @@ use super::{
     ConversationOperationFailureKind, ConversationOperationFailureStage,
     ExternalProviderSupervisor, PreparedOperation, ProviderOperationCompletion,
     ProviderOperationEffect, ProviderOperationKind, failure,
-    provider_admission_policy::DispatchMark,
+    provider_admission_policy::{AdmissionClass, AdmissionMode},
     provider_owner_operations::owner_failure,
     provider_owner_prompt::{SessionQueuePlan, WarmRun, explicit_steer_refusal, retained_prompt},
     provider_prompt_contents::ProviderPromptContentsRequest,
@@ -211,9 +211,24 @@ impl ExternalProviderSupervisor {
             DeliveryAdmission::Requested(MessageDelivery::Auto | MessageDelivery::Queue)
                 | DeliveryAdmission::QueueOnRun(_)
         );
+        let class = match admission {
+            DeliveryAdmission::Requested(MessageDelivery::Queue)
+            | DeliveryAdmission::QueueOnRun(_)
+            | DeliveryAdmission::SteerExisting(_) => AdmissionClass::LinePlacement,
+            DeliveryAdmission::Requested(MessageDelivery::Auto | MessageDelivery::Steer)
+                if matches!(snapshot.turn, SessionTurn::Running { .. }) =>
+            {
+                AdmissionClass::LinePlacement
+            }
+            DeliveryAdmission::Requested(MessageDelivery::Auto) if !snapshot.queue.is_empty() => {
+                AdmissionClass::LinePlacement
+            }
+            _ => AdmissionClass::Independent,
+        };
+        let mode = AdmissionMode::deferred(class);
         let live = if can_queue {
             let Some(live) = self
-                .reserve_queued_delivery(deadline, &operation, &target, &binding)
+                .reserve_queued_delivery(deadline, &operation, &target, &binding, mode)
                 .await?
             else {
                 return Ok(InputAcceptance::Unknown);
@@ -227,7 +242,7 @@ impl ExternalProviderSupervisor {
                     ProviderOperationKind::ConversationPrompt,
                     binding.clone(),
                     Some(&target),
-                    DispatchMark::Deferred,
+                    mode,
                 )
                 .await?
             else {

@@ -1,6 +1,75 @@
 use super::*;
 
 #[tokio::test(flavor = "current_thread")]
+async fn a_marked_create_refuses_an_independent_direct_prompt() {
+    check_marked_create_against_idle_prompt(PromptBusyPolicy::RefuseBusy).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_marked_create_refuses_auto_ahead_of_an_idle_start() {
+    check_marked_create_against_idle_prompt(PromptBusyPolicy::Send(MessageDelivery::Auto)).await;
+}
+
+async fn check_marked_create_against_idle_prompt(busy: PromptBusyPolicy) {
+    let rig = RestoreRig::new();
+    rig.seed_session().await;
+    let host = rig.open_host("restored-in-auto").await;
+    rig.assert_loads(&host).await;
+    let (reached, release) = host
+        .runtime_for(&rig.target.endpoint)
+        .expect("provider runtime")
+        .preparation_fixture
+        .pause_create();
+    let create = OperationId::generate();
+    host.create(create_request(&rig, create.clone()))
+        .await
+        .expect("create admitted");
+    reached
+        .await
+        .expect("hold the provider create after its mark");
+    let marked = host
+        .show(ConversationOperationShowRequest {
+            operation_id: create.clone(),
+        })
+        .await
+        .expect("marked create");
+    assert_eq!(marked.stage, ProviderOperationStage::MayHaveDispatched);
+    assert!(marked.target.is_none(), "create blocks the whole binding");
+
+    let prompt = OperationId::generate();
+    let mut request = ProviderPromptContentsRequest::from_prompt_request(
+        rig.prompt_request(prompt.clone(), "must stay local"),
+    )
+    .unwrap();
+    request.busy = busy;
+    let refusal = host
+        .prompt_contents(request)
+        .await
+        .expect_err("independent idle prompt overlapped a marked wide create");
+    assert_eq!(refusal.kind, ConversationOperationFailureKind::Busy);
+    assert_eq!(refusal.effect, ProviderOperationEffect::None);
+    assert!(String::from(refusal.message).contains(create.as_str()));
+    assert!(
+        host.inner
+            .store
+            .lock()
+            .await
+            .inspect(&prompt)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let wire = rig.wire_receipt();
+    assert!(wire["prompts"].as_array().unwrap().is_empty());
+
+    release.send(()).expect("release the creating session");
+    host.wait(wait_request(create))
+        .await
+        .expect("create settled");
+    host.shutdown().await.expect("shutdown");
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn a_binding_wide_reservation_blocks_a_second_create_before_any_sql() {
     check_binding_wide_reservation(ProviderOperationKind::ConversationCreate).await;
 }
@@ -16,20 +85,7 @@ async fn check_binding_wide_reservation(second_kind: ProviderOperationKind) {
     let host = rig.open_host("restored-in-auto").await;
     let first = OperationId::generate();
     let second = OperationId::generate();
-    let create_request = |operation_id| ConversationCreateRequest {
-        operation_id,
-        endpoint: rig.target.endpoint.clone(),
-        generation: Some(generation()),
-        working_directory: rig.working_directory(),
-        created_by: rig.target.clone().into(),
-        approver: rig.target.clone().into(),
-        requested_policy: policy(),
-        settings: Some(collaboration_protocol::ProviderRequestedSettings {
-            mode: Some("auto".into()),
-            ..Default::default()
-        }),
-        work_roots: vec![],
-    };
+    let create_request = |operation_id| create_request(&rig, operation_id);
     let (pause, second_at_reservation, release_second) = admission_pause();
     *host
         .inner
@@ -106,4 +162,21 @@ async fn check_binding_wide_reservation(second_kind: ProviderOperationKind) {
         1
     );
     host.shutdown().await.expect("drain the selected create");
+}
+
+fn create_request(rig: &RestoreRig, operation_id: OperationId) -> ConversationCreateRequest {
+    ConversationCreateRequest {
+        operation_id,
+        endpoint: rig.target.endpoint.clone(),
+        generation: Some(generation()),
+        working_directory: rig.working_directory(),
+        created_by: rig.target.clone().into(),
+        approver: rig.target.clone().into(),
+        requested_policy: policy(),
+        settings: Some(collaboration_protocol::ProviderRequestedSettings {
+            mode: Some("auto".into()),
+            ..Default::default()
+        }),
+        work_roots: vec![],
+    }
 }

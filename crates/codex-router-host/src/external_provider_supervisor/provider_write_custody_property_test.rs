@@ -62,7 +62,7 @@ impl OperationTrace {
             operation: &operation,
             kind: ProviderOperationKind::ConversationLoad,
             target: Some(&target),
-            mark: DispatchMark::BeforeHandoff,
+            mode: AdmissionMode::HANDOFF,
         };
         assert!(matches!(
             reserve(index, binding, request),

@@ -6,7 +6,7 @@ mod write_custody;
 use super::{
     LiveOperation, LiveOperations, OperationId, ProviderBindingIdentity, ProviderOperationKind,
     SessionRef,
-    provider_admission_policy::{AdmissionRequest, DispatchMark},
+    provider_admission_policy::{AdmissionClass, AdmissionMode, AdmissionRequest, DispatchMark},
     provider_operation_index::Reservation,
     tests::binding,
 };
@@ -42,7 +42,7 @@ fn reserve(
             binding,
             request.target.cloned(),
             request.kind,
-            request.mark,
+            request.mode.mark,
         )),
         vec![],
         None,
@@ -59,14 +59,14 @@ fn generated_admission_rechecks_at_reservation(case: hegel::TestCase) {
         operation: &first_id,
         kind: ProviderOperationKind::ConversationCreate,
         target: None,
-        mark: DispatchMark::BeforeHandoff,
+        mode: AdmissionMode::HANDOFF,
     };
     let second_target = case.draw(gs::booleans()).then_some(&targets[0]);
     let second = AdmissionRequest {
         operation: &second_id,
         kind: independent_kind(second_target),
         target: second_target,
-        mark: DispatchMark::BeforeHandoff,
+        mode: AdmissionMode::HANDOFF,
     };
 
     // The competing preflight can see an empty index. Its reservation still
@@ -101,7 +101,7 @@ fn compare_admission(
     let same_generation = case.draw(gs::booleans());
     let reused = case.draw(gs::booleans());
     let holder_stage = case.draw(gs::integers::<u8>().max_value(5));
-    let asking_port = case.draw(gs::integers::<u8>().max_value(3));
+    let asking_port = case.draw(gs::integers::<u8>().max_value(4));
     let mut prior_binding = binding.clone();
     if !same_generation {
         prior_binding.generation.generation = 2.try_into().unwrap();
@@ -142,10 +142,10 @@ fn compare_admission(
             _ => ProviderOperationKind::ConversationPrompt,
         },
         target: asking_target,
-        mark: if asking_port == 3 {
-            DispatchMark::Deferred
-        } else {
-            DispatchMark::BeforeHandoff
+        mode: match asking_port {
+            3 => AdmissionMode::deferred(AdmissionClass::LinePlacement),
+            4 => AdmissionMode::deferred(AdmissionClass::Independent),
+            _ => AdmissionMode::HANDOFF,
         },
     };
 
@@ -156,7 +156,8 @@ fn compare_admission(
         (Some(_), None) => false,
         (Some(holder), Some(requester)) => holder == requester,
     };
-    let expected_block = holder_stage <= 3 && same_generation && asking_port == 0 && overlaps;
+    let expected_block =
+        holder_stage <= 3 && same_generation && matches!(asking_port, 0 | 4) && overlaps;
     match reserve(&mut live, binding, request) {
         Ok(Reservation::Occupied(prior)) => {
             assert!(reused, "a fresh ID was treated as a duplicate");

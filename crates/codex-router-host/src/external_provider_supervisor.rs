@@ -552,7 +552,7 @@ impl ExternalProviderSupervisor {
             operation_kind,
             binding,
             known_target,
-            provider_admission_policy::DispatchMark::BeforeHandoff,
+            provider_admission_policy::AdmissionMode::HANDOFF,
         )
         .await
     }

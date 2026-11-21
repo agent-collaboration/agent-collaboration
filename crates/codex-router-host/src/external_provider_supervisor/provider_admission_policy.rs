@@ -8,12 +8,39 @@ pub(super) enum DispatchMark {
     Deferred,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum AdmissionClass {
+    Independent,
+    LinePlacement,
+    RefuseWhileRunning { foreground: uuid::Uuid },
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct AdmissionMode {
+    pub(super) mark: DispatchMark,
+    pub(super) class: AdmissionClass,
+}
+
+impl AdmissionMode {
+    pub(super) const HANDOFF: Self = Self {
+        mark: DispatchMark::BeforeHandoff,
+        class: AdmissionClass::Independent,
+    };
+
+    pub(super) const fn deferred(class: AdmissionClass) -> Self {
+        Self {
+            mark: DispatchMark::Deferred,
+            class,
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(super) struct AdmissionRequest<'a> {
     pub(super) operation: &'a OperationId,
     pub(super) kind: ProviderOperationKind,
     pub(super) target: Option<&'a SessionRef>,
-    pub(super) mark: DispatchMark,
+    pub(super) mode: AdmissionMode,
 }
 
 pub(super) enum EarlierOperation<'a> {
@@ -42,17 +69,21 @@ impl AdmissionRequest<'_> {
             EarlierOperation::Unknown => {
                 self.kind != ConversationClose || unconfirmed_cancel != Some(earlier.as_str())
             }
-            // Close can interrupt live work. Deferred line placement belongs
+            // Close can interrupt live work. Line placement belongs
             // to the owner, and same-ID reuse consults the existing operation.
             EarlierOperation::InFlight { .. }
                 if self.kind == ConversationClose
-                    || self.mark == DispatchMark::Deferred
+                    || self.mode.class == AdmissionClass::LinePlacement
                     || self.operation == earlier =>
             {
                 false
             }
             EarlierOperation::InFlight { target: None } => true,
-            EarlierOperation::InFlight { target: Some(held) } => self.target == Some(held),
+            EarlierOperation::InFlight { target: Some(held) } => {
+                self.target == Some(held)
+                    && !matches!(self.mode.class, AdmissionClass::RefuseWhileRunning { foreground }
+                        if uuid::Uuid::parse_str(earlier.as_str()).ok() == Some(foreground))
+            }
         }
     }
 }
