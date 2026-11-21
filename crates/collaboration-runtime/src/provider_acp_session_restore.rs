@@ -43,6 +43,10 @@ pub(super) enum WaitingSessionFrame {
         cwd: String,
         valid_refusal: (i32, &'static str),
     },
+    DuplicateResume {
+        frame: QueuedAcpFrame,
+        refusal: (i32, &'static str),
+    },
     RestoreRefusal {
         frame: QueuedAcpFrame,
         code: i32,
@@ -65,8 +69,16 @@ impl AwaitingRestore {
     ) -> VecDeque<WaitingSessionFrame> {
         if post_activation_elapsed {
             for frame in &mut self.frames {
-                if let WaitingSessionFrame::DuplicateLoad { valid_refusal, .. } = frame {
-                    *valid_refusal = STORE_ELAPSED;
+                match frame {
+                    WaitingSessionFrame::DuplicateLoad { valid_refusal, .. }
+                    | WaitingSessionFrame::DuplicateResume {
+                        refusal: valid_refusal,
+                        ..
+                    } => {
+                        *valid_refusal = STORE_ELAPSED;
+                    }
+                    WaitingSessionFrame::Command(_)
+                    | WaitingSessionFrame::RestoreRefusal { .. } => {}
                 }
             }
         }

@@ -446,6 +446,13 @@ async fn held_restore_attachment_expires_without_blocking_other_sessions_or_relo
     .await;
     request(
         &connection.input,
+        "session/resume",
+        json!("duplicate-resume"),
+        &session,
+    )
+    .await;
+    request(
+        &connection.input,
         "_session/queue/list",
         json!("same-session"),
         &session,
@@ -466,7 +473,7 @@ async fn held_restore_attachment_expires_without_blocking_other_sessions_or_relo
     clock
         .advance(Duration::from_secs(10))
         .expect("expire the post-activation deadline");
-    for id in ["first", "duplicate"] {
+    for id in ["first", "duplicate", "duplicate-resume"] {
         assert_eq!(
             next_response(&mut connection.route, &mut connection.replies).await,
             json!({"jsonrpc":"2.0","id":id,"error":{"code":-32000,"message":"the store didn't respond in time"}}),

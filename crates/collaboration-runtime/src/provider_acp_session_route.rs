@@ -326,6 +326,10 @@ async fn serve_provider_requests(
                 frame,
                 code,
                 message,
+            })
+            | Some(WaitingSessionFrame::DuplicateResume {
+                frame,
+                refusal: (code, message),
             }) => {
                 if let Some(id) = frame.get("id").cloned() {
                     router.output.send(failure(id, code, message)).await?;
@@ -433,10 +437,9 @@ async fn serve_provider_requests(
                         },
                     }
                 }
-                (Some(_), Some(AcpRestoreMethod::Resume)) => WaitingSessionFrame::RestoreRefusal {
+                (Some(_), Some(AcpRestoreMethod::Resume)) => WaitingSessionFrame::DuplicateResume {
                     frame,
-                    code: RESTORE_IN_PROGRESS.0,
-                    message: RESTORE_IN_PROGRESS.1,
+                    refusal: RESTORE_IN_PROGRESS,
                 },
                 _ => WaitingSessionFrame::Command(frame),
             };
