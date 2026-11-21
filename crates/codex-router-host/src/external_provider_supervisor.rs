@@ -98,6 +98,8 @@ struct SupervisorInner {
     #[cfg(test)]
     admission_test_pause: StdMutex<Option<AdmissionTestPause>>,
     #[cfg(test)]
+    dispatch_mark_test_pause: StdMutex<Option<AdmissionTestPause>>,
+    #[cfg(test)]
     cancel_admission_test_pause: StdMutex<Option<AdmissionTestPause>>,
     /// Pauses the next steer after its injection reply, before it reads the
     /// joined turn's approver.
@@ -403,6 +405,8 @@ impl ExternalProviderSupervisor {
                 #[cfg(test)]
                 admission_test_pause: StdMutex::new(None),
                 #[cfg(test)]
+                dispatch_mark_test_pause: StdMutex::new(None),
+                #[cfg(test)]
                 cancel_admission_test_pause: StdMutex::new(None),
                 #[cfg(test)]
                 steer_reply_test_pause: StdMutex::new(None),
@@ -478,7 +482,7 @@ impl ExternalProviderSupervisor {
             operation_kind,
             binding,
             known_target,
-            provider_operation_admission::DispatchMark::AtAdmission,
+            provider_operation_admission::DispatchMark::BeforeHandoff,
         )
         .await
     }
@@ -491,6 +495,28 @@ impl ExternalProviderSupervisor {
         tokio::spawn(async move {
             let completion = operation.await;
             inner.finish(operation_id, live, completion).await;
+        });
+    }
+
+    fn spawn_operation_for_handoff<F>(
+        &self,
+        operation_id: OperationId,
+        live: Arc<LiveOperation>,
+        operation: F,
+    ) where
+        F: std::future::Future<Output = ProviderOperationCompletion> + Send + 'static,
+    {
+        let supervisor = self.clone();
+        let marking_operation = operation_id.clone();
+        let marking_live = Arc::clone(&live);
+        self.spawn_operation(operation_id, live, async move {
+            if let Err(failure) = supervisor
+                .mark_operation_for_handoff(&marking_operation, &marking_live)
+                .await
+            {
+                return ProviderOperationCompletion::DispatchMarkNotWritten(failure);
+            }
+            operation.await
         });
     }
 

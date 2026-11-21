@@ -21,7 +21,6 @@ const HOST_ADMISSION_BUDGET: Duration = Duration::from_secs(10);
 struct AdmissionWrite {
     operation: ProviderOperationAdmission,
     target: Option<SessionRef>,
-    mark: DispatchMark,
     deadline: ClockInstant,
     live: Arc<LiveOperation>,
 }
@@ -43,8 +42,8 @@ fn admission_expired(
 /// When an admitted operation is marked as possibly dispatched.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum DispatchMark {
-    /// At admission: the caller dispatches right away.
-    AtAdmission,
+    /// A retained lifecycle operation marks before handing off to the owner.
+    BeforeHandoff,
     /// Later, when the owner authorizes a prompt or steer to dispatch.
     Deferred,
 }
@@ -120,6 +119,62 @@ pub(super) fn reused_id_failure(
 }
 
 impl ExternalProviderSupervisor {
+    #[expect(
+        clippy::result_large_err,
+        reason = "Retains the operation's typed failure."
+    )]
+    pub(super) async fn mark_operation_for_handoff(
+        &self,
+        operation: &OperationId,
+        live: &LiveOperation,
+    ) -> Result<(), ConversationOperationFailure> {
+        let deadline = self.admission_deadline();
+        let clock = self.inner.clock.as_ref();
+        let target = live.target();
+        let not_sent = |message| {
+            failure(
+                ConversationOperationFailureKind::Unavailable,
+                ConversationOperationFailureStage::Dispatch,
+                ProviderOperationEffect::None,
+                message,
+                operation.clone(),
+                target.clone(),
+            )
+        };
+        let elapsed = || not_sent("the store didn't respond in time, so nothing was sent");
+        let acquire_store = async {
+            #[cfg(test)]
+            {
+                let pause = self
+                    .inner
+                    .dispatch_mark_test_pause
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .take();
+                if let Some(pause) = pause {
+                    let _test_ended = pause.entered.send(());
+                    let _test_ended = pause.release.await;
+                }
+            }
+            self.inner.store.lock().await
+        };
+        let mut store = router_clock::timeout_at(clock, deadline, acquire_store)
+            .await
+            .map_err(|_| elapsed())?;
+        let mark = store
+            .mark_may_have_dispatched_if(operation, self.inner.now_ms(), || {
+                clock.monotonic_now() < deadline
+            })
+            .await
+            .map_err(|error| {
+                tracing::warn!(operation = operation.as_str(), %error, "could not mark provider dispatch");
+                not_sent("the store couldn't record the dispatch mark, so nothing was sent")
+            })?;
+        mark.ok_or_else(elapsed)?;
+        live.dispatch_marked();
+        Ok(())
+    }
+
     pub(super) fn admission_deadline(&self) -> ClockInstant {
         self.inner
             .clock
@@ -192,7 +247,7 @@ impl ExternalProviderSupervisor {
             let foreground = input.operation.to_string();
             unknown.retain(|operation| operation.as_str() != foreground);
         }
-        let in_flight = if mark == DispatchMark::AtAdmission
+        let in_flight = if mark == DispatchMark::BeforeHandoff
             && operation_kind != ProviderOperationKind::ConversationClose
         {
             self.inner
@@ -388,29 +443,32 @@ impl ExternalProviderSupervisor {
                 admitted_at_ms,
             },
             target: failure_target,
-            mark,
             deadline,
             live,
         };
         let supervisor = self.clone();
         let (reply, completion) = oneshot::channel();
+        let (accept, accepted) = oneshot::channel();
         tokio::spawn(async move {
-            supervisor.complete_admission(write, reply).await;
+            supervisor.complete_admission(write, reply, accepted).await;
         });
-        self.within_admission(deadline, &operation_id, known_target, completion)
+        let prepared = self
+            .within_admission(deadline, &operation_id, known_target, completion)
             .await?
-            .map_err(|_| unavailable_failure(operation_id, known_target.cloned()))?
+            .map_err(|_| unavailable_failure(operation_id, known_target.cloned()))??;
+        let _admission_task_ended = accept.send(());
+        Ok(prepared)
     }
 
     async fn complete_admission(
         &self,
         write: AdmissionWrite,
         reply: oneshot::Sender<Result<PreparedOperation, ConversationOperationFailure>>,
+        accepted: oneshot::Receiver<()>,
     ) {
         let AdmissionWrite {
             operation,
             target,
-            mark,
             deadline,
             live,
         } = write;
@@ -443,10 +501,9 @@ impl ExternalProviderSupervisor {
             let _result = reply.send(Err(admission_expired(&operation_id, target)));
             return;
         };
-        let dispatch_time = (mark == DispatchMark::AtAdmission).then(|| self.inner.now_ms());
         let eligible = || clock.monotonic_now() < deadline && !reply.is_closed();
         match store
-            .admit_with_target(operation, target, dispatch_time, eligible)
+            .admit_with_target(operation, target, None, eligible)
             .await
         {
             Ok(Some(ProviderOperationAdmissionResult::Admitted(record))) => {
@@ -460,11 +517,10 @@ impl ExternalProviderSupervisor {
                         })
                         .map_err(|message| snapshot_failure(operation_id.clone(), message));
                     if result.is_ok() {
-                        live.admitted();
-                        if mark == DispatchMark::AtAdmission {
-                            live.dispatch_marked();
-                        }
-                        if reply.send(result).is_ok() {
+                        // A queued reply can race the caller's deadline. Custody
+                        // transfers only if the caller consumed the admission.
+                        if reply.send(result).is_ok() && accepted.await.is_ok() {
+                            live.admitted();
                             return;
                         }
                     } else {

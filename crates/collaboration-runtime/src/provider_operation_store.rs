@@ -154,6 +154,8 @@ pub struct ProviderOperationStore {
     /// of this operation fails without touching its row.
     #[cfg(any(test, feature = "test-support"))]
     terminal_write_fault: Option<OperationId>,
+    #[cfg(any(test, feature = "test-support"))]
+    dispatch_mark_fault: Option<OperationId>,
 }
 
 /// Runs one write statement as a one-statement transaction through
@@ -220,6 +222,8 @@ impl ProviderOperationStore {
             commits: CommitSignal::new(),
             #[cfg(any(test, feature = "test-support"))]
             terminal_write_fault: None,
+            #[cfg(any(test, feature = "test-support"))]
+            dispatch_mark_fault: None,
         })
     }
 
@@ -427,6 +431,25 @@ impl ProviderOperationStore {
         operation_id: &OperationId,
         dispatched_at_ms: i64,
     ) -> Result<ProviderOperationRecord, ProviderOperationStoreError> {
+        self.mark_may_have_dispatched_if(operation_id, dispatched_at_ms, || true)
+            .await?
+            .ok_or(ProviderOperationStoreError::TransitionConflict)
+    }
+
+    /// Return the dispatch mark only after the guarded transaction commits.
+    /// The record is read in the transaction so no fallible read follows COMMIT.
+    pub async fn mark_may_have_dispatched_if(
+        &mut self,
+        operation_id: &OperationId,
+        dispatched_at_ms: i64,
+        may_commit: impl FnOnce() -> bool + Send,
+    ) -> Result<Option<ProviderOperationRecord>, ProviderOperationStoreError> {
+        #[cfg(any(test, feature = "test-support"))]
+        if self.dispatch_mark_fault.as_ref() == Some(operation_id) {
+            self.dispatch_mark_fault = None;
+            return Err(ProviderOperationStoreError::TransitionConflict);
+        }
+        let mut transaction = self.transaction(TransactionStart::Immediate).await?;
         let result = sqlx::query!(
             "UPDATE provider_operations
              SET stage=?,effect=?,dispatched_at_ms=MAX(admitted_at_ms,?),updated_at_ms=MAX(updated_at_ms,admitted_at_ms,?)
@@ -436,13 +459,18 @@ impl ProviderOperationStore {
              dispatched_at_ms, operation_id.as_str(),
              encode_enum(ProviderOperationStage::Admitted)?,
         )
-        .execute_as_transaction(self)
+        .execute(&mut *transaction)
         .await?;
-        self.transition_result(operation_id, result.rows_affected(), |record| {
-            record.stage == ProviderOperationStage::MayHaveDispatched
-                && record.dispatched_at_ms.is_some()
-        })
-        .await
+        let record = Self::read_operation(&mut transaction, operation_id)
+            .await?
+            .ok_or(ProviderOperationStoreError::NotFound)?;
+        if result.rows_affected() == 0
+            && (record.stage != ProviderOperationStage::MayHaveDispatched
+                || record.dispatched_at_ms.is_none())
+        {
+            return Err(ProviderOperationStoreError::TransitionConflict);
+        }
+        Ok(transaction.commit_if(may_commit).await?.then_some(record))
     }
 
     /// Returns a row marked for dispatch to Admitted with no effect when the
@@ -836,6 +864,11 @@ impl ProviderOperationStore {
     /// `operation_id` fails and leaves its row as it was.
     pub fn fail_next_terminal_write_of(&mut self, operation_id: &OperationId) {
         self.terminal_write_fault = Some(operation_id.clone());
+    }
+
+    /// Fail the next dispatch mark of this operation before its transaction.
+    pub fn fail_next_dispatch_mark_of(&mut self, operation_id: &OperationId) {
+        self.dispatch_mark_fault = Some(operation_id.clone());
     }
 }
 

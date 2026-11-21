@@ -18,6 +18,8 @@ pub(crate) enum ProviderOperationCompletion {
         session_record: Option<Box<ProviderSessionRecord>>,
     },
     Failure(ConversationOperationFailure),
+    /// Dispatch never acquired custody. The admitted row remains known unsent.
+    DispatchMarkNotWritten(ConversationOperationFailure),
     FailureWithSession {
         failure: ConversationOperationFailure,
         session_record: Box<ProviderSessionRecord>,

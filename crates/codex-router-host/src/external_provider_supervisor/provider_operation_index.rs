@@ -199,12 +199,17 @@ impl LiveOperation {
         }
     }
 
-    /// A send that may have left and whose result isn't published yet.
+    /// A send in handoff custody or already marked, with no published result.
     fn in_flight(&self) -> bool {
-        matches!(
-            self.record(),
+        let record = self.record();
+        (matches!(
+            record,
             OperationRecord::MayHaveDispatched { .. } | OperationRecord::SettlingUnknown { .. }
-        ) && !self.published.load(Ordering::Acquire)
+        ) || matches!(record, OperationRecord::Admitted { queued: false })
+            && self
+                .kind
+                .is_some_and(|kind| kind != ProviderOperationKind::ConversationPrompt))
+            && !self.published.load(Ordering::Acquire)
     }
 }
 

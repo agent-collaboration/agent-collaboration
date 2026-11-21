@@ -39,6 +39,9 @@ impl SupervisorInner {
                     provider_session_machines::operation_record_machine::AttemptEnding::Unknown
                 }
             },
+            ProviderOperationCompletion::DispatchMarkNotWritten(_) => {
+                provider_session_machines::operation_record_machine::AttemptEnding::Refused
+            }
             ProviderOperationCompletion::Owned { result, .. } => {
                 match result.as_ref().err().map(|failure| failure.effect) {
                     None | Some(ProviderOperationEffect::Applied) => {
@@ -54,6 +57,9 @@ impl SupervisorInner {
             }
         });
         let (result, retention) = match completion {
+            ProviderOperationCompletion::DispatchMarkNotWritten(failure) => {
+                (Err(failure), Retention::PersistenceFailed)
+            }
             ProviderOperationCompletion::Success {
                 settlement,
                 target,

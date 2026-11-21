@@ -183,7 +183,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                     let scratch_root = backend.inner.scratch_root.clone();
                     let completion_inner = Arc::clone(&backend.inner);
                     let completion_backend = backend.clone();
-                    backend.spawn_operation(operation_id.clone(), live, async move {
+                    backend.spawn_operation_for_handoff(operation_id.clone(), live, async move {
                         let scratch_folder = match super::provider_session_scratch::prepare_provider_session_scratch(scratch_root.as_deref()).await {
                             Ok(scratch_folder) => scratch_folder,
                             Err(message) => {
@@ -408,7 +408,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                         backend.inner.now_ms(),
                     ));
                     let completion_backend = backend.clone();
-                    backend.spawn_operation(operation_id.clone(), live, async move {
+                    backend.spawn_operation_for_handoff(operation_id.clone(), live, async move {
                         super::provider_owner_operations::restore(
                             &completion_backend,
                             operation_id,
@@ -528,7 +528,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                     let operation_id = request.operation_id.clone();
                     let target_operation_id = request.target_operation_id;
                     let completion_backend = backend.clone();
-                    backend.spawn_operation(operation_id.clone(), live, async move {
+                    backend.spawn_operation_for_handoff(operation_id.clone(), live, async move {
                         super::provider_owner_operations::cancel(
                             &completion_backend,
                             operation_id,

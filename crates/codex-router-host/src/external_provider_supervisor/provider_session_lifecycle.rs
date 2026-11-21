@@ -67,7 +67,7 @@ pub(super) fn resume(
                     backend.inner.now_ms(),
                 ));
                 let completion_backend = backend.clone();
-                backend.spawn_operation(operation_id.clone(), live, async move {
+                backend.spawn_operation_for_handoff(operation_id.clone(), live, async move {
                     super::provider_owner_operations::restore(
                         &completion_backend,
                         operation_id,
@@ -120,7 +120,7 @@ pub(super) fn close(
                 ProviderOperationKind::ConversationClose,
                 binding,
                 Some(&target),
-                DispatchMark::AtAdmission,
+                DispatchMark::BeforeHandoff,
             )
             .await?;
         match prepared {
@@ -128,7 +128,7 @@ pub(super) fn close(
             PreparedOperation::Admitted { snapshot, live } => {
                 let operation_id = request.operation_id.clone();
                 let completion_backend = backend.clone();
-                backend.spawn_operation(operation_id.clone(), live, async move {
+                backend.spawn_operation_for_handoff(operation_id.clone(), live, async move {
                     super::provider_owner_operations::close(
                         &completion_backend,
                         operation_id,
