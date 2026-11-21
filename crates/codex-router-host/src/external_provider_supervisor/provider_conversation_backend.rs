@@ -713,9 +713,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                 .live_operations
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .operations
-                .get(&request.operation_id)
-                .is_some_and(|operation| operation.holds_custody());
+                .holds_custody_of(&request.operation_id);
             #[cfg(test)]
             self.pause_reconcile_for_test(
                 super::supervisor_test_pauses::ReconcilePausePoint::HoldingStore,

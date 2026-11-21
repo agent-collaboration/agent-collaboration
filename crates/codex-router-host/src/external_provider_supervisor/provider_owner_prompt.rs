@@ -174,10 +174,7 @@ impl ExternalProviderSupervisor {
                                     },
                                 ),
                             );
-                            let _publication =
-                                router_clock::timeout_at(clock, deadline, live.wait_for_result())
-                                    .await;
-                            Err(failure)
+                            Err(prompt_failure_answer(clock, deadline, &live, failure).await)
                         }
                     }
                 }
@@ -307,6 +304,16 @@ impl ExternalProviderSupervisor {
                 }
             })
     }
+}
+
+pub(super) async fn prompt_failure_answer(
+    clock: &dyn router_clock::RuntimeClock,
+    deadline: router_clock::ClockInstant,
+    live: &super::LiveOperation,
+    failure: ConversationOperationFailure,
+) -> ConversationOperationFailure {
+    let _publication = router_clock::timeout_at(clock, deadline, live.wait_for_result()).await;
+    failure
 }
 
 fn explicit_steer_refusal(

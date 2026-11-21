@@ -13,6 +13,10 @@ use crate::{
 use provider_session_machines::operation_record_machine::AttemptEnding;
 use router_clock::ClockInstant;
 
+pub(super) fn mark_receipt_is_timely(observed: ClockInstant, deadline: ClockInstant) -> bool {
+    observed < deadline
+}
+
 fn dispatch_mark_expired(
     operation: &OperationId,
     live: &LiveOperation,
@@ -45,7 +49,7 @@ impl ExternalProviderSupervisor {
                 receipt = router_clock::timeout_at(clock, deadline, &mut mark) => receipt,
             };
             let late = match receipt {
-                Ok(receipt) if clock.monotonic_now() < deadline => {
+                Ok(receipt) if mark_receipt_is_timely(clock.monotonic_now(), deadline) => {
                     let completion = match receipt {
                         Ok(store) => {
                             drop(store);

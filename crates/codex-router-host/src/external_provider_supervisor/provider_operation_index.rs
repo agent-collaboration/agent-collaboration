@@ -289,6 +289,18 @@ impl HeldResult {
 }
 
 impl LiveOperations {
+    pub(super) fn holds_custody_of(&self, operation: &OperationId) -> bool {
+        self.operations
+            .get(operation)
+            .is_some_and(|live| live.holds_custody())
+    }
+
+    pub(super) fn custodians(&self) -> impl Iterator<Item = (&OperationId, &Arc<LiveOperation>)> {
+        self.operations
+            .iter()
+            .filter(|(_, live)| live.holds_custody())
+    }
+
     pub(super) fn reserve(
         &mut self,
         binding: &ProviderBindingIdentity,

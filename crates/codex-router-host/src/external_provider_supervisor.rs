@@ -9,6 +9,9 @@ use provider_operation_index::{LiveOperation, LiveOperations, UncertaintyCells};
 mod provider_operation_failure;
 mod provider_operation_finish;
 mod provider_operation_handoff;
+#[cfg(test)]
+#[path = "external_provider_supervisor/provider_operation_property_test.rs"]
+mod provider_operation_properties;
 mod provider_owner_operations;
 mod provider_owner_prompt;
 pub(crate) use provider_owner_prompt::{SessionQueuePlan, WarmRun};
@@ -353,9 +356,7 @@ impl ExternalProviderSupervisor {
             .live_operations
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .operations
-            .iter()
-            .filter(|(_, operation)| operation.holds_custody())
+            .custodians()
             .map(|(operation_id, _)| operation_id.clone())
             .collect()
     }
@@ -641,9 +642,8 @@ impl ExternalProviderSupervisor {
             .live_operations
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .operations
-            .values()
-            .cloned()
+            .custodians()
+            .map(|(_, operation)| Arc::clone(operation))
             .collect::<Vec<_>>();
         self.inner.operation_tasks.close();
         router_clock::timeout_at(self.inner.clock.as_ref(), drain_deadline, async {
