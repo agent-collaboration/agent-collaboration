@@ -110,6 +110,8 @@ struct SupervisorInner {
     #[cfg(test)]
     admission_before_reservation_test_pause: StdMutex<Option<AdmissionTestPause>>,
     #[cfg(test)]
+    before_owner_prompt_test_pause: StdMutex<Option<(OperationId, AdmissionTestPause)>>,
+    #[cfg(test)]
     reconcile_test_pause: StdMutex<
         Option<(
             supervisor_test_pauses::ReconcilePausePoint,
@@ -455,21 +457,27 @@ impl ExternalProviderSupervisor {
             });
             let dispatch_binding = binding.identity.clone();
             permit.live_dispatch_blocker.get_or_init(|| {
+                use crate::binding_dispatch_permit::DispatchEligibilityCheck;
                 use provider_admission_policy::{AdmissionClass, AdmissionMode, AdmissionRequest};
-                Arc::new(move |operation, target| {
-                    dispatch_operations
-                        .upgrade()?
+                Arc::new(move |operation, target, check| {
+                    let index = dispatch_operations.upgrade()?;
+                    let index = index
                         .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner)
-                        .lane_mark_blocker(
-                            &dispatch_binding,
-                            AdmissionRequest {
-                                operation,
-                                kind: ProviderOperationKind::ConversationPrompt,
-                                target: Some(target),
-                                mode: AdmissionMode::deferred(AdmissionClass::Independent),
-                            },
-                        )
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    let request = AdmissionRequest {
+                        operation,
+                        kind: ProviderOperationKind::ConversationPrompt,
+                        target: Some(target),
+                        mode: AdmissionMode::deferred(AdmissionClass::Independent),
+                    };
+                    match check {
+                        DispatchEligibilityCheck::Observe => {
+                            index.lane_mark_blocker(&dispatch_binding, request)
+                        }
+                        DispatchEligibilityCheck::ClaimIndependentStart => {
+                            index.claim_independent_start(&dispatch_binding, request)
+                        }
+                    }
                 })
             });
             owners.install_binding_permit(permit);
@@ -500,6 +508,8 @@ impl ExternalProviderSupervisor {
                 admission_test_pause: StdMutex::new(None),
                 #[cfg(test)]
                 admission_before_reservation_test_pause: StdMutex::new(None),
+                #[cfg(test)]
+                before_owner_prompt_test_pause: StdMutex::new(None),
                 #[cfg(test)]
                 reconcile_test_pause: StdMutex::new(None),
                 #[cfg(test)]

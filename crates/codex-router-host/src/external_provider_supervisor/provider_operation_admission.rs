@@ -305,7 +305,7 @@ impl ExternalProviderSupervisor {
             )
             .await?
             .map_err(|()| unavailable_failure(operation_id.clone(), Some(target.clone())))?;
-        let live = Arc::new(LiveOperation::queued_prompt(binding, target.clone()));
+        let live = Arc::new(LiveOperation::queued_prompt(binding, target.clone(), mode));
         match self
             .reserve_operation(deadline, binding, request, &context, &live)
             .await?
@@ -364,10 +364,12 @@ impl ExternalProviderSupervisor {
 
         #[cfg(test)]
         self.pause_before_admission_reservation_for_test().await;
-        let live = Arc::new(
-            LiveOperation::reserving(&binding, known_target.cloned(), operation_kind, mode.mark)
-                .with_cancel_target(mode.cancel_target),
-        );
+        let live = Arc::new(LiveOperation::reserving(
+            &binding,
+            known_target.cloned(),
+            operation_kind,
+            mode,
+        ));
         if matches!(
             self.reserve_operation(deadline, &binding, request, &context, &live)
                 .await?,

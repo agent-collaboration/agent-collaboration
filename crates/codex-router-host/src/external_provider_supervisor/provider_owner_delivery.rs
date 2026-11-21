@@ -213,9 +213,14 @@ impl ExternalProviderSupervisor {
         );
         let class = match admission {
             DeliveryAdmission::Requested(MessageDelivery::Queue)
-            | DeliveryAdmission::QueueOnRun(_)
-            | DeliveryAdmission::SteerExisting(_) => AdmissionClass::LinePlacement,
-            DeliveryAdmission::Requested(MessageDelivery::Auto | MessageDelivery::Steer)
+            | DeliveryAdmission::QueueOnRun(_) => AdmissionClass::LinePlacement,
+            DeliveryAdmission::SteerExisting(_) => AdmissionClass::ExactTurn,
+            DeliveryAdmission::Requested(MessageDelivery::Steer)
+                if matches!(snapshot.turn, SessionTurn::Running { .. }) =>
+            {
+                AdmissionClass::ExactTurn
+            }
+            DeliveryAdmission::Requested(MessageDelivery::Auto)
                 if matches!(snapshot.turn, SessionTurn::Running { .. }) =>
             {
                 AdmissionClass::LinePlacement
@@ -312,6 +317,8 @@ impl ExternalProviderSupervisor {
         // The Host owns settlement before the caller can suspend on placement.
         // Only the borrowed evidence reply stays with the caller.
         let acceptance = self.retain_operation(operation.clone(), Some(target.clone()), async move {
+            #[cfg(test)]
+            backend.pause_before_owner_prompt_for_test(&operation).await;
             let receipt = if can_queue
                 && owner
                     .defer_queued_admission(collaboration_runtime::ProviderOperationAdmission {

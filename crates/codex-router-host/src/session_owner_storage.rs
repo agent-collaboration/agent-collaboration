@@ -178,13 +178,13 @@ impl SessionOwnerStorage {
                 )
             }
             SessionStoreRequest::MarkDispatch(input) => {
-                self.report_dispatch(address, input, LaneDispatchKind::Prompt, false, completions)
+                self.report_dispatch(address, input, LaneDispatchKind::Prompt, completions)
             }
             SessionStoreRequest::MarkQueuedDispatch(input) => {
-                self.report_dispatch(address, input, LaneDispatchKind::Prompt, true, completions)
+                self.report_dispatch(address, input, LaneDispatchKind::QueuedPrompt, completions)
             }
             SessionStoreRequest::MarkSteerDispatch(input) => {
-                self.report_dispatch(address, input, LaneDispatchKind::Steer, false, completions)
+                self.report_dispatch(address, input, LaneDispatchKind::Steer, completions)
             }
             SessionStoreRequest::UndoDispatch(input) => {
                 let operation = operation_id(input.operation)?;
@@ -300,7 +300,6 @@ impl SessionOwnerStorage {
         address: OwnerAddress,
         input: OwnerInput,
         kind: LaneDispatchKind,
-        queued: bool,
         completions: &OwnerCompletionPort,
     ) -> Result<Option<OwnerEvent>, OwnerTaskError> {
         let completion = completions.reserve(address)?;
@@ -309,7 +308,7 @@ impl SessionOwnerStorage {
         let mut changes = lane.subscribe_dispatch_eligibility();
         let offer =
             lane.offer_dispatch(address.incarnation, operation.clone(), input.clone(), kind);
-        if queued
+        if kind == LaneDispatchKind::QueuedPrompt
             && matches!(offer, Err(SessionStoreOfferError::DispatchBusy { .. }))
             && let Some(mut changes) = changes.take()
         {

@@ -96,16 +96,17 @@ impl ExternalProviderSupervisor {
                     })
                     .unwrap_or(AdmissionClass::Independent),
                 PromptBusyPolicy::Send(MessageDelivery::Queue) => AdmissionClass::LinePlacement,
-                PromptBusyPolicy::Send(MessageDelivery::Auto | MessageDelivery::Steer)
+                PromptBusyPolicy::Send(MessageDelivery::Steer)
                     if snapshot
                         .as_ref()
                         .is_some_and(|owner| matches!(owner.turn, SessionTurn::Running { .. })) =>
                 {
-                    AdmissionClass::LinePlacement
+                    AdmissionClass::ExactTurn
                 }
                 PromptBusyPolicy::Send(MessageDelivery::Auto)
                     if snapshot.as_ref().is_some_and(|owner| {
-                        matches!(owner.lifecycle, SessionLifecycle::Loading { .. })
+                        matches!(owner.turn, SessionTurn::Running { .. })
+                            || matches!(owner.lifecycle, SessionLifecycle::Loading { .. })
                     }) =>
                 {
                     AdmissionClass::LinePlacement
@@ -215,6 +216,8 @@ impl ExternalProviderSupervisor {
         use provider_session_machines::session_owner::SessionOwnerCommand;
         let target = request.target;
         let operation = request.operation_id;
+        #[cfg(test)]
+        self.pause_before_owner_prompt_for_test(&operation).await;
         let provider_id = String::from(target.session_id.clone());
         let content = runtime
             .prepare_owner_prompt(&provider_id, request.input)

@@ -10,7 +10,8 @@
 use super::{
     MAX_RETAINED_SETTLEMENTS,
     provider_admission_policy::{
-        AdmissionBlockers, AdmissionRequest, DispatchMark, EarlierOperation,
+        AdmissionBlockers, AdmissionClass, AdmissionMode, AdmissionRequest, DispatchMark,
+        EarlierOperation,
     },
     provider_operation_finish::Retention,
 };
@@ -57,6 +58,7 @@ pub(super) struct LiveOperation {
     binding: Option<(EndpointRef, CodexGeneration)>,
     kind: Option<ProviderOperationKind>,
     mark: DispatchMark,
+    class: StdMutex<AdmissionClass>,
     target: StdMutex<Option<SessionRef>>,
     lifecycle: Arc<OperationLifecycle>,
     cancel_target: Option<uuid::Uuid>,
@@ -70,7 +72,7 @@ impl LiveOperation {
             None,
             None,
             None,
-            DispatchMark::Deferred,
+            AdmissionMode::deferred(AdmissionClass::LinePlacement),
             OperationRecord::Admitted { queued: false },
         )
     }
@@ -80,23 +82,27 @@ impl LiveOperation {
         binding: &ProviderBindingIdentity,
         target: Option<SessionRef>,
         kind: ProviderOperationKind,
-        mark: DispatchMark,
+        mode: AdmissionMode,
     ) -> Self {
         Self::new(
             Some(binding),
             target,
             Some(kind),
-            mark,
+            mode,
             OperationRecord::Reserving,
         )
     }
 
-    pub(super) fn queued_prompt(binding: &ProviderBindingIdentity, target: SessionRef) -> Self {
+    pub(super) fn queued_prompt(
+        binding: &ProviderBindingIdentity,
+        target: SessionRef,
+        mode: AdmissionMode,
+    ) -> Self {
         Self::new(
             Some(binding),
             Some(target),
             Some(ProviderOperationKind::ConversationPrompt),
-            DispatchMark::Deferred,
+            mode,
             OperationRecord::Admitted { queued: true },
         )
     }
@@ -110,7 +116,7 @@ impl LiveOperation {
         binding: Option<&ProviderBindingIdentity>,
         target: Option<SessionRef>,
         kind: Option<ProviderOperationKind>,
-        mark: DispatchMark,
+        mode: AdmissionMode,
         record: OperationRecord,
     ) -> Self {
         let changed = Arc::new(Notify::new());
@@ -119,16 +125,12 @@ impl LiveOperation {
             changed: Arc::clone(&changed),
             binding: binding.map(|binding| (binding.endpoint.clone(), binding.generation.clone())),
             kind,
-            mark,
+            mark: mode.mark,
+            class: StdMutex::new(mode.class),
             target: StdMutex::new(target),
             lifecycle: Arc::new(OperationLifecycle::new(record, changed)),
-            cancel_target: None,
+            cancel_target: mode.cancel_target,
         }
-    }
-
-    pub(super) fn with_cancel_target(mut self, target: Option<uuid::Uuid>) -> Self {
-        self.cancel_target = target;
-        self
     }
 
     /// Applies one event to the operation's record. A move the record no
@@ -291,24 +293,36 @@ impl LiveOperation {
         }
     }
 
-    /// An admitted handoff or marked send whose writer still holds custody.
-    fn in_flight(&self) -> bool {
+    fn holds_admission(&self) -> bool {
         let lifecycle = self.lifecycle.state();
+        (lock(&self.class).holds_admission() && lifecycle.custody.holds_custody())
+            || self.holds_dispatch_at(&lifecycle)
+    }
+
+    fn holds_dispatch(&self) -> bool {
+        self.holds_dispatch_at(&self.lifecycle.state())
+    }
+
+    /// A mark, or a reservation on the Host's mark-before-handoff path,
+    /// can block the owner line. An unmarked prompt can itself be on that line.
+    fn holds_dispatch_at(
+        &self,
+        lifecycle: &crate::provider_operation_custody::OperationLifecycleState,
+    ) -> bool {
         if let Some(marked) = lifecycle.lane_marked() {
             return lifecycle.custody.holds_custody() && marked;
         }
         let record = lifecycle.admission_record();
         lifecycle.custody.holds_custody()
-            && (record == OperationRecord::Reserving && self.mark == DispatchMark::BeforeHandoff
+            && (matches!(
+                record,
+                OperationRecord::Reserving | OperationRecord::Admitted { queued: false }
+            ) && self.mark == DispatchMark::BeforeHandoff
                 || matches!(
                     record,
                     OperationRecord::MayHaveDispatched { .. }
                         | OperationRecord::SettlingUnknown { .. }
-                )
-                || matches!(record, OperationRecord::Admitted { queued: false })
-                    && self
-                        .kind
-                        .is_some_and(|kind| kind != ProviderOperationKind::ConversationPrompt))
+                ))
     }
 }
 
@@ -351,7 +365,7 @@ impl LiveOperations {
         unknown.retain(|operation| {
             request.blocked_by(operation, EarlierOperation::Unknown, unconfirmed_cancel)
         });
-        let in_flight = self.in_flight_blockers(binding, request);
+        let in_flight = self.admission_blockers(binding, request);
         if !unknown.is_empty() || !in_flight.is_empty() {
             return Err(AdmissionBlockers { unknown, in_flight });
         }
@@ -418,14 +432,13 @@ impl LiveOperations {
         });
     }
 
-    /// Sends still in flight on `binding` that an admission on `target`
-    /// waits behind: the target's own, and binding-wide ones (no target).
-    pub(super) fn in_flight_blockers(
+    /// Holders that overlap this admission on the target or whole binding.
+    pub(super) fn admission_blockers(
         &self,
         binding: &ProviderBindingIdentity,
         request: AdmissionRequest<'_>,
     ) -> Vec<OperationId> {
-        self.overlapping_holders(binding, request)
+        self.overlapping_holders(binding, request, LiveOperation::holds_admission)
             .map(|(operation, _)| operation.clone())
             .collect()
     }
@@ -435,15 +448,37 @@ impl LiveOperations {
         binding: &ProviderBindingIdentity,
         request: AdmissionRequest<'_>,
     ) -> Option<OperationId> {
-        self.overlapping_holders(binding, request)
+        self.overlapping_holders(binding, request, LiveOperation::holds_dispatch)
             .find(|(_, holder)| !request.is_own_cancel_holder(holder.kind, holder.cancel_target))
             .map(|(operation, _)| operation.clone())
+    }
+
+    // The lane checks its blockers and claims an independent start under one
+    // index guard. A stale placement class must not outlive that decision.
+    pub(super) fn claim_independent_start(
+        &self,
+        binding: &ProviderBindingIdentity,
+        request: AdmissionRequest<'_>,
+    ) -> Option<OperationId> {
+        let blocker = self.lane_mark_blocker(binding, request);
+        if blocker.is_none()
+            && let Some(live) = self.operations.get(request.operation)
+            && live.kind == Some(ProviderOperationKind::ConversationPrompt)
+            && live.holds_custody()
+            && request
+                .target
+                .is_some_and(|target| live.matches_lane_binding(&binding.generation, target))
+        {
+            *lock(&live.class) = AdmissionClass::Independent;
+        }
+        blocker
     }
 
     fn overlapping_holders<'a>(
         &'a self,
         binding: &'a ProviderBindingIdentity,
         request: AdmissionRequest<'a>,
+        holds: fn(&LiveOperation) -> bool,
     ) -> impl Iterator<Item = (&'a OperationId, &'a Arc<LiveOperation>)> {
         self.operations.iter().filter(move |(id, operation)| {
             operation
@@ -452,7 +487,7 @@ impl LiveOperations {
                 .is_some_and(|(endpoint, generation)| {
                     endpoint == &binding.endpoint && generation == &binding.generation
                 })
-                && operation.in_flight()
+                && holds(operation)
                 && request.blocked_by(
                     id,
                     EarlierOperation::InFlight {

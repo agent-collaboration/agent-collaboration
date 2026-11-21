@@ -12,7 +12,18 @@ pub(super) enum DispatchMark {
 pub(super) enum AdmissionClass {
     Independent,
     LinePlacement,
+    ExactTurn,
     RefuseWhileRunning { foreground: uuid::Uuid },
+}
+
+impl AdmissionClass {
+    pub(super) const fn holds_admission(self) -> bool {
+        matches!(self, Self::Independent)
+    }
+
+    const fn joins_owner_line(self) -> bool {
+        matches!(self, Self::LinePlacement | Self::ExactTurn)
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -93,7 +104,7 @@ impl AdmissionRequest<'_> {
             // to the owner, and same-ID reuse consults the existing operation.
             EarlierOperation::InFlight { .. }
                 if self.kind == ConversationClose
-                    || self.mode.class == AdmissionClass::LinePlacement
+                    || self.mode.class.joins_owner_line()
                     || self.operation == earlier =>
             {
                 false

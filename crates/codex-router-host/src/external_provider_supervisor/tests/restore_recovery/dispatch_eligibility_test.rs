@@ -1,7 +1,159 @@
 use super::admission_race_tests::create_request;
 use super::*;
 use crate::binding_store_fixture::BindingFixtureWait;
+use crate::external_provider_supervisor::PromptBusyPolicy;
 use std::time::Duration;
+
+#[tokio::test(flavor = "current_thread")]
+async fn an_admitted_independent_prompt_blocks_before_its_owner_command() {
+    independent_reservation_precedes_the_owner_command(false).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_rowless_idle_auto_reservation_blocks_before_its_owner_command() {
+    independent_reservation_precedes_the_owner_command(true).await;
+}
+
+async fn independent_reservation_precedes_the_owner_command(rowless: bool) {
+    let rig = RestoreRig::new();
+    rig.seed_session().await;
+    let host = rig.open_host("restored-in-auto").await;
+    rig.assert_loads(&host).await;
+    let first = OperationId::generate();
+    let second = OperationId::generate();
+    let (pause, before_owner, let_owner_run) = admission_pause();
+    *host.inner.before_owner_prompt_test_pause.lock().unwrap() = Some((first.clone(), pause));
+    let first_request = rig.prompt_request(first.clone(), "first independent request");
+    let first_submission = async {
+        if rowless {
+            let request = ProviderPromptContentsRequest::from_prompt_request(first_request)
+                .expect("valid Auto contents");
+            host.submit_owned_delivery(request, MessageDelivery::Auto)
+                .await
+                .expect("Auto request admitted");
+        } else {
+            let mut request = ProviderPromptContentsRequest::from_prompt_request(first_request)
+                .expect("valid direct contents");
+            request.busy = PromptBusyPolicy::RefuseBusy;
+            host.prompt_contents(request)
+                .await
+                .expect("direct prompt admitted");
+        }
+    };
+    tokio::pin!(first_submission);
+    tokio::select! {
+        reached = before_owner => reached.expect("first reservation reached the owner boundary"),
+        () = &mut first_submission => panic!("the first request passed its pause"),
+    }
+    let row = host.inner.store.lock().await.inspect(&first).await.unwrap();
+    assert_eq!(
+        row.as_ref().map(|row| row.stage),
+        (!rowless).then_some(ProviderOperationStage::Admitted),
+    );
+
+    let refusal = host
+        .prompt(rig.prompt_request(second.clone(), "competing independent prompt"))
+        .await
+        .expect_err("the second independent request must be refused at admission");
+    assert_eq!(refusal.stage, ConversationOperationFailureStage::Validation);
+    assert_eq!(refusal.kind, ConversationOperationFailureKind::Busy);
+    assert!(String::from(refusal.message).contains(first.as_str()));
+    assert!(
+        host.inner
+            .store
+            .lock()
+            .await
+            .inspect(&second)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(rig.wire_receipt()["prompts"].as_array().unwrap().is_empty());
+
+    let_owner_run.send(()).expect("release the first request");
+    first_submission.await;
+    host.wait(wait_request(first))
+        .await
+        .expect("first request completes");
+    assert_eq!(rig.wire_receipt()["prompts"].as_array().unwrap().len(), 1);
+    host.shutdown().await.expect("shutdown");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn the_owner_line_progresses_while_an_independent_reservation_has_no_mark() {
+    let rig = RestoreRig::new();
+    rig.seed_session().await;
+    let host = rig.open_host("restored-in-auto").await;
+    rig.assert_loads(&host).await;
+    let independent = OperationId::generate();
+    let queue_head = OperationId::generate();
+    let (pause, before_owner, let_owner_run) = admission_pause();
+    *host.inner.before_owner_prompt_test_pause.lock().unwrap() = Some((independent.clone(), pause));
+    let mut request = ProviderPromptContentsRequest::from_prompt_request(
+        rig.prompt_request(independent.clone(), "held independent"),
+    )
+    .unwrap();
+    request.busy = PromptBusyPolicy::RefuseBusy;
+    let first = host.prompt_contents(request);
+    tokio::pin!(first);
+    tokio::select! {
+        reached = before_owner => reached.expect("independent reservation before its owner command"),
+        result = &mut first => panic!("independent request returned before the hold: {result:?}"),
+    }
+    let parked = host
+        .inner
+        .uncertainty
+        .slot(&rig.target.endpoint)
+        .fixture
+        .notice_wait(rig.target.clone(), BindingFixtureWait::QueuedDispatchParked);
+    let queued = ProviderPromptContentsRequest::from_prompt_request(
+        rig.prompt_request(queue_head.clone(), "queue reaches the owner first"),
+    )
+    .unwrap();
+    assert_eq!(
+        host.submit_owned_delivery(queued, MessageDelivery::Queue)
+            .await
+            .unwrap(),
+        crate::session_owner_calls::InputAcceptance::Queued
+    );
+    let request = wait_request(queue_head);
+    let budget = Duration::from_secs(u32::from(request.timeout_seconds).into());
+    let waiting = host.wait(request);
+    tokio::pin!(waiting);
+    let mut release = Some(let_owner_run);
+    let completed = tokio::select! {
+        biased;
+        result = &mut waiting => result,
+        reached = parked => {
+            reached.expect("the queue head parked");
+            release.take().unwrap().send(()).expect("release the independent request");
+            assert!(futures_util::poll!(&mut first).is_pending());
+            rig.clock.advance(budget).expect("bound the parked head with the injected clock");
+            waiting.await
+        }
+    }
+    .expect("queue head result");
+    assert!(
+        matches!(
+            completed.output,
+            ConversationOperationWaitOutput::Available {
+                settlement: ConversationOperationSettlement::PromptCompleted { .. }
+            }
+        ),
+        "the parked head cannot wait for a reservation whose command waits behind it: {completed:?}"
+    );
+    if let Some(release) = release {
+        release.send(()).expect("release the independent request");
+    }
+    first
+        .await
+        .expect("the independent request reaches the owner after the head");
+    host.wait(wait_request(independent))
+        .await
+        .expect("both inputs settle");
+    assert_eq!(rig.wire_receipt()["prompts"].as_array().unwrap().len(), 2);
+    host.shutdown().await.expect("shutdown");
+}
 
 #[tokio::test(flavor = "current_thread")]
 async fn a_lost_host_mark_receipt_transfers_its_durable_blocker_before_release() {

@@ -22,7 +22,7 @@ fn session(name: &str) -> SessionRef {
 }
 
 fn in_flight_on(index: &LiveOperations, target: &SessionRef) -> Vec<OperationId> {
-    index.in_flight_blockers(
+    index.admission_blockers(
         &binding(),
         AdmissionRequest {
             operation: &OperationId::generate(),
@@ -57,7 +57,7 @@ fn a_send_counts_in_flight_from_its_marker_until_it_settles() {
             &binding(),
             Some(session("a")),
             ProviderOperationKind::ConversationPrompt,
-            DispatchMark::Deferred,
+            AdmissionMode::deferred(AdmissionClass::LinePlacement),
         ),
     );
     live.admitted();
@@ -113,7 +113,7 @@ fn an_undone_marker_and_a_dropped_reservation_leave_nothing_in_flight() {
             &binding(),
             None,
             ProviderOperationKind::ConversationPrompt,
-            DispatchMark::Deferred,
+            AdmissionMode::deferred(AdmissionClass::LinePlacement),
         ),
     );
     live.admitted();
@@ -123,7 +123,7 @@ fn an_undone_marker_and_a_dropped_reservation_leave_nothing_in_flight() {
         &binding(),
         None,
         ProviderOperationKind::ConversationPrompt,
-        DispatchMark::Deferred,
+        AdmissionMode::deferred(AdmissionClass::LinePlacement),
     );
 
     // Act
@@ -151,7 +151,7 @@ fn an_undispatched_operation_settles_not_sent() {
         &binding(),
         None,
         ProviderOperationKind::ConversationPrompt,
-        DispatchMark::Deferred,
+        AdmissionMode::deferred(AdmissionClass::LinePlacement),
     );
     live.admitted();
 
@@ -179,7 +179,7 @@ fn lane_receipts_are_bound_to_the_reserved_operation_generation_and_target() {
             &binding,
             Some(target.clone()),
             ProviderOperationKind::ConversationPrompt,
-            DispatchMark::Deferred,
+            AdmissionMode::deferred(AdmissionClass::LinePlacement),
         ),
     );
     let lookup = |index: &LiveOperations,
@@ -197,7 +197,7 @@ fn lane_receipts_are_bound_to_the_reserved_operation_generation_and_target() {
         &replacement_binding,
         Some(target.clone()),
         ProviderOperationKind::ConversationPrompt,
-        DispatchMark::Deferred,
+        AdmissionMode::deferred(AdmissionClass::LinePlacement),
     ));
     index
         .operations
