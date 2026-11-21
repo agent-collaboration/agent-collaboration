@@ -11,6 +11,7 @@ use crate::{
     provider_operation_custody::CustodyEnd,
     provider_operation_settlement::ProviderOperationCompletion,
 };
+use collaboration_runtime::ProviderOperationStoreError;
 use router_clock::ClockInstant;
 
 pub(super) fn mark_receipt_is_timely(observed: ClockInstant, deadline: ClockInstant) -> bool {
@@ -150,15 +151,27 @@ impl ExternalProviderSupervisor {
         if clock.monotonic_now() >= deadline {
             return Err(elapsed());
         }
-        let mark = store
+        let marked = store
             .mark_may_have_dispatched_if(operation, self.inner.now_ms(), || {
                 clock.monotonic_now() < deadline
             })
-            .await
-            .map_err(|error| {
+            .await;
+        let mark = match marked {
+            Ok(mark) => mark,
+            Err(error) => {
+                if matches!(error, ProviderOperationStoreError::Database(_)) {
+                    // The transaction can have committed without a receipt.
+                    // Transfer its blocker while this writer still owns the guard.
+                    self.inner
+                        .preserve_operation_residue(&mut store, operation, live)
+                        .await;
+                }
                 tracing::warn!(operation = operation.as_str(), %error, "could not mark provider dispatch");
-                not_sent("the store couldn't record the dispatch mark, so nothing was sent")
-            })?;
+                return Err(not_sent(
+                    "the store couldn't record the dispatch mark, so nothing was sent",
+                ));
+            }
+        };
         mark.ok_or_else(elapsed)?;
         Ok(store)
     }

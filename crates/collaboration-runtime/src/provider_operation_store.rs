@@ -156,6 +156,8 @@ pub struct ProviderOperationStore {
     terminal_write_fault: Option<OperationId>,
     #[cfg(any(test, feature = "test-support"))]
     dispatch_mark_fault: Option<OperationId>,
+    #[cfg(any(test, feature = "test-support"))]
+    dispatch_mark_receipt_fault: Option<OperationId>,
 }
 
 /// Runs one write statement as a one-statement transaction through
@@ -224,6 +226,8 @@ impl ProviderOperationStore {
             terminal_write_fault: None,
             #[cfg(any(test, feature = "test-support"))]
             dispatch_mark_fault: None,
+            #[cfg(any(test, feature = "test-support"))]
+            dispatch_mark_receipt_fault: None,
         })
     }
 
@@ -478,7 +482,15 @@ impl ProviderOperationStore {
         {
             return Err(ProviderOperationStoreError::TransitionConflict);
         }
-        Ok(transaction.commit_if(may_commit).await?.then_some(record))
+        let committed = transaction.commit_if(may_commit).await?;
+        #[cfg(any(test, feature = "test-support"))]
+        if committed && self.dispatch_mark_receipt_fault.as_ref() == Some(operation_id) {
+            self.dispatch_mark_receipt_fault = None;
+            return Err(ProviderOperationStoreError::Database(
+                sqlx::Error::Protocol("injected dispatch mark receipt failure".to_owned()),
+            ));
+        }
+        Ok(committed.then_some(record))
     }
 
     /// Returns a row marked for dispatch to Admitted with no effect when the
@@ -877,6 +889,11 @@ impl ProviderOperationStore {
     /// Fail the next dispatch mark of this operation before its transaction.
     pub fn fail_next_dispatch_mark_of(&mut self, operation_id: &OperationId) {
         self.dispatch_mark_fault = Some(operation_id.clone());
+    }
+
+    /// Fail the receipt after the next dispatch mark of this operation commits.
+    pub fn fail_next_dispatch_mark_receipt_of(&mut self, operation_id: &OperationId) {
+        self.dispatch_mark_receipt_fault = Some(operation_id.clone());
     }
 }
 

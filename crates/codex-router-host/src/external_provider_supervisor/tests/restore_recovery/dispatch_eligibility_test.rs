@@ -4,6 +4,68 @@ use crate::binding_store_fixture::BindingFixtureWait;
 use std::time::Duration;
 
 #[tokio::test(flavor = "current_thread")]
+async fn a_lost_host_mark_receipt_transfers_its_durable_blocker_before_release() {
+    let rig = RestoreRig::new();
+    rig.seed_session().await;
+    let host = rig.open_host("restored-in-auto").await;
+    rig.assert_loads(&host).await;
+    let operation = OperationId::generate();
+    host.inner
+        .store
+        .lock()
+        .await
+        .fail_next_dispatch_mark_receipt_of(&operation);
+
+    host.create(create_request(&rig, operation.clone()))
+        .await
+        .expect("create admitted");
+    assert_eq!(
+        host.wait(wait_request(operation.clone()))
+            .await
+            .expect_err("the lost mark receipt cannot authorize create")
+            .effect,
+        ProviderOperationEffect::None
+    );
+    let row = host
+        .inner
+        .store
+        .lock()
+        .await
+        .inspect(&operation)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(row.stage, ProviderOperationStage::MayHaveDispatched);
+    assert_eq!(row.effect, ProviderOperationEffect::Unknown);
+    assert!(!host.live_operation_ids().contains(&operation));
+    assert!(
+        rig.wire_receipt()["sessions"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+
+    let prompt = OperationId::generate();
+    let refusal = host
+        .prompt(rig.prompt_request(prompt.clone(), "unknown after receipt loss"))
+        .await
+        .expect_err("the actual wide mark must keep blocking after custody release");
+    assert_eq!(refusal.kind, ConversationOperationFailureKind::Busy);
+    assert!(String::from(refusal.message).contains(operation.as_str()));
+    assert!(
+        host.inner
+            .store
+            .lock()
+            .await
+            .inspect(&prompt)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    host.shutdown().await.expect("shutdown");
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn a_queued_first_mark_has_eligibility_before_its_receipt() {
     let rig = RestoreRig::new();
     rig.seed_session().await;
