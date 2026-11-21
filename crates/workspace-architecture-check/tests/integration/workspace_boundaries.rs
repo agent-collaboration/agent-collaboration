@@ -27,6 +27,7 @@ pub(super) const FLEET_PURE_CRATES: [(&str, &[&str]); 2] = [
     ),
 ];
 const FLEET_ACCESS: &str = "fleet-workspace-access";
+const FLEET_DIRECTORY: &str = "fleet-workspace-directory";
 const FLEET_ENGINE: &str = "fleet-engine";
 const FLEET_MAIL: &str = "fleet-mail";
 const FLEET_NOTICES: &str = "fleet-notices";
@@ -87,6 +88,16 @@ pub(super) const NOTICES_LAYER: (&str, &[&str]) = (
         "fleet-runtime-ports",
         "fleet-workspace-access",
         "workspace-ids",
+        "workspace-model",
+    ],
+);
+pub(super) const DIRECTORY_LAYER: (&str, &[&str]) = (
+    FLEET_DIRECTORY,
+    &[
+        "central-storage",
+        "fleet-contracts",
+        "fleet-runtime-ports",
+        "message-board",
         "workspace-model",
     ],
 );
@@ -224,15 +235,16 @@ pub(super) fn check_boundaries(
     }
     check_closed_workspace_edges(graph, MAIL_LAYER.0, MAIL_LAYER.1)?;
     check_closed_workspace_edges(graph, NOTICES_LAYER.0, NOTICES_LAYER.1)?;
+    check_closed_workspace_edges(graph, DIRECTORY_LAYER.0, DIRECTORY_LAYER.1)?;
     check_job_reachability(
         graph,
         FLEET_WAKES,
-        &[FLEET_SCHEDULES, FLEET_MAIL, FLEET_NOTICES],
+        &[FLEET_SCHEDULES, FLEET_MAIL, FLEET_NOTICES, FLEET_DIRECTORY],
     )?;
     check_job_reachability(
         graph,
         FLEET_SCHEDULES,
-        &[FLEET_WAKES, FLEET_MAIL, FLEET_NOTICES],
+        &[FLEET_WAKES, FLEET_MAIL, FLEET_NOTICES, FLEET_DIRECTORY],
     )?;
     check_job_reachability(
         graph,
@@ -242,12 +254,38 @@ pub(super) fn check_boundaries(
             FLEET_SCHEDULES,
             FLEET_TIMER_POLICY,
             FLEET_NOTICES,
+            FLEET_DIRECTORY,
         ],
     )?;
     check_job_reachability(
         graph,
         FLEET_NOTICES,
-        &[FLEET_MAIL, FLEET_WAKES, FLEET_SCHEDULES, FLEET_TIMER_POLICY],
+        &[
+            FLEET_MAIL,
+            FLEET_WAKES,
+            FLEET_SCHEDULES,
+            FLEET_TIMER_POLICY,
+            FLEET_DIRECTORY,
+        ],
+    )?;
+    check_job_reachability(graph, FLEET_ENGINE, &[FLEET_DIRECTORY])?;
+    check_job_reachability(
+        graph,
+        FLEET_DIRECTORY,
+        &[
+            FLEET_ACCESS,
+            FLEET_ENGINE,
+            FLEET_MAIL,
+            FLEET_NOTICES,
+            FLEET_WAKES,
+            FLEET_SCHEDULES,
+            FLEET_TIMER_POLICY,
+            "fleet-workspace-requests",
+            "fleet-runtime",
+            "fleet-signin",
+            "fleet-machine-login",
+            "fleet-admin",
+        ],
     )?;
     for name in PROXY_CRATES {
         let Some(source) = graph.workspace_id(name) else {
@@ -361,7 +399,13 @@ pub(super) fn check_pure_dependency_tree(root: &Path) -> Result<(), Box<dyn std:
         .into_iter()
         .chain(FLEET_PURE_CRATES)
         .map(|(package, _)| package)
-        .chain([FLEET_ACCESS, FLEET_ENGINE, FLEET_MAIL, FLEET_NOTICES])
+        .chain([
+            FLEET_ACCESS,
+            FLEET_ENGINE,
+            FLEET_MAIL,
+            FLEET_NOTICES,
+            FLEET_DIRECTORY,
+        ])
         .chain(TIMER_CRATES.into_iter().map(|(package, _)| package))
     {
         check_package_targets(root, package)?;
@@ -374,6 +418,7 @@ fn check_package_targets(root: &Path, package: &str) -> Result<(), Box<dyn std::
     if matches!(
         package,
         FLEET_ACCESS
+            | FLEET_DIRECTORY
             | FLEET_ENGINE
             | FLEET_MAIL
             | FLEET_NOTICES

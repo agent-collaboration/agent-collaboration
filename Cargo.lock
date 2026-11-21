@@ -1481,6 +1481,7 @@ dependencies = [
  "fleet-timer-policy",
  "fleet-wakes",
  "fleet-workspace-access",
+ "fleet-workspace-directory",
  "futures-util",
  "hegeltest",
  "http",
@@ -2580,6 +2581,17 @@ dependencies = [
  "serde_json",
  "serde_json_canonicalizer",
  "workspace-ids",
+ "workspace-model",
+]
+
+[[package]]
+name = "fleet-workspace-directory"
+version = "0.1.156"
+dependencies = [
+ "central-storage",
+ "fleet-contracts",
+ "fleet-runtime-ports",
+ "message-board",
  "workspace-model",
 ]
 

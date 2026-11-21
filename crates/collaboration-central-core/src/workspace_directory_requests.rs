@@ -5,8 +5,10 @@ use crate::WorkspaceCaller;
 use crate::WorkspaceRuntime;
 use crate::workspace_request_gate::{reply, store_result};
 use central_storage::{AlarmUpdate, StatementBatch, StoreFailure};
+use fleet_contracts::WorkspaceDirectory;
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_workspace_directory::CentralWorkspaceDirectory;
 use workspace_model as m;
 use workspace_rules::DirectoryChange;
 
@@ -102,12 +104,12 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
             {
                 return Ok(reply(m::WorkspaceResult::Refused(refusal)));
             }
-            let workspace = crate::workspace_directory_rows::read_by_id(
-                runtime.execution.statement_host(),
-                workspace_id,
-            )
-            .await?
-            .ok_or_else(|| corrupt("directory_workspaces.workspace_id"))?;
+            let directory_store =
+                CentralWorkspaceDirectory::new(runtime.execution.statement_host());
+            let workspace = directory_store
+                .read_by_id(workspace_id)
+                .await?
+                .ok_or_else(|| corrupt("directory_workspaces.workspace_id"))?;
             Ok(reply(m::WorkspaceResult::Done(m::WorkspaceAnswer::Item {
                 item: m::ItemView::Workspace(workspace.into()),
             })))
@@ -130,12 +132,14 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
             {
                 return Ok(reply(m::WorkspaceResult::Refused(refusal)));
             }
-            let workspaces: Vec<m::Workspace> =
-                crate::workspace_directory_rows::read_all(runtime.execution.statement_host())
-                    .await?
-                    .into_iter()
-                    .map(Into::into)
-                    .collect();
+            let directory_store =
+                CentralWorkspaceDirectory::new(runtime.execution.statement_host());
+            let workspaces: Vec<m::Workspace> = directory_store
+                .read_all()
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect();
             let allowed = runtime
                 .access()
                 .allowed_workspaces(caller.connection().machine_id())
@@ -217,15 +221,10 @@ async fn write<Host: CentralStore, Stores: WorkspaceStores>(
         return Ok(reply(answer));
     }
     let mut statements = actor_plan.statements;
+    let directory_store = CentralWorkspaceDirectory::new(runtime.execution.statement_host());
     let answer = match directory {
         DirectoryRequest::Create { name } => {
-            if crate::workspace_directory_rows::read_by_name(
-                runtime.execution.statement_host(),
-                name,
-            )
-            .await?
-            .is_some()
-            {
+            if directory_store.read_by_name(name).await?.is_some() {
                 m::WorkspaceResult::Refused(m::RefusalReason::WorkspaceNameInUse {
                     name: name.clone(),
                 })
@@ -237,7 +236,7 @@ async fn write<Host: CentralStore, Stores: WorkspaceStores>(
                         .map_err(|_| corrupt("directory_workspaces.description"))?,
                     state: m::WorkspaceState::Active,
                 };
-                statements.push(crate::workspace_directory_rows::insert(
+                statements.push(directory_store.plan_guarded_insert(
                     &workspace.workspace_id,
                     name,
                     &workspace.description,
@@ -262,22 +261,16 @@ async fn write<Host: CentralStore, Stores: WorkspaceStores>(
             {
                 return Ok(reply(m::WorkspaceResult::Refused(refusal)));
             }
-            let current: m::Workspace = crate::workspace_directory_rows::read_by_id(
-                runtime.execution.statement_host(),
-                workspace_id,
-            )
-            .await?
-            .ok_or_else(|| corrupt("directory_workspaces.workspace_id"))?
-            .into();
+            let current: m::Workspace = directory_store
+                .read_by_id(workspace_id)
+                .await?
+                .ok_or_else(|| corrupt("directory_workspaces.workspace_id"))?
+                .into();
             let holder = match &change {
-                DirectoryChange::Update { name, .. } => {
-                    crate::workspace_directory_rows::read_by_name(
-                        runtime.execution.statement_host(),
-                        name,
-                    )
+                DirectoryChange::Update { name, .. } => directory_store
+                    .read_by_name(name)
                     .await?
-                    .map(|row| row.workspace_id)
-                }
+                    .map(|row| row.workspace_id),
                 DirectoryChange::Archive => None,
             };
             match workspace_rules::change_workspace(now, &current, &change, holder.as_ref()) {

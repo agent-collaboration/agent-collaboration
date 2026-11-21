@@ -28,6 +28,7 @@ fleet-timer-policy.workspace = true
 fleet-runtime-ports.workspace = true
 fleet-runtime.workspace = true
 fleet-workspace-access.workspace = true
+fleet-workspace-directory.workspace = true
 workspace-model.workspace = true
 workspace-ids.workspace = true
 workspace-rules = {path="../workspace-rules",version="0.1.149"}
