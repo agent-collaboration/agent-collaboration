@@ -56,8 +56,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         workspace: &WorkspaceId,
     ) -> Result<(), StoreFailure> {
         use central_engine_model::{InstanceKey, MachineKind, RetirementThreshold};
-        use fleet_contracts::{EngineSubject, SubjectVersion};
-        use fleet_engine::{CONTROL_WRITE, ControlGate, Engine, FailureOutcome};
+        use fleet_contracts::{ControlGate, EngineSubject, FailureOutcome, SubjectVersion};
+        use fleet_engine::{CONTROL_WRITE, Engine};
         let subject = EngineSubject {
             kind: MachineKind("legacy_workspace_drains"),
             key: InstanceKey("all".into()),

@@ -1,23 +1,15 @@
+use super::port::{Engine, EngineHost};
 use super::{
     attempt_statements::{CONTROL_WRITE, delete_observed_attempt},
     attempt_store::load_attempt,
     effects::{ApplyFailure, classify_batch},
 };
-use super::{
-    failures::FailureOutcome,
-    port::{Engine, EngineHost},
-};
 use central_engine_model::{AttemptState, RetirementThreshold};
 use central_storage::{AlarmUpdate, StatementBatch, StoreFailure};
-use fleet_contracts::{EngineSubject, ObservedControl, SubjectVersion};
+use fleet_contracts::{
+    ControlGate, EngineSubject, FailureOutcome, ObservedControl, SubjectVersion,
+};
 use fleet_runtime_ports::CentralStore as _;
-
-pub enum ControlGate {
-    Run(ObservedControl),
-    Skip,
-    Uncertain,
-    CentralDown(StoreFailure),
-}
 
 impl<R: EngineHost> Engine<'_, R> {
     pub async fn control_gate(

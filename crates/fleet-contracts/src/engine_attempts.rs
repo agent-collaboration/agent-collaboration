@@ -1,5 +1,5 @@
-use central_engine_model::{InstanceKey, MachineKind};
-use central_storage::SqlValue;
+use central_engine_model::{FailureRecord, InstanceKey, MachineKind};
+use central_storage::{SqlValue, StoreFailure};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EngineSubject {
@@ -26,4 +26,19 @@ pub struct SubjectVersion(pub Vec<SqlValue>);
 pub enum ObservedControl {
     Absent,
     Present(AttemptGuard),
+}
+
+pub enum ControlGate {
+    Run(ObservedControl),
+    Skip,
+    Uncertain,
+    CentralDown(StoreFailure),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum FailureOutcome {
+    Recorded(FailureRecord),
+    Superseded,
+    Uncertain,
+    StoreDown(StoreFailure),
 }

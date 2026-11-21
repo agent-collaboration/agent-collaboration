@@ -19,5 +19,3 @@ fleet-runtime-ports.workspace = true
 fleet-workspace-access.workspace = true
 workspace-ids.workspace = true
 workspace-model.workspace = true
-chrono = { version = "0.4.45", default-features = false, features = ["alloc"] }
-serde_json.workspace = true

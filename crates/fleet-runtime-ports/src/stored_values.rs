@@ -1,4 +1,4 @@
-//! Statement transport rows are decoded by column name before domain construction.
+//! Decode stored rows by column name and encode values for statement binds.
 use central_storage::{CorruptReason, ReadOutcome, SqlValue, StoreFailure};
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Serialize, de::DeserializeOwned};

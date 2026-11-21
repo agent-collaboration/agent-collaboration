@@ -23,6 +23,8 @@ pub use machine_connection_refusal::MachineConnectionRefusal;
 pub use provisioning_failure::OrganizationProvisioningFailure;
 pub use statement_refusal::FleetOrganizationStatementRefusal;
 
-pub use engine_attempts::{AttemptGuard, EngineSubject, ObservedControl, SubjectVersion};
+pub use engine_attempts::{
+    AttemptGuard, ControlGate, EngineSubject, FailureOutcome, ObservedControl, SubjectVersion,
+};
 pub use legacy_units::LegacyUnitOutcome;
 pub use mail_delivery_ready::MailDeliveryReady;

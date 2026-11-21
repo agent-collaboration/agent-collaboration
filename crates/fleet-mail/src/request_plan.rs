@@ -82,7 +82,11 @@ pub fn plan_direct_send(
     })
 }
 
-/// Plan a queued notice with its source and matching readiness hint.
+/// Plan a sourced notice and a readiness hint for the same record.
+///
+/// Offer the hint only after the batch applies. On a source conflict the
+/// INSERT leaves the existing row in place, and the hint names the new ID
+/// whose row was never inserted. Delivery rechecks that ID.
 pub fn plan_sourced_notice(
     target: SessionRef,
     items: Vec<NoticeItem>,

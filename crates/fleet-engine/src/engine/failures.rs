@@ -6,20 +6,12 @@ use super::{
     effects::{ApplyFailure, classify_batch},
 };
 use central_engine_model::{
-    FailureRecord, FailureTransition, ItemFailureClass, RetirementThreshold, after_failure,
+    FailureTransition, ItemFailureClass, RetirementThreshold, after_failure,
 };
 use central_storage::{AlarmUpdate, StatementBatch, StoreFailure};
-use fleet_contracts::{EngineSubject, SubjectVersion};
+use fleet_contracts::{EngineSubject, FailureOutcome, SubjectVersion};
 use fleet_runtime_ports::CentralStore as _;
 use workspace_model::WorkspaceId;
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum FailureOutcome {
-    Recorded(FailureRecord),
-    Superseded,
-    Uncertain,
-    StoreDown(StoreFailure),
-}
 
 impl<R: EngineHost> Engine<'_, R> {
     pub fn observe_engine_store_down(&self, subject: &EngineSubject, failure: StoreFailure) {

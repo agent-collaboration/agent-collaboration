@@ -5,7 +5,6 @@ use super::{
     port::{Engine, EngineHost},
     store_adapter::corrupt_class,
 };
-use super::{control_gate::ControlGate, failures::FailureOutcome};
 use central_engine_model::{
     DueBatchPolicy, DueRow, EngineTime, InstanceKey, MachineKind, RetirementThreshold,
 };
@@ -13,8 +12,8 @@ use central_storage::{
     AlarmPublication, AlarmUpdate, BatchOutcome, SqlValue, Statement, StatementBatch, StoreFailure,
 };
 use fleet_contracts::{
-    AlarmNotPublished, AlarmResult, EngineSubject, EventCompletion, LegacyUnitOutcome,
-    SubjectVersion,
+    AlarmNotPublished, AlarmResult, ControlGate, EngineSubject, EventCompletion, FailureOutcome,
+    LegacyUnitOutcome, SubjectVersion,
 };
 use fleet_runtime_ports::CentralStore as _;
 use fleet_runtime_ports::{
