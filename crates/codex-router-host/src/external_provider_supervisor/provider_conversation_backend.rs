@@ -657,16 +657,18 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                             if let Some(Err(failure)) = &*live.result.lock().await {
                                 return Err(failure.clone());
                             }
-                            let operation = pending_snapshot.unwrap_or_else(|| Err(failure(
-                                ConversationOperationFailureKind::Unavailable,
-                                ConversationOperationFailureStage::Settlement,
-                                ProviderOperationEffect::Unknown,
-                                "the store didn't respond in time",
-                                operation_id.clone(),
-                                live.target(),
-                            )))?;
+                            let Some(snapshot) = pending_snapshot else {
+                                return Err(failure(
+                                    ConversationOperationFailureKind::Unavailable,
+                                    ConversationOperationFailureStage::Settlement,
+                                    ProviderOperationEffect::Unknown,
+                                    "the store didn't respond in time",
+                                    operation_id.clone(),
+                                    live.target(),
+                                ));
+                            };
                             return Ok(ConversationOperationWaitResult {
-                                operation,
+                                operation: snapshot?,
                                 output: ConversationOperationWaitOutput::Pending,
                             });
                         }
