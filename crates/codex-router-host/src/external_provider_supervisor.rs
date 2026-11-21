@@ -575,19 +575,7 @@ impl ExternalProviderSupervisor {
             .operations
             .get(operation_id)
             .cloned()?;
-        loop {
-            let changed = live.changed.notified();
-            if let Some(result) = live.result.lock().await.clone() {
-                return Some(result);
-            }
-            if matches!(
-                live.record(),
-                provider_session_machines::operation_record_machine::OperationRecord::Dropped
-            ) {
-                return None;
-            }
-            changed.await;
-        }
+        live.wait_for_result().await
     }
 
     pub async fn shutdown(&self) -> Result<(), &'static str> {

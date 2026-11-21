@@ -18,6 +18,10 @@ pub(crate) enum ProviderOperationCompletion {
         session_record: Option<Box<ProviderSessionRecord>>,
     },
     Failure(ConversationOperationFailure),
+    PromptAdmissionRefused {
+        failure: ConversationOperationFailure,
+        deadline: router_clock::ClockInstant,
+    },
     /// Dispatch never acquired custody. The admitted row remains known unsent.
     DispatchMarkNotWritten(ConversationOperationFailure),
     FailureWithSession {

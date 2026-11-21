@@ -13,6 +13,17 @@ const MAX_ADVERTISED_CHOICES: usize = 32;
 const MAX_ADVERTISED_SUMMARY_BYTES: usize = 2048;
 const MAX_SETTING_VALUE_DISPLAY_CHARS: usize = 120;
 
+pub(super) enum PromptStartFailure {
+    OwnerRefused(ConversationOperationFailure),
+    Other(ConversationOperationFailure),
+}
+
+impl From<ConversationOperationFailure> for PromptStartFailure {
+    fn from(failure: ConversationOperationFailure) -> Self {
+        Self::Other(failure)
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 struct ProviderErrorReference {
     provider_code: i64,

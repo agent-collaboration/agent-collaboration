@@ -7,6 +7,7 @@ use super::{
     ProviderOperationKind, SessionRef, admitted_submission, existing_submission, failure,
     optional_message_text,
     provider_operation_admission::DispatchMark,
+    provider_operation_failure::PromptStartFailure,
     provider_owner_operations::owner_failure,
     provider_prompt_contents::{PromptBusyPolicy, ProviderPromptContentsRequest},
     runtime_failure,
@@ -14,6 +15,7 @@ use super::{
 use crate::session_owner_delivery_evidence::{
     OwnerDeliveryEvidence, ProviderDeliveryEvidence, placement_evidence,
 };
+use crate::session_store_lane::STORE_WAIT;
 use acp_client_runtime::acp_transport::TransportRun;
 use collaboration_contracts::AttemptEvidenceSink;
 use collaboration_protocol::{
@@ -31,6 +33,7 @@ use provider_session_machines::{
     session_setting_machine::UnresolvedCause,
     session_turn_machine::{SessionTurn, TurnId},
 };
+use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Clone, Copy)]
@@ -73,9 +76,16 @@ impl ExternalProviderSupervisor {
     ) -> ProviderConversationFuture<'static, super::ConversationOperationSubmission> {
         let operation = request.operation_id.clone();
         let failure_target = Some(request.target.clone());
+        self.retain_operation(operation, failure_target, self.submit_owner_prompt(request))
+    }
+
+    pub(super) fn submit_owner_prompt(
+        &self,
+        request: ProviderPromptContentsRequest,
+    ) -> ProviderConversationFuture<'static, super::ConversationOperationSubmission> {
         let deadline = self.admission_deadline();
         let backend = self.clone();
-        self.retain_operation(operation, failure_target, async move {
+        Box::pin(async move {
             let target = request.target.clone();
             let (binding, runtime) = backend.runtime_binding(
                 &target.endpoint,
@@ -152,7 +162,25 @@ impl ExternalProviderSupervisor {
                             });
                             Ok(admitted_submission(snapshot))
                         }
-                        Err(failure) => {
+                        Err(PromptStartFailure::OwnerRefused(failure)) => {
+                            let clock = backend.inner.clock.as_ref();
+                            let deadline = clock.monotonic_now().after(STORE_WAIT);
+                            backend.spawn_operation(
+                                operation,
+                                Arc::clone(&live),
+                                std::future::ready(
+                                    ProviderOperationCompletion::PromptAdmissionRefused {
+                                        failure: failure.clone(),
+                                        deadline,
+                                    },
+                                ),
+                            );
+                            let _publication =
+                                router_clock::timeout_at(clock, deadline, live.wait_for_result())
+                                    .await;
+                            Err(failure)
+                        }
+                        Err(PromptStartFailure::Other(failure)) => {
                             backend
                                 .inner
                                 .finish(
@@ -178,8 +206,7 @@ impl ExternalProviderSupervisor {
         request: ProviderPromptContentsRequest,
         binding: &collaboration_protocol::ProviderBindingIdentity,
         runtime: &crate::ExternalProviderRuntime,
-    ) -> Result<crate::session_owner_door::OwnerDeliveryHandle, super::ConversationOperationFailure>
-    {
+    ) -> Result<crate::session_owner_door::OwnerDeliveryHandle, PromptStartFailure> {
         use provider_session_machines::session_owner::SessionOwnerCommand;
         let target = request.target;
         let operation = request.operation_id;
@@ -207,7 +234,8 @@ impl ExternalProviderSupervisor {
                     &state_answer(&snapshot.lifecycle),
                     operation,
                     Some(target),
-                ));
+                )
+                .into());
             }
         };
         let id = Uuid::parse_str(operation.as_str()).map_err(|_| {
@@ -279,16 +307,26 @@ impl ExternalProviderSupervisor {
             .start_delivery(input, content, command)
             .await
             .map_err(|error| {
+                let owner_refused = matches!(
+                    &error,
+                    crate::session_owner_door::OwnerDoorError::Refused { .. }
+                );
                 let refusal = owner_failure(operation.clone(), target.clone(), error);
-                if matches!(request.busy, PromptBusyPolicy::Send(MessageDelivery::Steer))
-                    && refusal.kind == ConversationOperationFailureKind::CannotSteer
-                {
-                    explicit_steer_refusal(
-                        refusal,
-                        ConversationOperationFailureKind::UnsupportedCapability,
-                    )
+                let refusal =
+                    if matches!(request.busy, PromptBusyPolicy::Send(MessageDelivery::Steer))
+                        && refusal.kind == ConversationOperationFailureKind::CannotSteer
+                    {
+                        explicit_steer_refusal(
+                            refusal,
+                            ConversationOperationFailureKind::UnsupportedCapability,
+                        )
+                    } else {
+                        refusal
+                    };
+                if owner_refused {
+                    PromptStartFailure::OwnerRefused(refusal)
                 } else {
-                    refusal
+                    refusal.into()
                 }
             })
     }

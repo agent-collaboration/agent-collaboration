@@ -124,6 +124,21 @@ impl LiveOperation {
         *lock(&self.record)
     }
 
+    pub(super) async fn wait_for_result(
+        &self,
+    ) -> Option<Result<ConversationOperationSettlement, ConversationOperationFailure>> {
+        loop {
+            let changed = self.changed.notified();
+            if let Some(result) = self.result.lock().await.clone() {
+                return Some(result);
+            }
+            if matches!(self.record(), OperationRecord::Dropped) {
+                return None;
+            }
+            changed.await;
+        }
+    }
+
     pub(super) fn binding(&self) -> Option<&EndpointRef> {
         self.binding.as_ref()
     }

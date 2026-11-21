@@ -63,6 +63,10 @@ impl SupervisorInner {
         live: Arc<LiveOperation>,
         completion: ProviderOperationCompletion,
     ) {
+        let prompt_refusal_deadline = match &completion {
+            ProviderOperationCompletion::PromptAdmissionRefused { deadline, .. } => Some(*deadline),
+            _ => None,
+        };
         // The operation's record takes its outcome first; an unknown one
         // stays live until the binding's uncertainty cell holds it.
         live.completed(match &completion {
@@ -70,17 +74,20 @@ impl SupervisorInner {
             | ProviderOperationCompletion::FailureWithSession { .. } => {
                 provider_session_machines::operation_record_machine::AttemptEnding::Applied
             }
-            ProviderOperationCompletion::Failure(failure) => match failure.effect {
-                ProviderOperationEffect::Applied => {
-                    provider_session_machines::operation_record_machine::AttemptEnding::Applied
+            ProviderOperationCompletion::Failure(failure)
+            | ProviderOperationCompletion::PromptAdmissionRefused { failure, .. } => {
+                match failure.effect {
+                    ProviderOperationEffect::Applied => {
+                        provider_session_machines::operation_record_machine::AttemptEnding::Applied
+                    }
+                    ProviderOperationEffect::None => {
+                        provider_session_machines::operation_record_machine::AttemptEnding::Refused
+                    }
+                    ProviderOperationEffect::Unknown => {
+                        provider_session_machines::operation_record_machine::AttemptEnding::Unknown
+                    }
                 }
-                ProviderOperationEffect::None => {
-                    provider_session_machines::operation_record_machine::AttemptEnding::Refused
-                }
-                ProviderOperationEffect::Unknown => {
-                    provider_session_machines::operation_record_machine::AttemptEnding::Unknown
-                }
-            },
+            }
             ProviderOperationCompletion::DispatchMarkNotWritten(_) => {
                 provider_session_machines::operation_record_machine::AttemptEnding::Refused
             }
@@ -140,8 +147,13 @@ impl SupervisorInner {
                     (Ok(settlement), Retention::Settled)
                 }
             }
-            ProviderOperationCompletion::Failure(operation_failure) => {
-                let restore_failure = live.is_restore().then(|| operation_failure.clone());
+            ProviderOperationCompletion::Failure(operation_failure)
+            | ProviderOperationCompletion::PromptAdmissionRefused {
+                failure: operation_failure,
+                ..
+            } => {
+                let observed_failure = (live.is_restore() || prompt_refusal_deadline.is_some())
+                    .then(|| operation_failure.clone());
                 let reconciliation = if operation_failure.effect == ProviderOperationEffect::Unknown
                 {
                     // Recorded on the binding's uncertainty cell before this
@@ -164,12 +176,14 @@ impl SupervisorInner {
                 };
                 let persistence =
                     self.persist_failed_operation(&operation_id, operation_failure, reconciliation);
-                if let Some(restore_failure) = restore_failure {
+                if let Some(observed_failure) = observed_failure {
+                    let deadline = prompt_refusal_deadline
+                        .unwrap_or_else(|| self.clock.monotonic_now().after(STORE_WAIT));
                     tokio::pin!(persistence);
                     let bounded = tokio::select! {
                         biased;
                         () = self.operation_cleanup_cancel.cancelled() => Err(router_clock::WaitElapsed),
-                        written = router_clock::timeout(self.clock.as_ref(), STORE_WAIT, &mut persistence) => written,
+                        written = router_clock::timeout_at(self.clock.as_ref(), deadline, &mut persistence) => written,
                     };
                     match bounded {
                         Ok(settled) => settled,
@@ -177,7 +191,7 @@ impl SupervisorInner {
                             self.publish_result(
                                 operation_id.clone(),
                                 &live,
-                                Err(restore_failure),
+                                Err(observed_failure),
                                 Retention::PersistenceFailed,
                             )
                             .await;
@@ -188,7 +202,7 @@ impl SupervisorInner {
                                 () = self.operation_cleanup_cancel.cancelled() => {}
                                 (_, retention) = &mut persistence => {
                                     if retention == Retention::PersistenceFailed {
-                                        tracing::error!(operation = operation_id.as_str(), "could not settle the late terminal write for a restore failure");
+                                        tracing::error!(operation = operation_id.as_str(), "could not settle the late terminal write for a provider failure");
                                     }
                                 }
                             }
