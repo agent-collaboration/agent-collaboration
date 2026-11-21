@@ -194,6 +194,7 @@ impl RouteHarness {
             session.endpoint.clone(),
             Arc::clone(&commands) as Arc<dyn SessionCommandPort>,
             Arc::clone(&hub) as Arc<dyn SessionEventHub>,
+            Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
         );
         tokio::spawn(Box::new(route).run(
             router,

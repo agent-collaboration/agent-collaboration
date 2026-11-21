@@ -63,11 +63,13 @@ impl AcpChannelListener {
         endpoint: SessionEndpointRef,
         commands: Arc<dyn SessionCommandPort>,
         events: Arc<dyn SessionEventHub>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Self {
         self.providers.push(ProviderRouteBackend {
             endpoint,
             commands,
             events,
+            clock,
         });
         self
     }
@@ -103,6 +105,7 @@ impl AcpChannelListener {
                             provider.endpoint.clone(),
                             Arc::clone(&provider.commands),
                             Arc::clone(&provider.events),
+                            Arc::clone(&provider.clock),
                         );
                         Box::new(route) as Box<dyn AcpSessionRoute>
                     }));
@@ -129,6 +132,7 @@ struct ProviderRouteBackend {
     endpoint: SessionEndpointRef,
     commands: Arc<dyn SessionCommandPort>,
     events: Arc<dyn SessionEventHub>,
+    clock: Arc<dyn router_clock::RuntimeClock>,
 }
 
 struct GateCodexAdmissionSource {

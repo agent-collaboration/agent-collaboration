@@ -385,6 +385,7 @@ impl CollaborationRuntime {
                     endpoint.clone(),
                     std::sync::Arc::clone(&commands),
                     std::sync::Arc::clone(&events),
+                    std::sync::Arc::clone(&worker_clock),
                 );
                 let Some(owner_human_id) = owner_human_id.as_ref() else {
                     continue;

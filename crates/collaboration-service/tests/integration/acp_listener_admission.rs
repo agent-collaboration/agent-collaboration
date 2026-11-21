@@ -49,6 +49,7 @@ async fn acp_listener_reports_unavailable_codex_without_closing_the_connection()
         provider.endpoint.clone(),
         Arc::clone(&provider) as Arc<dyn SessionCommandPort>,
         Arc::clone(&provider) as Arc<dyn SessionEventHub>,
+        Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
     );
     let stop = CancellationToken::new();
     let task = tokio::spawn(listener.run(stop.clone()));

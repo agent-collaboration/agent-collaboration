@@ -26,16 +26,61 @@ struct RestoreGate {
     release: oneshot::Receiver<()>,
 }
 
+#[derive(Clone, Copy)]
+enum InventoryRead {
+    Validation,
+    Reply,
+}
+
+struct HeldInventoryRead {
+    phase: InventoryRead,
+    gate: RestoreGate,
+}
+
 pub(super) struct RestoreFixture {
     pub(super) other: SessionRef,
     pub(super) state: Mutex<SessionState>,
     pub(super) queue_reads: Mutex<Vec<SessionRef>>,
     calls: Mutex<Vec<(RestoreMethod, SessionRef)>>,
-    clock: ManualClock,
+    clock: Arc<ManualClock>,
     gate: Mutex<Option<RestoreGate>>,
+    inventory: Mutex<Option<HeldInventoryRead>>,
 }
 
 impl RestoreFixture {
+    pub(super) fn inventory(
+        &self,
+        summaries: Vec<HubSessionSummary>,
+    ) -> HubFuture<'_, Vec<HubSessionSummary>> {
+        let unloaded = *self.state.lock().expect("restore state") == SessionState::Unloaded;
+        let mut pending = self.inventory.lock().expect("inventory gate");
+        let held =
+            pending.take_if(|read| unloaded == matches!(read.phase, InventoryRead::Validation));
+        Box::pin(async move {
+            if let Some(held) = held {
+                held.gate.entered.send(()).expect("inventory read reached");
+                held.gate.release.await.expect("inventory read released");
+            }
+            Ok(summaries)
+        })
+    }
+
+    fn hold_inventory(&self, phase: InventoryRead) -> (oneshot::Receiver<()>, oneshot::Sender<()>) {
+        let (entered, reading) = oneshot::channel();
+        let (release, released) = oneshot::channel();
+        self.inventory
+            .lock()
+            .expect("inventory gate")
+            .replace(HeldInventoryRead {
+                phase,
+                gate: RestoreGate {
+                    entered,
+                    release: released,
+                },
+            });
+        (reading, release)
+    }
+
     pub(super) fn restore(
         &self,
         method: RestoreMethod,
@@ -49,7 +94,7 @@ impl RestoreFixture {
         Box::pin(async move {
             let gate = gate.expect("one restore reached the fixture");
             gate.entered.send(()).expect("restore handshake");
-            router_clock::timeout(&self.clock, Duration::from_secs(30), gate.release)
+            router_clock::timeout(self.clock.as_ref(), Duration::from_secs(30), gate.release)
                 .await
                 .expect("fixture clock did not expire")
                 .expect("restore released");
@@ -80,6 +125,7 @@ impl RestoreConnection {
         other.session_id = "other-session".to_owned().try_into().expect("session id");
         let (report_entered, entered) = oneshot::channel();
         let (release, wait_for_release) = oneshot::channel();
+        let clock = Arc::new(ManualClock::new(chrono::DateTime::UNIX_EPOCH));
         Arc::get_mut(&mut backend)
             .expect("fixture owns the backend")
             .restore = Some(RestoreFixture {
@@ -87,11 +133,12 @@ impl RestoreConnection {
             state: Mutex::new(SessionState::Unloaded),
             queue_reads: Mutex::default(),
             calls: Mutex::default(),
-            clock: ManualClock::new(chrono::DateTime::UNIX_EPOCH),
+            clock: clock.clone(),
             gate: Mutex::new(Some(RestoreGate {
                 entered: report_entered,
                 release: wait_for_release,
             })),
+            inventory: Mutex::default(),
         });
         let closed = CancellationToken::new();
         let (input, input_frames) = bounded_acp_output(closed.clone());
@@ -100,6 +147,7 @@ impl RestoreConnection {
             backend.session.endpoint.clone(),
             backend.clone(),
             backend.clone(),
+            clock,
         ))
         .run(
             AcpRouterChannels {
@@ -126,10 +174,18 @@ impl RestoreConnection {
 
     async fn hold_restore(&mut self, method: &str) {
         request(&self.input, method, json!("first"), &self.backend.session).await;
+        self.wait_for_restore().await;
+    }
+
+    async fn wait_for_restore(&mut self) {
         tokio::select! {
             entered = &mut self.entered => entered.expect("host restore handshake"),
             result = &mut self.route => panic!("route exited before entering the restore: {result:?}"),
         }
+    }
+
+    fn fixture(&self) -> &RestoreFixture {
+        self.backend.restore.as_ref().expect("restore fixture")
     }
 }
 
@@ -261,4 +317,159 @@ async fn closing_connection_drops_pending_resume_before_returning() {
         connection.release.is_closed(),
         "the route left the restore task running"
     );
+}
+
+#[tokio::test]
+async fn held_restore_inventory_validation_leaves_the_other_session_responsive() {
+    let mut connection = RestoreConnection::new();
+    let other = connection.fixture().other.clone();
+    let (reading, release) = connection
+        .fixture()
+        .hold_inventory(InventoryRead::Validation);
+    request(
+        &connection.input,
+        "session/load",
+        json!("first"),
+        &connection.backend.session,
+    )
+    .await;
+    reaches_inventory(&mut connection.route, reading).await;
+
+    assert_other_session_replies(
+        &connection.input,
+        &mut connection.route,
+        &mut connection.replies,
+        &other,
+    )
+    .await;
+
+    release.send(()).expect("release validation");
+    connection.wait_for_restore().await;
+    connection.release.send(()).expect("release activation");
+    let reply = next_response(&mut connection.route, &mut connection.replies).await;
+    assert_eq!(reply["id"], "first");
+    assert_eq!(
+        reply["result"]["sessionId"],
+        connection.backend.session.session_id.as_str()
+    );
+    connection.closed.cancel();
+    connection.route.await.expect("route shutdown");
+}
+
+#[tokio::test]
+async fn held_restore_reply_inventory_leaves_the_other_session_responsive() {
+    let mut connection = RestoreConnection::new();
+    let other = connection.fixture().other.clone();
+    let (reading, release) = connection.fixture().hold_inventory(InventoryRead::Reply);
+    connection.hold_restore("session/resume").await;
+    connection.release.send(()).expect("release activation");
+    reaches_inventory(&mut connection.route, reading).await;
+    request(
+        &connection.input,
+        "_session/queue/list",
+        json!("same-session"),
+        &connection.backend.session,
+    )
+    .await;
+
+    assert_other_session_replies(
+        &connection.input,
+        &mut connection.route,
+        &mut connection.replies,
+        &other,
+    )
+    .await;
+
+    release.send(()).expect("release reply inventory");
+    let reply = next_response(&mut connection.route, &mut connection.replies).await;
+    assert_eq!(reply["id"], "first");
+    assert_eq!(
+        reply["result"]["sessionId"],
+        connection.backend.session.session_id.as_str()
+    );
+    let queued = next_response(&mut connection.route, &mut connection.replies).await;
+    assert_eq!(
+        queued,
+        json!({"jsonrpc":"2.0","id":"same-session","result":{"items":[]}})
+    );
+    connection.closed.cancel();
+    connection.route.await.expect("route shutdown");
+}
+
+async fn reaches_inventory(route: &mut AcpRouteFuture, reading: oneshot::Receiver<()>) {
+    tokio::select! {
+        entered = reading => entered.expect("inventory read handshake"),
+        result = route => panic!("route exited before the inventory read: {result:?}"),
+    }
+}
+
+async fn assert_other_session_replies(
+    input: &AcpOutputSender,
+    route: &mut AcpRouteFuture,
+    replies: &mut mpsc::Receiver<QueuedAcpFrame>,
+    other: &SessionRef,
+) {
+    request(input, "_session/queue/list", json!("other"), other).await;
+    poll_fn(|cx| {
+        assert!(route.as_mut().poll(cx).is_pending());
+        Poll::Ready(())
+    })
+    .await;
+    let reply = replies
+        .try_recv()
+        .expect("the other session must reply while inventory is held");
+    assert_eq!(
+        *reply,
+        json!({"jsonrpc":"2.0","id":"other","result":{"items":[]}})
+    );
+}
+
+#[tokio::test]
+async fn both_restore_inventory_reads_expire_on_the_route_clock() {
+    for phase in [InventoryRead::Validation, InventoryRead::Reply] {
+        let mut connection = RestoreConnection::new();
+        let clock = connection.fixture().clock.clone();
+        let (reading, release) = connection.fixture().hold_inventory(phase);
+        match phase {
+            InventoryRead::Validation => {
+                request(
+                    &connection.input,
+                    "session/load",
+                    json!("first"),
+                    &connection.backend.session,
+                )
+                .await;
+            }
+            InventoryRead::Reply => {
+                connection.hold_restore("session/resume").await;
+                connection.release.send(()).expect("release activation");
+            }
+        }
+        reaches_inventory(&mut connection.route, reading).await;
+
+        clock
+            .advance(Duration::from_secs(10))
+            .expect("reach the inventory deadline");
+        let reply = next_response(&mut connection.route, &mut connection.replies).await;
+        assert_eq!(
+            reply,
+            json!({
+                "jsonrpc":"2.0", "id":"first",
+                "error":{"code":-32000,"message":"the store didn't respond in time"}
+            })
+        );
+        assert!(
+            release.is_closed(),
+            "the route dropped its expired inventory read"
+        );
+        let fixture = connection
+            .backend
+            .restore
+            .as_ref()
+            .expect("restore fixture");
+        let calls = fixture.calls.lock().expect("restore calls").len();
+        assert_eq!(calls, usize::from(matches!(phase, InventoryRead::Reply)));
+        connection.closed.cancel();
+        connection.route.await.expect("route shutdown");
+    }
 }

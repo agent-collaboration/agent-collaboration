@@ -228,17 +228,16 @@ impl SessionEventHub for RecordingSessionBackend {
             mode: None,
             state: SessionState::Idle,
         };
-        let summaries = if let Some(fixture) = &self.restore {
+        if let Some(fixture) = &self.restore {
             let other = HubSessionSummary {
                 session: fixture.other.clone(),
                 ..summary.clone()
             };
             summary.state = fixture.state.lock().expect("restore state").clone();
-            vec![summary, other]
+            fixture.inventory(vec![summary, other])
         } else {
-            vec![summary]
-        };
-        Box::pin(async move { Ok(summaries) })
+            Box::pin(async move { Ok(vec![summary]) })
+        }
     }
 }
 
@@ -264,6 +263,7 @@ async fn session_new_asks_for_auto() -> Result<(), Box<dyn std::error::Error>> {
         endpoint,
         Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
         Arc::clone(&backend) as Arc<dyn SessionEventHub>,
+        Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
     ));
     let served = tokio::spawn(route.run(
         codex_acp_adapter::AcpRouterChannels {
@@ -354,6 +354,7 @@ impl BusyRouteHarness {
             endpoint,
             Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
             Arc::clone(&backend) as Arc<dyn SessionEventHub>,
+            Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
         ));
         let served = tokio::spawn(route.run(
             codex_acp_adapter::AcpRouterChannels {

@@ -123,6 +123,7 @@ impl FailureRoute {
             session.endpoint.clone(),
             port,
             hub,
+            clock.clone(),
         ));
         let route = tokio::spawn(route.run(
             AcpRouterChannels {
