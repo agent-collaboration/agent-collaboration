@@ -235,6 +235,21 @@ async fn human_mcp_prompt_and_exact_cancel_reach_real_host_runtime() -> TestResu
         cancelled["result"]["structuredContent"]["operation"]["operationId"],
         json!(cancel_id)
     );
+    // The submission acknowledges admission. Keep the fixture turn open
+    // until the exact cancel has reached the owner's ordered writer.
+    let cancellation = client
+        .wait_for_provider_conversation_operation(ConversationOperationWaitRequest {
+            operation_id: cancel_id.clone(),
+            timeout_seconds: PositiveSeconds::try_from(3)?,
+        })
+        .await
+        .map_err(|error| format!("exact cancel writer receipt: {error:?}"))?;
+    check!(
+        matches!(cancellation.output, ConversationOperationWaitOutput::Available {
+        settlement: ConversationOperationSettlement::CancelRequested { target: ref cancelled_target, target_operation_id: ref operation }
+    } if cancelled_target == &target && operation == &prompt_id),
+        "{cancellation:?}"
+    );
     let mut release = tokio::net::UnixStream::connect(root.path().join("exit.sock")).await?;
     use tokio::io::AsyncWriteExt as _;
     release.write_all(b"c").await?;
@@ -256,18 +271,6 @@ async fn human_mcp_prompt_and_exact_cancel_reach_real_host_runtime() -> TestResu
     );
 
     // Assert: real operation readback, binding generation, cancelled turn and durable roles.
-    let cancellation = client
-        .wait_for_provider_conversation_operation(ConversationOperationWaitRequest {
-            operation_id: cancel_id.clone(),
-            timeout_seconds: PositiveSeconds::try_from(3)?,
-        })
-        .await?;
-    check!(
-        matches!(cancellation.output, ConversationOperationWaitOutput::Available {
-        settlement: ConversationOperationSettlement::CancelRequested { target: ref cancelled_target, target_operation_id: ref operation }
-    } if cancelled_target == &target && operation == &prompt_id),
-        "{cancellation:?}"
-    );
     check_eq!(
         listed_state(&client, &target).await?,
         ProviderSessionState::Idle

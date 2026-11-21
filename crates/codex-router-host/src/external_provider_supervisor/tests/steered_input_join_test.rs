@@ -13,6 +13,9 @@ use session_event_model::SessionEvent;
 #[path = "provider_prompt_wire_test.rs"]
 mod provider_prompt_wire;
 
+#[path = "cancel_after_turn_test.rs"]
+mod cancel_after_turn_tests;
+
 /// A steering agent that holds its first turn open, on a supervisor whose
 /// session is recorded on a real hub.
 async fn create_test_session(
