@@ -4,7 +4,7 @@ use fleet_rpc::{CallFailure, Rpc, RpcClient, Transport};
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 use workspace_model::{
-    ActorIdentityId, RefusalReason, RequestId, Timestamp, WorkspaceId, WorkspaceResult,
+    ActorIdentityId, ItemRef, RefusalReason, RequestId, Timestamp, WorkspaceAnswer, WorkspaceId,
 };
 
 /// Protocol selected by the owning workspace service client.
@@ -24,17 +24,31 @@ pub struct ReadWorkspaceRequestStatus {
     pub cutoff: Timestamp,
 }
 
+/// Decisions retained by the owning workspace, or the absence of a visible receipt.
+///
+/// A transient request outcome cannot be returned as a retained answer.
+/// ```compile_fail,E0308
+/// use fleet_contracts::RetainedWorkspaceStatus;
+/// use workspace_model::WorkspaceResult;
+/// let _ = RetainedWorkspaceStatus::Done(Box::new(WorkspaceResult::OutcomeUnknown));
+/// ```
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
     tag = "kind",
     content = "value",
     rename_all = "camelCase",
+    rename_all_fields = "camelCase",
     deny_unknown_fields
 )]
 pub enum RetainedWorkspaceStatus {
+    /// No visible retained receipt matches the query.
     NotFound,
     Refused(RefusalReason),
-    Answered(Box<WorkspaceResult>),
+    Done(Box<WorkspaceAnswer>),
+    ItemNotFound {
+        workspace_id: WorkspaceId,
+        item: ItemRef,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]

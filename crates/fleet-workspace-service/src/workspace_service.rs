@@ -45,8 +45,9 @@ where
         // receipts consistently report a storage failure.
         let status = match answer {
             WorkspaceResult::Refused(reason) => RetainedWorkspaceStatus::Refused(reason),
-            result @ (WorkspaceResult::Done(_) | WorkspaceResult::NotFound { .. }) => {
-                RetainedWorkspaceStatus::Answered(Box::new(result))
+            WorkspaceResult::Done(answer) => RetainedWorkspaceStatus::Done(Box::new(answer)),
+            WorkspaceResult::NotFound { workspace_id, item } => {
+                RetainedWorkspaceStatus::ItemNotFound { workspace_id, item }
             }
             WorkspaceResult::Conflict
             | WorkspaceResult::OutcomeUnknown

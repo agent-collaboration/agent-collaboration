@@ -1,8 +1,9 @@
 use super::WorkspaceService;
 use central_storage::{CorruptReason, StoreFailure};
 use fleet_contracts::{ReadWorkspaceRequestStatus, RetainedWorkspaceStatus, WorkspaceServiceRpc};
+use serde_json::json;
 use sqlx::SqlitePool;
-use workspace_model::{ActorIdentityId, RequestId, WorkspaceResult};
+use workspace_model::{ActorIdentityId, ItemRef, RequestId, WorkspaceAnswer, WorkspaceResult};
 
 type TestResult<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -111,4 +112,70 @@ async fn damaged_answer_is_corrupt_even_for_the_other_actor() -> TestResult<()> 
         );
     }
     Ok(())
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the exact wire shape read from migrated SQLite"
+)]
+async fn stored_success_and_missing_item_have_distinct_status_wire_tags() -> TestResult<()> {
+    let db = database().await?;
+    let workspace_id = "019f0000-0000-7000-8000-000000000031";
+    let area_id = "019f0000-0000-7000-8000-000000000032";
+    let item = ItemRef::Area(area_id.parse()?);
+    let wire_item = json!({"kind": "area", "id": area_id});
+
+    let receipts = [
+        (
+            REQUEST,
+            WorkspaceResult::Done(WorkspaceAnswer::Unchanged { item: item.clone() }),
+            json!({"kind": "done", "value": {"kind": "unchanged", "item": wire_item}}),
+        ),
+        (
+            OTHER_REQUEST,
+            WorkspaceResult::NotFound {
+                workspace_id: workspace_id.parse()?,
+                item,
+            },
+            json!({"kind": "itemNotFound", "value": {"workspaceId": workspace_id, "item": wire_item}}),
+        ),
+    ];
+    for (request, result, expected) in receipts {
+        insert_receipt(&db, request, FRESH, &serde_json::to_string(&result)?).await?;
+        let retained = status(&db, request, ACTOR).await??;
+        assert_eq!(serde_json::to_value(&retained)?, expected);
+        assert_eq!(
+            serde_json::from_value::<RetainedWorkspaceStatus>(expected)?,
+            retained
+        );
+    }
+    assert_eq!(
+        status(&db, OTHER_REQUEST, FOREIGN).await??,
+        RetainedWorkspaceStatus::NotFound
+    );
+    Ok(())
+}
+
+#[test]
+fn status_wire_rejects_nonretained_results_and_unknown_fields() {
+    let rejected = [
+        json!({"kind": "answered", "value": {"kind": "conflict"}}),
+        json!({"kind": "conflict"}),
+        json!({"kind": "outcomeUnknown"}),
+        json!({"kind": "centralUnavailable"}),
+        json!({"kind": "notFound", "extra": true}),
+        json!({"kind": "itemNotFound", "value": {
+            "workspaceId": "019f0000-0000-7000-8000-000000000031",
+            "item": {"kind": "area", "id": "019f0000-0000-7000-8000-000000000032"},
+            "extra": true
+        }}),
+    ];
+    for reply in rejected {
+        let decoded = serde_json::from_value::<RetainedWorkspaceStatus>(reply.clone());
+        assert!(
+            decoded.is_err(),
+            "unexpected retained status for {reply}: {decoded:?}"
+        );
+    }
 }

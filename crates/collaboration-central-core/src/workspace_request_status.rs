@@ -93,8 +93,14 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 RetainedWorkspaceStatus::Refused(reason) => Some(OrganizationDecision::Workspace(
                     WorkspaceResult::Refused(reason),
                 )),
-                RetainedWorkspaceStatus::Answered(result) => {
-                    Some(OrganizationDecision::Workspace(*result))
+                RetainedWorkspaceStatus::Done(answer) => Some(OrganizationDecision::Workspace(
+                    WorkspaceResult::Done(*answer),
+                )),
+                RetainedWorkspaceStatus::ItemNotFound { workspace_id, item } => {
+                    Some(OrganizationDecision::Workspace(WorkspaceResult::NotFound {
+                        workspace_id,
+                        item,
+                    }))
                 }
             }
         } else {
@@ -139,9 +145,22 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 RequestStatusAnswer::Answered(ReplyPayload::Mail(result))
             }
             Some(
-                OrganizationDecision::Workspace(_)
-                | OrganizationDecision::Mail(_)
-                | OrganizationDecision::PrivateAdmin(_),
+                OrganizationDecision::Workspace(
+                    WorkspaceResult::Conflict
+                    | WorkspaceResult::OutcomeUnknown
+                    | WorkspaceResult::CentralUnavailable,
+                )
+                | OrganizationDecision::Mail(
+                    CentralMailResult::Conflict
+                    | CentralMailResult::OutcomeUnknown
+                    | CentralMailResult::CentralUnavailable,
+                )
+                | OrganizationDecision::PrivateAdmin(
+                    OrganizationAdminResult::Found { .. }
+                    | OrganizationAdminResult::Records { .. }
+                    | OrganizationAdminResult::EngineHealth { .. }
+                    | OrganizationAdminResult::EngineRetired { .. },
+                ),
             ) => {
                 return Err(corrupt("request log answer"));
             }
