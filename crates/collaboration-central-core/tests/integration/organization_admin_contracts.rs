@@ -1,5 +1,5 @@
 //! Literal T06 admin wire oracles and serializer-generated artifact freshness.
-use crate::contract_artifacts;
+use crate::{contract_artifacts, schema_validation};
 use collaboration_central_core::{
     OrganizationAdminResult,
     identity_contract::{AuthorizationRevision, AuthorizationRevisionAcknowledgement},
@@ -88,16 +88,31 @@ fn organization_admin_result_wire_contract() {
 
 #[test]
 fn create_workspace_request_wire_contract() {
-    let boundaries = description_boundaries(
-        json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","operationId":"019a3dce-2000-7000-8000-000000000003","name":"Fixture workspace","description":"Fixture description"}),
-        "/description",
-    );
+    let request = json!({
+        "organizationId":"019a3dce-2000-7000-8000-000000000001",
+        "operationId":"019a3dce-2000-7000-8000-000000000003",
+        "name":"Fixture workspace",
+        "description":"Fixture description"
+    });
+    let boundaries = description_boundaries(request.clone(), "/description");
     contract_artifacts::assert_contract::<CreateWorkspaceRequest>(
         "CreateWorkspaceRequest",
-        vec![
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","operationId":"019a3dce-2000-7000-8000-000000000003","name":"Fixture workspace","description":"Fixture description"}),
-        ].into_iter().chain(boundaries).collect(),
+        std::iter::once(request.clone()).chain(boundaries).collect(),
         false,
+    );
+
+    let mut oversized_name = request;
+    oversized_name["name"] = json!(format!("{}a", "é".repeat(128)));
+    assert!(
+        serde_json::from_value::<CreateWorkspaceRequest>(oversized_name.clone()).is_err(),
+        "Serde accepted a workspace name of 257 UTF-8 bytes"
+    );
+    let schema = serde_json::to_value(schemars::schema_for!(CreateWorkspaceRequest)).unwrap();
+    assert!(
+        !schema_validation::contract_validator(&schema)
+            .unwrap()
+            .is_valid(&oversized_name),
+        "schema accepted a workspace name of 257 UTF-8 bytes"
     );
 }
 

@@ -2,11 +2,10 @@
 #[cfg(test)]
 use crate::contract_artifacts;
 use collaboration_central_core::identity_contract::{
-    AdmitMachineConnection, AdmittedMachine, AllowedWorkspaces, DecideDeviceLogin,
-    DecideMachineToken, DeviceLoginDecision, DeviceLoginRefusal, DisableMachineClient,
-    DisabledMachineClient, EndedMachineClient, EnrollPermission, MachineConnectionAdmission,
-    MachinePrincipal, MachineTokenClaims, MachineTokenDecision, MachineTokenRefusal,
-    OrganizationStanding, PersonAdmissionRequest, PresentedMachine, StandingRole,
+    AllowedWorkspaces, DecideDeviceLogin, DecideMachineToken, DeviceLoginDecision,
+    DeviceLoginRefusal, DisableMachineClient, DisabledMachineClient, EndedMachineClient,
+    EnrollPermission, MachinePrincipal, MachineTokenClaims, MachineTokenDecision,
+    MachineTokenRefusal, PresentedMachine,
 };
 use fleet_contracts::MachineConnectionRefusal;
 use serde_json::json;
@@ -137,44 +136,6 @@ fn presented_machine_wire_contract() {
 }
 
 #[test]
-fn admit_machine_connection_wire_contract() {
-    contract_artifacts::assert_contract::<AdmitMachineConnection>(
-        "AdmitMachineConnection",
-        vec![
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","clientId":"019a3dce-2000-7000-8000-000000000002","presented":{"machineId":"019a3dce-2000-7000-8000-000000000001"},"tokenExpiresAt":1793448600_i64}),
-        ],
-        false,
-    );
-}
-
-#[test]
-fn admitted_machine_wire_contract() {
-    contract_artifacts::assert_contract::<AdmittedMachine>(
-        "AdmittedMachine",
-        vec![
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","tokenExpiresAt":1793448600_i64}),
-        ],
-        false,
-    );
-}
-
-#[test]
-fn machine_connection_admission_wire_contract() {
-    contract_artifacts::assert_contract::<MachineConnectionAdmission>(
-        "MachineConnectionAdmission",
-        vec![
-            json!({"result":"admitted","machine":{"organizationId":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","tokenExpiresAt":1793448600_i64}}),
-            json!({"result":"refused","reason":{"kind":"unknownMachine"}}),
-            json!({"result":"refused","reason":{"kind":"enrollmentNotActive"}}),
-            json!({"result":"refused","reason":{"kind":"superseded"}}),
-            json!({"result":"refused","reason":{"kind":"machineInAnotherOrganization"}}),
-            json!({"result":"refused","reason":{"kind":"wrongClient"}}),
-        ],
-        false,
-    );
-}
-
-#[test]
 fn machine_connection_refusal_wire_contract() {
     contract_artifacts::assert_contract::<MachineConnectionRefusal>(
         "MachineConnectionRefusal",
@@ -185,42 +146,6 @@ fn machine_connection_refusal_wire_contract() {
             json!({"kind":"machineInAnotherOrganization"}),
             json!({"kind":"wrongClient"}),
         ],
-        false,
-    );
-}
-
-#[test]
-fn person_admission_request_wire_contract() {
-    contract_artifacts::assert_contract::<PersonAdmissionRequest>(
-        "PersonAdmissionRequest",
-        vec![
-            json!({"operation":"admitSignIn","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002"}),
-            json!({"operation":"admitSignIn","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002","verifiedEmail":"fixture@example.invalid"}),
-            json!({"operation":"standing","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002"}),
-        ],
-        false,
-    );
-}
-
-#[test]
-fn organization_standing_wire_contract() {
-    contract_artifacts::assert_contract::<OrganizationStanding>(
-        "OrganizationStanding",
-        vec![
-            json!({"result":"admitted","role":"owner"}),
-            json!({"result":"admitted","role":"member"}),
-            json!({"result":"awaitingOwner"}),
-            json!({"result":"notAdmitted"}),
-        ],
-        false,
-    );
-}
-
-#[test]
-fn standing_role_wire_contract() {
-    contract_artifacts::assert_contract::<StandingRole>(
-        "StandingRole",
-        vec![json!("member"), json!("owner")],
         false,
     );
 }

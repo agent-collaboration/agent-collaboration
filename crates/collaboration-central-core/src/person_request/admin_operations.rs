@@ -74,10 +74,6 @@ impl WorkspaceName {
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
-    #[must_use]
-    pub fn resource_name(&self) -> &message_board::ResourceName {
-        &self.0
-    }
 }
 impl JsonSchema for WorkspaceName {
     fn schema_name() -> std::borrow::Cow<'static, str> {

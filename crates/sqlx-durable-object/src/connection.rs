@@ -32,13 +32,6 @@ impl DoConnection {
     pub fn sql(&self) -> &worker::SqlStorage {
         &self.sql
     }
-
-    /// The storage this connection wraps, giving up the connection. See
-    /// [`storage`](Self::storage) to borrow it instead.
-    #[must_use]
-    pub fn into_storage(self) -> worker::Storage {
-        self.storage.0
-    }
 }
 
 impl From<worker::Storage> for DoConnection {

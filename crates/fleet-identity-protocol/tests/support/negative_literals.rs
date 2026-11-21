@@ -3,16 +3,13 @@ use serde_json::{Value, json};
 pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
     let mut invalid = vec![Value::Null];
     match name {
-        "DecideDeviceLogin" | "PresentedMachine" | "AdmittedMachine" => {
+        "DecideDeviceLogin" | "PresentedMachine" => {
             if let Some(first) = literals.first() {
                 for peer in ["00000000-0000-4000-8000-000000000001", "019A3DCE-2000-7000-8000-000000000001"] {
                     let mut value = first.clone(); value["peer"] = json!(peer); invalid.push(value);
                 }
             }
         }
-        "OwnerRefusal" => invalid.push(json!({"kind":"secondFactorRequired","withinSeconds":900})),
-        "IdentityLookupResult" | "WorkspaceLookupResult" | "MachineLookupResult" | "CommandStatusResult" | "WhoIsLoggedInResult" => invalid.push(json!({"result":"refused","reason":{"kind":"secondFactorRequired","withinSeconds":900}})),
-        "IdentityLookup" => invalid.push(json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","subject":{"kind":"person","personId":"019a3dce-2000-7000-8000-000000000001"}})),
         "AbsolutePath" => invalid.extend([
             json!("relative"), json!("C:\\x"), json!(""), json!("/nul\0"),
             json!(format!("/{}", "a".repeat(4096))),
@@ -41,16 +38,15 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
         "SequenceNumber" => invalid.extend([json!(9007199254740992_u64), json!(-1), json!(1.5)]),
         "IsolationKind" => invalid.extend([json!("Host"),json!("process-sandbox"),json!("unknown")]),
         "MachineEnvironment" => invalid.extend([json!("Physical"),json!("cloud-vm"),json!("unknown")]),
-        "Activity" | "SessionEndCause" | "HarnessKind" | "RemoteLaunchAccess" | "StandingRole" | "SessionStateView" | "AllowanceState" => {
+        "Activity" | "SessionEndCause" | "HarnessKind" | "RemoteLaunchAccess" | "AllowanceState" => {
             invalid.push(json!("unrecognizedVariant"));
             for literal in literals { if let Some(value) = literal.as_str() { invalid.push(json!(value.to_uppercase())); } }
         }
         "Heartbeat" => invalid.push(json!({"capabilities":["RemoteStart"]})),
-        "ReportSessionActivity" | "MachinePresenceAnswer" => {
+        "ReportSessionActivity" => {
             if let Some(first) = literals.first() {
                 let mut value = first.clone();
-                let field = if name == "ReportSessionActivity" { "sequence" } else { "attachSequence" };
-                value[field] = json!(9007199254740992_u64);
+                value["sequence"] = json!(9007199254740992_u64);
                 invalid.push(value);
             }
         }

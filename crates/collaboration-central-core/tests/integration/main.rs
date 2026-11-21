@@ -7,7 +7,6 @@ mod contract_artifacts;
 #[path = "../support/schema_validation.rs"]
 mod schema_validation;
 
-mod admin_lookup_result_contracts;
 mod enrollment_contracts;
 mod identity_boundary_rules;
 mod issuer_decision_contracts;
@@ -15,4 +14,3 @@ mod machine_claim_boundaries;
 mod machine_login_mirror_vectors;
 mod organization_admin_contracts;
 mod organization_command_contracts;
-mod presence_lookup_contracts;
