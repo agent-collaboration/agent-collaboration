@@ -6,6 +6,7 @@ use crate::{
 use collaboration_central_core::WorkspaceCaller;
 use fleet_contracts::{
     WorkspaceRequest as WorkspaceRpcRequest, WorkspaceResponse, WorkspaceServiceProtocol,
+    WorkspaceStatusFailure,
 };
 use fleet_rpc::{CallFailure, Envelope, Transport, dispatch};
 use fleet_workspace_service::WorkspaceService;
@@ -113,14 +114,14 @@ impl Transport<WorkspaceServiceProtocol> for TokioWorkspaceStores {
         dispatch::<WorkspaceServiceProtocol, _, _>(&workspace, request, |call| async {
             let store = match self.store(&workspace).await {
                 Ok(store) => store,
-                Err(failure) => return call.unavailable_reply(failure),
+                Err(_) => return call.unavailable_reply(WorkspaceStatusFailure::Unavailable),
             };
             match store.workspace_pool().await {
                 Ok(pool) => {
                     fleet_contracts::dispatch_workspace_request(&WorkspaceService::new(pool), call)
                         .await
                 }
-                Err(failure) => call.unavailable_reply(failure),
+                Err(_) => call.unavailable_reply(WorkspaceStatusFailure::Unavailable),
             }
         })
         .await

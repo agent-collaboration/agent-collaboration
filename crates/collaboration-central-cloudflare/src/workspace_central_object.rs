@@ -149,7 +149,7 @@ struct WorkspaceTransport {
     #[cfg(feature = "test-support")]
     lose_read: Arc<std::sync::atomic::AtomicBool>,
     #[cfg(feature = "test-support")]
-    calls: Arc<workspace_cases::WorkspaceCallCounts>,
+    legacy_workspace_calls: Arc<std::sync::atomic::AtomicUsize>,
 }
 impl WorkspaceStores for WorkspaceTransport {
     fn call_workspace(
@@ -161,8 +161,7 @@ impl WorkspaceStores for WorkspaceTransport {
         let id = id.clone();
         SendFuture::new(async move {
             #[cfg(feature = "test-support")]
-            self.calls
-                .legacy
+            self.legacy_workspace_calls
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             #[cfg(feature = "test-support")]
             let is_read = matches!(&call, StoreCall::Read(_));
@@ -190,10 +189,6 @@ impl Transport<WorkspaceServiceProtocol> for WorkspaceTransport {
         >,
     > + Send {
         SendFuture::new(async move {
-            #[cfg(feature = "test-support")]
-            self.calls
-                .rpc
-                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             let answer = crate::cloudflare_transport::workspace_exchange(
                 &self.env,
                 request.target.clone(),
@@ -293,7 +288,7 @@ impl CentralObject {
                 #[cfg(feature = "test-support")]
                 lose_read: self.controls.lose_read.clone(),
                 #[cfg(feature = "test-support")]
-                calls: self.controls.workspace_calls.clone(),
+                legacy_workspace_calls: self.controls.legacy_workspace_calls.clone(),
             },
             clock.clone(),
             Arc::new(ClockIds::new(self.clock.clone())),

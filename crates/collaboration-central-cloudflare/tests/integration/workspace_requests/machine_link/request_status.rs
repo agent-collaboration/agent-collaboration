@@ -37,18 +37,11 @@ async fn query_journey(fixture: &Fixture) -> Result<()> {
         },
     )
     .await?;
-    let ReplyPayload::Workspace(WorkspaceReply {
-        result: WorkspaceResult::Done(WorkspaceAnswer::WorkspaceCreated { workspace }),
-        ..
-    }) = &organization_reply
-    else {
-        return Err("create did not retain a workspace".into());
-    };
-    let workspace = &workspace.workspace_id;
+    let workspace = created_workspace(&organization_reply)?;
     let runtime = fixture.runtime();
 
     let before_refusal = runtime
-        .control::<[u64; 2]>("raw-workspace-call-counts", &())
+        .control::<u64>("raw-legacy-workspace-call-count", &())
         .await?;
     check_status(
         &mut link,
@@ -60,9 +53,13 @@ async fn query_journey(fixture: &Fixture) -> Result<()> {
     .await?;
     assert_eq!(
         runtime
-            .control::<[u64; 2]>("raw-workspace-call-counts", &())
+            .control::<u64>("raw-legacy-workspace-call-count", &())
             .await?,
         before_refusal
+    );
+    assert_eq!(
+        workspace_storage_state(fixture, workspace).await?,
+        StorageState::default()
     );
 
     fixture.allow_workspace(workspace).await?;
@@ -85,9 +82,12 @@ async fn query_journey(fixture: &Fixture) -> Result<()> {
         })
     ));
     let before_rows = stored_state(fixture, workspace).await?;
-    let [legacy, typed] = runtime
-        .control::<[u64; 2]>("raw-workspace-call-counts", &())
+    let legacy = runtime
+        .control::<u64>("raw-legacy-workspace-call-count", &())
         .await?;
+    let typed = workspace_storage_state(fixture, workspace)
+        .await?
+        .typed_dispatches;
     for (scope, id, correlation, answer, expected_typed) in [
         (
             RequestScope::Organization,
@@ -113,10 +113,17 @@ async fn query_journey(fixture: &Fixture) -> Result<()> {
     ] {
         check_status(&mut link, id, scope, correlation, answer).await?;
         assert_eq!(
+            workspace_storage_state(fixture, workspace)
+                .await?
+                .typed_dispatches,
+            expected_typed,
+            "the owning object must dispatch once for each admitted workspace status"
+        );
+        assert_eq!(
             runtime
-                .control::<[u64; 2]>("raw-workspace-call-counts", &())
+                .control::<u64>("raw-legacy-workspace-call-count", &())
                 .await?,
-            [legacy, expected_typed]
+            legacy
         );
     }
     assert_eq!(stored_state(fixture, workspace).await?, before_rows);
@@ -126,6 +133,13 @@ async fn query_journey(fixture: &Fixture) -> Result<()> {
     let scope = RequestScope::Workspace(workspace.clone());
     let frame = status_frame(&workspace_request, scope.clone(), 0x17)?;
     assert_link_store_failure(&mut link, &frame).await?;
+    assert_eq!(
+        workspace_storage_state(fixture, workspace)
+            .await?
+            .typed_dispatches,
+        typed + 3,
+        "the receiving object must dispatch the attempt whose answer was lost"
+    );
     let mut link = ConnectedLink::open(fixture).await?;
     check_status(
         &mut link,
@@ -136,13 +150,94 @@ async fn query_journey(fixture: &Fixture) -> Result<()> {
     )
     .await?;
     assert_eq!(
+        workspace_storage_state(fixture, workspace)
+            .await?
+            .typed_dispatches,
+        typed + 4,
+        "the retry must dispatch once at the receiving object"
+    );
+    assert_eq!(
         runtime
-            .control::<[u64; 2]>("raw-workspace-call-counts", &())
+            .control::<u64>("raw-legacy-workspace-call-count", &())
             .await?,
-        [legacy, typed + 4]
+        legacy
     );
     assert_eq!(stored_state(fixture, workspace).await?, before_rows);
     check_corruption(fixture, &mut link, workspace, &workspace_request).await
+}
+
+#[tokio::test]
+async fn worker_machine_link_status_opens_cold_workspace() -> Result<()> {
+    let fixture = Fixture::new().await?;
+    let result = cold_status_journey(&fixture).await;
+    fixture.close().await?;
+    result
+}
+
+async fn cold_status_journey(fixture: &Fixture) -> Result<()> {
+    let mut link = ConnectedLink::open(fixture).await?;
+    let runtime = fixture.runtime();
+    let legacy = runtime
+        .control::<u64>("raw-legacy-workspace-call-count", &())
+        .await?;
+    let reply = call(
+        &mut link,
+        &"019f0000-0000-7000-8000-00000000cf31".parse()?,
+        None,
+        WorkspaceOperation::CreateWorkspace {
+            name: "Cold status workspace".to_owned().try_into()?,
+        },
+    )
+    .await?;
+    let workspace = created_workspace(&reply)?;
+    fixture.allow_workspace(workspace).await?;
+
+    // The first call to the owning object is the status request over the link.
+    check_status(
+        &mut link,
+        &"019f0000-0000-7000-8000-00000000cf32".parse()?,
+        RequestScope::Workspace(workspace.clone()),
+        0x33,
+        RequestStatusAnswer::NotFound,
+    )
+    .await?;
+    assert_eq!(
+        workspace_storage_state(fixture, workspace).await?,
+        StorageState {
+            opened: true,
+            migrated: true,
+            typed_dispatches: 1
+        },
+        "a first typed status must open and migrate the store"
+    );
+    assert_eq!(
+        runtime
+            .control::<u64>("raw-legacy-workspace-call-count", &())
+            .await?,
+        legacy
+    );
+    Ok(())
+}
+
+fn created_workspace(reply: &ReplyPayload) -> Result<&WorkspaceId> {
+    let ReplyPayload::Workspace(WorkspaceReply {
+        result: WorkspaceResult::Done(WorkspaceAnswer::WorkspaceCreated { workspace }),
+        ..
+    }) = reply
+    else {
+        return Err("create did not retain a workspace".into());
+    };
+    Ok(&workspace.workspace_id)
+}
+
+async fn workspace_storage_state(
+    fixture: &Fixture,
+    workspace: &WorkspaceId,
+) -> Result<StorageState> {
+    Ok(fixture
+        .runtime()
+        .control("raw-workspace-storage-state", workspace)
+        .await?)
 }
 
 async fn call(
@@ -216,13 +311,21 @@ async fn stored_state(
     Ok((central, owning, completions))
 }
 
+#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct StorageState {
+    opened: bool,
+    migrated: bool,
+    typed_dispatches: u32,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AddressReceipt {
     status: u16,
     body: String,
-    storage_before: [bool; 2],
-    storage_after: [bool; 2],
+    storage_before: StorageState,
+    storage_after: StorageState,
 }
 
 fn workspace_header(workspace: &str) -> Value {
@@ -291,8 +394,14 @@ async fn check_corruption(
         )
         .await?;
     assert_eq!(receipt.status, 200, "{}", receipt.body);
-    assert_eq!(receipt.storage_before, [true, true]);
-    assert_eq!(receipt.storage_after, [true, true]);
+    assert!(receipt.storage_before.opened && receipt.storage_before.migrated);
+    assert_eq!(
+        receipt.storage_after,
+        StorageState {
+            typed_dispatches: receipt.storage_before.typed_dispatches + 1,
+            ..receipt.storage_before
+        }
+    );
     let envelope: Envelope<WorkspaceId, Value> = serde_json::from_str(&receipt.body)?;
     assert_eq!(envelope.target, *workspace);
     assert_eq!(
@@ -366,12 +475,12 @@ async fn check_address_mismatches(fixture: &Fixture) -> Result<()> {
         );
         assert_eq!(
             receipt.storage_before,
-            [false, false],
+            StorageState::default(),
             "{case} fixture should start cold"
         );
         assert_eq!(
             receipt.storage_after,
-            [false, false],
+            StorageState::default(),
             "{case} ran before validation"
         );
     }

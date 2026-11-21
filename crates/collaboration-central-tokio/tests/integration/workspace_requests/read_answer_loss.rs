@@ -5,9 +5,9 @@ use collaboration_central_core::WorkspaceRuntime;
 use collaboration_central_tokio::{ObjectStorage, TokioWorkspaceStores};
 use fleet_contracts::{
     ReadWorkspaceRequestStatus, WorkspaceRequest, WorkspaceResponse, WorkspaceServiceClient,
-    WorkspaceServiceProtocol, WorkspaceServiceRpc,
+    WorkspaceServiceProtocol, WorkspaceServiceRpc, WorkspaceStatusFailure,
 };
-use fleet_rpc::{CallFailure, Envelope, Transport};
+use fleet_rpc::{CallError, CallFailure, Envelope, Transport};
 use fleet_runtime::{ClockIds, FleetRuntime};
 use fleet_runtime_ports::{Clock, SyncTime, WorkspaceStores};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -179,10 +179,10 @@ async fn request_status_returns_a_typed_reply_when_the_workspace_store_cannot_op
     // The fixture can lose the first reply only after the real transport returns an envelope.
     assert_eq!(
         client.read_request_status(status_call()).await,
-        Err(StoreFailure::AnswerLost)
+        Err(CallError::AnswerLost)
     );
     assert_eq!(
         client.read_request_status(status_call()).await,
-        Err(StoreFailure::Unavailable)
+        Err(CallError::Service(WorkspaceStatusFailure::Unavailable))
     );
 }

@@ -1,6 +1,9 @@
 use super::WorkspaceService;
-use central_storage::{CorruptReason, StoreFailure};
-use fleet_contracts::{ReadWorkspaceRequestStatus, RetainedWorkspaceStatus, WorkspaceServiceRpc};
+use central_storage::CorruptReason;
+use fleet_contracts::{
+    ReadWorkspaceRequestStatus, RetainedWorkspaceStatus, WorkspaceResponse, WorkspaceServiceRpc,
+    WorkspaceStatusFailure,
+};
 use serde_json::json;
 use sqlx::SqlitePool;
 use workspace_model::{ActorIdentityId, ItemRef, RequestId, WorkspaceAnswer, WorkspaceResult};
@@ -29,7 +32,7 @@ async fn status(
     db: &SqlitePool,
     request_id: &str,
     actor: &str,
-) -> TestResult<Result<RetainedWorkspaceStatus, StoreFailure>> {
+) -> TestResult<Result<RetainedWorkspaceStatus, WorkspaceStatusFailure>> {
     let request = ReadWorkspaceRequestStatus {
         request_id: request_id.parse::<RequestId>()?,
         actor: actor.parse::<ActorIdentityId>()?,
@@ -89,7 +92,7 @@ async fn damaged_answer_is_corrupt_even_for_the_other_actor() -> TestResult<()> 
     for actor in [ACTOR, FOREIGN] {
         assert_eq!(
             status(&db, REQUEST, actor).await?,
-            Err(StoreFailure::Corrupt {
+            Err(WorkspaceStatusFailure::Corrupt {
                 reason: CorruptReason::BadValue {
                     column: "workspace_request_log.answer".to_owned()
                 }
@@ -104,7 +107,7 @@ async fn damaged_answer_is_corrupt_even_for_the_other_actor() -> TestResult<()> 
     for actor in [ACTOR, FOREIGN] {
         assert_eq!(
             status(&db, REQUEST, actor).await?,
-            Err(StoreFailure::Corrupt {
+            Err(WorkspaceStatusFailure::Corrupt {
                 reason: CorruptReason::BadValue {
                     column: "answer".to_owned()
                 }
@@ -178,4 +181,40 @@ fn status_wire_rejects_nonretained_results_and_unknown_fields() {
             "unexpected retained status for {reply}: {decoded:?}"
         );
     }
+}
+
+#[test]
+fn workspace_status_reply_cannot_report_transport_loss() {
+    let wire = json!({
+        "kind": "readRequestStatus",
+        "reply": {"Err": {"kind": "answerLost"}}
+    });
+    let decoded = serde_json::from_value::<WorkspaceResponse>(wire);
+    assert!(
+        decoded.is_err(),
+        "server reply reported transport loss: {decoded:?}"
+    );
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Compare the exact corruption reason for both actors"
+)]
+async fn retained_page_is_corrupt_for_original_and_foreign_actors() -> TestResult<()> {
+    let db = database().await?;
+    let page = WorkspaceResult::Done(WorkspaceAnswer::Page {
+        items: vec![],
+        next_cursor: None,
+    });
+    insert_receipt(&db, REQUEST, FRESH, &serde_json::to_string(&page)?).await?;
+    let original = status(&db, REQUEST, ACTOR).await?;
+    let foreign = status(&db, REQUEST, FOREIGN).await?;
+    let failure = WorkspaceStatusFailure::Corrupt {
+        reason: CorruptReason::BadValue {
+            column: "request log answer".into(),
+        },
+    };
+    assert_eq!([original, foreign], [Err(failure.clone()), Err(failure)]);
+    Ok(())
 }

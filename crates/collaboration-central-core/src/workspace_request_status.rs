@@ -6,10 +6,10 @@ use central_link_protocol::{
 };
 use central_storage::{ReadOutcome, StoreFailure};
 use fleet_contracts::{
-    ReadWorkspaceRequestStatus, RetainedWorkspaceStatus, WorkspaceServiceClient,
-    WorkspaceServiceProtocol, WorkspaceServiceRpc,
+    ReadWorkspaceRequestStatus, RetainedWorkspaceStatus, RetainedWriteAnswer,
+    WorkspaceServiceClient, WorkspaceServiceProtocol, WorkspaceServiceRpc, WorkspaceStatusFailure,
 };
-use fleet_rpc::Transport;
+use fleet_rpc::{CallError, Transport};
 use fleet_runtime::workspace_request_log::{RequestLogStore, lookup};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_runtime_ports::{
@@ -17,7 +17,8 @@ use fleet_runtime_ports::{
     workspace_decode_error::corrupt,
 };
 use workspace_model::{
-    ActorIdentityId, WorkspaceReply, WorkspaceResult, central_mail::CentralMailResult,
+    ActorIdentityId, WorkspaceAnswer, WorkspaceReply, WorkspaceResult,
+    central_mail::CentralMailResult,
 };
 
 #[derive(serde::Deserialize)]
@@ -87,14 +88,23 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                     actor,
                     cutoff,
                 })
-                .await?
-            {
+                .await
+                .map_err(|failure| match failure {
+                    CallError::NeverReached
+                    | CallError::Service(WorkspaceStatusFailure::Unavailable) => {
+                        StoreFailure::Unavailable
+                    }
+                    CallError::AnswerLost => StoreFailure::AnswerLost,
+                    CallError::Service(WorkspaceStatusFailure::Corrupt { reason }) => {
+                        StoreFailure::Corrupt { reason }
+                    }
+                })? {
                 RetainedWorkspaceStatus::NotFound => None,
                 RetainedWorkspaceStatus::Refused(reason) => Some(OrganizationDecision::Workspace(
                     WorkspaceResult::Refused(reason),
                 )),
                 RetainedWorkspaceStatus::Done(answer) => Some(OrganizationDecision::Workspace(
-                    WorkspaceResult::Done(*answer),
+                    WorkspaceResult::Done(public_workspace_answer(*answer)),
                 )),
                 RetainedWorkspaceStatus::ItemNotFound { workspace_id, item } => {
                     Some(OrganizationDecision::Workspace(WorkspaceResult::NotFound {
@@ -165,5 +175,23 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 return Err(corrupt("request log answer"));
             }
         })
+    }
+}
+
+fn public_workspace_answer(answer: RetainedWriteAnswer) -> WorkspaceAnswer {
+    match answer {
+        RetainedWriteAnswer::Created { item, position } => {
+            WorkspaceAnswer::Created { item, position }
+        }
+        RetainedWriteAnswer::Updated { item, position } => {
+            WorkspaceAnswer::Updated { item, position }
+        }
+        RetainedWriteAnswer::Removed { item, position } => {
+            WorkspaceAnswer::Removed { item, position }
+        }
+        RetainedWriteAnswer::Marked { scope, through } => {
+            WorkspaceAnswer::Marked { scope, through }
+        }
+        RetainedWriteAnswer::Unchanged { item } => WorkspaceAnswer::Unchanged { item },
     }
 }

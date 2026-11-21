@@ -10,21 +10,14 @@ use worker::{Env, Request, Response, Result};
 use worker::{Headers, Method, RequestInit, js_sys};
 #[path = "workspace_fixture_admission.rs"]
 mod fixture_admission;
-#[path = "workspace_rpc_fixture.rs"]
-mod workspace_rpc_fixture;
-
-#[derive(Default)]
-pub(super) struct WorkspaceCallCounts {
-    pub(super) legacy: std::sync::atomic::AtomicUsize,
-    pub(super) rpc: std::sync::atomic::AtomicUsize,
-}
+use crate::workspace_rpc_fixture;
 
 #[derive(Default)]
 pub(crate) struct Controls {
     pub(super) faults: std::sync::Arc<fleet_runtime::TestFaults>,
     pub(super) zero_next_write_alarm: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub(super) lose_read: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    pub(super) workspace_calls: std::sync::Arc<WorkspaceCallCounts>,
+    pub(super) legacy_workspace_calls: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     observations: RefCell<BTreeMap<workspace_ids::WorkspaceId, HeldPause>>,
     holds: RefCell<BTreeMap<(workspace_ids::WorkspaceId, Point), HeldPause>>,
     central_holds: RefCell<BTreeMap<Point, HeldPause>>,
@@ -577,10 +570,17 @@ enum AlarmReceiptResult {
 pub(super) async fn raw_control(object: &CentralObject, mut request: Request) -> Result<Response> {
     let storage = object.state.storage();
     match request.path().as_str() {
-        "/test/raw-workspace-call-counts" => {
-            use std::sync::atomic::Ordering::SeqCst;
-            let counts = &object.controls.workspace_calls;
-            Response::from_json(&[counts.legacy.load(SeqCst), counts.rpc.load(SeqCst)])
+        "/test/raw-legacy-workspace-call-count" => Response::from_json(
+            &object
+                .controls
+                .legacy_workspace_calls
+                .load(std::sync::atomic::Ordering::SeqCst),
+        ),
+        "/test/raw-workspace-storage-state" => {
+            let workspace = request.json().await?;
+            let state =
+                workspace_rpc_fixture::workspace_storage_state(&object.env, workspace).await?;
+            Response::from_json(&state)
         }
         "/test/raw-workspace-rpc-probe" => {
             workspace_rpc_fixture::probe(&object.env, request.json().await?).await

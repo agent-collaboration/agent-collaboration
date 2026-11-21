@@ -3,9 +3,17 @@ use crate::cloudflare_transport::{address_header, stub};
 use crate::object_location::ObjectAddress;
 use fleet_contracts::WorkspaceRequest;
 use fleet_rpc::Envelope;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use worker::{Env, Headers, Method, Request, RequestInit, Response, Result, Stub, js_sys};
 use workspace_ids::WorkspaceId;
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct StorageState {
+    pub(super) opened: bool,
+    pub(super) migrated: bool,
+    pub(super) typed_dispatches: u32,
+}
 
 #[derive(Deserialize)]
 pub(super) struct AddressProbe {
@@ -43,7 +51,15 @@ pub(super) async fn probe(env: &Env, probe: AddressProbe) -> Result<Response> {
     }))
 }
 
-async fn storage_state(target: &Stub, owner: &ObjectAddress) -> Result<[bool; 2]> {
+pub(super) async fn workspace_storage_state(
+    env: &Env,
+    workspace: WorkspaceId,
+) -> Result<StorageState> {
+    let owner = ObjectAddress::WorkspaceStore(workspace);
+    storage_state(&stub(env, &owner)?, &owner).await
+}
+
+async fn storage_state(target: &Stub, owner: &ObjectAddress) -> Result<StorageState> {
     let headers = Headers::new();
     address_header(&headers, owner)?;
     let mut init = RequestInit::new();

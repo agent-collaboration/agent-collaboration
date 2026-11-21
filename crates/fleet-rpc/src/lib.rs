@@ -4,5 +4,5 @@
 mod rpc_exchange;
 
 pub use rpc_exchange::{
-    CallFailure, Envelope, Rpc, RpcClient, TargetMismatch, Transport, dispatch,
+    CallError, CallFailure, Envelope, Rpc, RpcClient, TargetMismatch, Transport, dispatch,
 };

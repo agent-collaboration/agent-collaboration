@@ -5,7 +5,7 @@ use crate::object_location::ObjectAddress;
 use crate::statement_store::{self, AlarmPolicy};
 use crate::store_wire::{OwnedStoreCall, StoreAnswer};
 use central_storage::{StoreFailure, StoreReply};
-use fleet_contracts::{WorkspaceRequest, WorkspaceServiceProtocol};
+use fleet_contracts::{WorkspaceRequest, WorkspaceServiceProtocol, WorkspaceStatusFailure};
 use fleet_rpc::{Envelope, dispatch};
 use fleet_workspace_service::WorkspaceService;
 use sqlx_durable_object::DoConnection;
@@ -18,6 +18,8 @@ pub struct WorkspaceStoreObject {
     env: Env,
     connection: OnceCell<DoConnection>,
     migrated: Cell<bool>,
+    #[cfg(feature = "test-support")]
+    typed_dispatches: Cell<u32>,
 }
 
 impl WorkspaceStoreObject {
@@ -93,6 +95,8 @@ impl DurableObject for WorkspaceStoreObject {
             env,
             connection: OnceCell::new(),
             migrated: Cell::new(false),
+            #[cfg(feature = "test-support")]
+            typed_dispatches: Cell::new(0),
         }
     }
 
@@ -100,7 +104,11 @@ impl DurableObject for WorkspaceStoreObject {
         let workspace = self.check_address(&request)?;
         #[cfg(feature = "test-support")]
         if request.path() == "/test/storage-state" {
-            return Response::from_json(&[self.connection.get().is_some(), self.migrated.get()]);
+            return Response::from_json(&crate::workspace_rpc_fixture::StorageState {
+                opened: self.connection.get().is_some(),
+                migrated: self.migrated.get(),
+                typed_dispatches: self.typed_dispatches.get(),
+            });
         }
         if request.path() == "/workspace-rpc" {
             if request.method() != worker::Method::Post {
@@ -110,6 +118,9 @@ impl DurableObject for WorkspaceStoreObject {
                 request.json().await?;
             let reply =
                 dispatch::<WorkspaceServiceProtocol, _, _>(&workspace, envelope, |call| async {
+                    #[cfg(feature = "test-support")]
+                    self.typed_dispatches
+                        .set(self.typed_dispatches.get().saturating_add(1));
                     match self
                         .open_store(crate::object_migrations::workspace_store())
                         .await
@@ -121,7 +132,7 @@ impl DurableObject for WorkspaceStoreObject {
                             )
                             .await
                         }
-                        Err(failure) => call.unavailable_reply(failure),
+                        Err(_) => call.unavailable_reply(WorkspaceStatusFailure::Unavailable),
                     }
                 })
                 .await

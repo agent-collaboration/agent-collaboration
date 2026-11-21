@@ -24,6 +24,8 @@ mod store_wire;
 mod worker_clock;
 mod workspace_central_object;
 mod workspace_link_entry;
+#[cfg(feature = "test-support")]
+mod workspace_rpc_fixture;
 mod workspace_store_object;
 #[cfg(feature = "test-support")]
 pub use driver_scenarios::DriverScenarioObject;

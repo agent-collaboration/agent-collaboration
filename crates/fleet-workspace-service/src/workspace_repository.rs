@@ -1,5 +1,5 @@
-use central_storage::{CorruptReason, StoreFailure};
-use fleet_contracts::ReadWorkspaceRequestStatus;
+use central_storage::CorruptReason;
+use fleet_contracts::{ReadWorkspaceRequestStatus, WorkspaceStatusFailure};
 use sqlx::{ColumnIndex, Database, Decode, Encode, Executor, IntoArguments, Type};
 use workspace_model::{ActorIdentityId, WorkspaceResult};
 
@@ -15,7 +15,7 @@ impl WorkspaceRepo {
     pub(crate) async fn retained_status<'connection, DB, E>(
         executor: E,
         request: &ReadWorkspaceRequestStatus,
-    ) -> Result<Option<(ActorIdentityId, WorkspaceResult)>, StoreFailure>
+    ) -> Result<Option<(ActorIdentityId, WorkspaceResult)>, WorkspaceStatusFailure>
     where
         DB: Database,
         E: Executor<'connection, Database = DB>,
@@ -56,18 +56,18 @@ impl WorkspaceRepo {
     }
 }
 
-fn query_failure(error: sqlx::Error) -> StoreFailure {
+fn query_failure(error: sqlx::Error) -> WorkspaceStatusFailure {
     match error {
         sqlx::Error::ColumnDecode { index, .. } => corrupt(index.trim_matches('"')),
-        sqlx::Error::ColumnNotFound(column) => StoreFailure::Corrupt {
+        sqlx::Error::ColumnNotFound(column) => WorkspaceStatusFailure::Corrupt {
             reason: CorruptReason::MissingColumn { column },
         },
-        _ => StoreFailure::Unavailable,
+        _ => WorkspaceStatusFailure::Unavailable,
     }
 }
 
-pub(crate) fn corrupt(column: &str) -> StoreFailure {
-    StoreFailure::Corrupt {
+pub(crate) fn corrupt(column: &str) -> WorkspaceStatusFailure {
+    WorkspaceStatusFailure::Corrupt {
         reason: CorruptReason::BadValue {
             column: column.to_owned(),
         },

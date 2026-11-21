@@ -22,6 +22,14 @@ pub enum CallFailure {
     AnswerLost,
 }
 
+/// A typed call can fail at the service or while obtaining its reply.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum CallError<F> {
+    Service(F),
+    NeverReached,
+    AnswerLost,
+}
+
 pub trait Transport<R: Rpc>: Send + Sync {
     fn exchange(
         &self,

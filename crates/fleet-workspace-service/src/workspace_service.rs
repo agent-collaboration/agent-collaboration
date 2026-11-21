@@ -1,8 +1,11 @@
 use crate::workspace_repository::{WorkspaceRepo, corrupt};
-use fleet_contracts::{ReadWorkspaceRequestStatus, RetainedWorkspaceStatus, WorkspaceServiceRpc};
+use fleet_contracts::{
+    ReadWorkspaceRequestStatus, RetainedWorkspaceStatus, RetainedWriteAnswer, WorkspaceServiceRpc,
+    WorkspaceStatusFailure,
+};
 use sqlx::{ColumnIndex, Database, Decode, Encode, Executor, IntoArguments, Type};
 use std::marker::PhantomData;
-use workspace_model::WorkspaceResult;
+use workspace_model::{WorkspaceAnswer, WorkspaceResult};
 
 pub struct WorkspaceService<'connection, DB, E> {
     executor: E,
@@ -33,10 +36,12 @@ where
     String: Type<DB> + for<'query> Encode<'query, DB> + for<'row> Decode<'row, DB>,
     for<'row> &'row str: ColumnIndex<DB::Row>,
 {
+    type Failure = WorkspaceStatusFailure;
+
     async fn read_request_status(
         &self,
         call: ReadWorkspaceRequestStatus,
-    ) -> Result<RetainedWorkspaceStatus, central_storage::StoreFailure> {
+    ) -> Result<RetainedWorkspaceStatus, Self::Failure> {
         let Some((caller, answer)) = WorkspaceRepo::retained_status(self.executor, &call).await?
         else {
             return Ok(RetainedWorkspaceStatus::NotFound);
@@ -45,7 +50,9 @@ where
         // receipts consistently report a storage failure.
         let status = match answer {
             WorkspaceResult::Refused(reason) => RetainedWorkspaceStatus::Refused(reason),
-            WorkspaceResult::Done(answer) => RetainedWorkspaceStatus::Done(Box::new(answer)),
+            WorkspaceResult::Done(answer) => {
+                RetainedWorkspaceStatus::Done(Box::new(retained_write_answer(answer)?))
+            }
             WorkspaceResult::NotFound { workspace_id, item } => {
                 RetainedWorkspaceStatus::ItemNotFound { workspace_id, item }
             }
@@ -58,6 +65,34 @@ where
         }
         Ok(status)
     }
+}
+
+fn retained_write_answer(
+    answer: WorkspaceAnswer,
+) -> Result<RetainedWriteAnswer, WorkspaceStatusFailure> {
+    Ok(match answer {
+        WorkspaceAnswer::Created { item, position } => {
+            RetainedWriteAnswer::Created { item, position }
+        }
+        WorkspaceAnswer::Updated { item, position } => {
+            RetainedWriteAnswer::Updated { item, position }
+        }
+        WorkspaceAnswer::Removed { item, position } => {
+            RetainedWriteAnswer::Removed { item, position }
+        }
+        WorkspaceAnswer::Marked { scope, through } => {
+            RetainedWriteAnswer::Marked { scope, through }
+        }
+        WorkspaceAnswer::Unchanged { item } => RetainedWriteAnswer::Unchanged { item },
+        WorkspaceAnswer::MessageStatus { .. }
+        | WorkspaceAnswer::WorkspaceCreated { .. }
+        | WorkspaceAnswer::WorkspaceUpdated { .. }
+        | WorkspaceAnswer::Item { .. }
+        | WorkspaceAnswer::Page { .. }
+        | WorkspaceAnswer::References { .. }
+        | WorkspaceAnswer::Links { .. }
+        | WorkspaceAnswer::Inbox { .. } => return Err(corrupt("request log answer")),
+    })
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
