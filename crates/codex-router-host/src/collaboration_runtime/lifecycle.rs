@@ -52,6 +52,18 @@ impl CollaborationRuntime {
         if let Some(route) = self.provider_delivery_route.take() {
             route.shutdown_queue().await;
         }
+        self.drain_native_observer().await;
+        while let Some(result) = self.tasks.join_next().await {
+            match result {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => {
+                    failure.get_or_insert(error);
+                }
+                Err(_) => {
+                    failure.get_or_insert(io::Error::other("collaboration task shutdown failed"));
+                }
+            }
+        }
         if let Some(supervisor) = self.external_provider_supervisor.take()
             && let Err(message) = supervisor.shutdown().await
         {
@@ -67,18 +79,6 @@ impl CollaborationRuntime {
                     failure.get_or_insert(io::Error::other(
                         "provider retirement publication task failed",
                     ));
-                }
-            }
-        }
-        self.drain_native_observer().await;
-        while let Some(result) = self.tasks.join_next().await {
-            match result {
-                Ok(Ok(())) => {}
-                Ok(Err(error)) => {
-                    failure.get_or_insert(error);
-                }
-                Err(_) => {
-                    failure.get_or_insert(io::Error::other("collaboration task shutdown failed"));
                 }
             }
         }

@@ -5,6 +5,10 @@
 use super::{AdmissionTestPause, ExternalProviderSupervisor, OperationId};
 
 impl ExternalProviderSupervisor {
+    pub(crate) fn tracked_operation_tasks_for_test(&self) -> tokio_util::task::TaskTracker {
+        self.inner.operation_tasks.clone()
+    }
+
     /// Pauses the next steer with its approver records pinned, before its
     /// injection is sent.
     pub(crate) fn pause_next_steer_before_injection(

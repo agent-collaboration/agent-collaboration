@@ -9,7 +9,7 @@ use super::{
     provider_operation_admission::DispatchMark,
     provider_owner_operations::owner_failure,
     provider_prompt_contents::{PromptBusyPolicy, ProviderPromptContentsRequest},
-    retain_operation, runtime_failure,
+    runtime_failure,
 };
 use crate::session_owner_delivery_evidence::{
     OwnerDeliveryEvidence, ProviderDeliveryEvidence, placement_evidence,
@@ -75,7 +75,7 @@ impl ExternalProviderSupervisor {
         let failure_target = Some(request.target.clone());
         let deadline = self.admission_deadline();
         let backend = self.clone();
-        retain_operation(operation, failure_target, async move {
+        self.retain_operation(operation, failure_target, async move {
             let target = request.target.clone();
             let (binding, runtime) = backend.runtime_binding(
                 &target.endpoint,

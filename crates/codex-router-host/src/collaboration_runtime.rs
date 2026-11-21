@@ -273,3 +273,7 @@ pub(crate) mod scratch_sweep;
 #[cfg(test)]
 #[path = "collaboration_runtime/startup_failure_tests.rs"]
 mod startup_failure_tests;
+
+#[cfg(test)]
+#[path = "collaboration_runtime/shutdown_ownership_test.rs"]
+mod shutdown_ownership_tests;

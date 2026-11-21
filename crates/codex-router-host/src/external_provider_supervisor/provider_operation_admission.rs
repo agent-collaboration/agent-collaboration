@@ -449,7 +449,7 @@ impl ExternalProviderSupervisor {
         let supervisor = self.clone();
         let (reply, completion) = oneshot::channel();
         let (accept, accepted) = oneshot::channel();
-        tokio::spawn(async move {
+        self.inner.operation_tasks.spawn(async move {
             supervisor.complete_admission(write, reply, accepted).await;
         });
         let prepared = self

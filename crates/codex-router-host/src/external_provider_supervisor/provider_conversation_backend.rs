@@ -16,8 +16,8 @@ use super::{
     SessionRef, admitted_submission, effective_settings, existing_submission, failure,
     invalid_setting_failure, provider_applied_setting, provider_failed_setting,
     provider_session_inspection, provider_session_lifecycle, provider_session_record,
-    provider_settings_control, retain_operation, runtime_failure, snapshot_failure,
-    snapshot_from_record, unavailable_failure,
+    provider_settings_control, runtime_failure, snapshot_failure, snapshot_from_record,
+    unavailable_failure,
 };
 
 impl ProviderConversationBackend for ExternalProviderSupervisor {
@@ -85,7 +85,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
         let operation_id = request.operation_id.clone();
         let deadline = self.admission_deadline();
         let backend = self.clone();
-        retain_operation(operation_id, None, async move {
+        self.retain_operation(operation_id, None, async move {
             let (binding, runtime) =
                 backend.runtime_binding(&request.endpoint, &request.operation_id, None)?;
             // Owner, 2026-11-15: "default shodu lbe -> error force agent to ask
@@ -368,7 +368,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
         let failure_target = Some(request.target.clone());
         let deadline = self.admission_deadline();
         let backend = self.clone();
-        retain_operation(operation_id, failure_target, async move {
+        self.retain_operation(operation_id, failure_target, async move {
             let target = request.target.clone();
             let (binding, runtime) = backend.runtime_binding(
                 &target.endpoint,
@@ -431,7 +431,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
         let target = Some(request.target.clone());
         match ProviderPromptContentsRequest::from_prompt_request(request) {
             Ok(contents_request) => self.prompt_contents(contents_request),
-            Err(error) => retain_operation(operation_id, target, async move { Err(*error) }),
+            Err(error) => self.retain_operation(operation_id, target, async move { Err(*error) }),
         }
     }
 
@@ -443,7 +443,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
         let failure_target = Some(request.target.clone());
         let deadline = self.admission_deadline();
         let backend = self.clone();
-        retain_operation(operation_id, failure_target, async move {
+        self.retain_operation(operation_id, failure_target, async move {
             let target = request.target.clone();
             let (binding, _runtime) = backend.runtime_binding(
                 &target.endpoint,

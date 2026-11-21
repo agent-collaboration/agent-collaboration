@@ -64,8 +64,10 @@ use std::{
     time::Duration,
 };
 use tokio::sync::Mutex;
+use tokio_util::task::TaskTracker;
 
 const MAX_RETAINED_SETTLEMENTS: usize = 256;
+const OPERATION_DRAIN_BUDGET: Duration = Duration::from_secs(10);
 
 pub struct ExternalProviderBinding {
     pub identity: ProviderBindingIdentity,
@@ -82,6 +84,7 @@ struct SupervisorInner {
     store: Arc<Mutex<ProviderOperationStore>>,
     clock: Arc<dyn router_clock::RuntimeClock>,
     live_operations: StdMutex<LiveOperations>,
+    operation_tasks: TaskTracker,
     /// Each binding's unknown outcomes: the one place admission asks
     /// whether an earlier send's outcome is unknown (design note §14.1).
     uncertainty: UncertaintyCells,
@@ -396,6 +399,7 @@ impl ExternalProviderSupervisor {
                 store,
                 clock,
                 live_operations: StdMutex::new(LiveOperations::default()),
+                operation_tasks: TaskTracker::new(),
                 uncertainty,
                 completions: tokio::sync::watch::channel(0).0,
                 queued_operations,
@@ -492,7 +496,7 @@ impl ExternalProviderSupervisor {
         F: std::future::Future<Output = ProviderOperationCompletion> + Send + 'static,
     {
         let inner = Arc::clone(&self.inner);
-        tokio::spawn(async move {
+        self.inner.operation_tasks.spawn(async move {
             let completion = operation.await;
             inner.finish(operation_id, live, completion).await;
         });
@@ -576,7 +580,7 @@ impl ExternalProviderSupervisor {
             .cloned()
             .collect::<Vec<_>>();
         for operation in operations {
-            router_clock::timeout(self.inner.clock.as_ref(), Duration::from_secs(10), async {
+            router_clock::timeout(self.inner.clock.as_ref(), OPERATION_DRAIN_BUDGET, async {
                 loop {
                     let changed = operation.changed.notified();
                     if operation.result.lock().await.is_some() {
@@ -588,7 +592,15 @@ impl ExternalProviderSupervisor {
             .await
             .map_err(|_| "external provider operation drain timed out")?;
         }
-        Ok(())
+        // A published result can wake a caller before its task drops the store.
+        self.inner.operation_tasks.close();
+        router_clock::timeout(
+            self.inner.clock.as_ref(),
+            OPERATION_DRAIN_BUDGET,
+            self.inner.operation_tasks.wait(),
+        )
+        .await
+        .map_err(|_| "external provider operation drain timed out")
     }
 }
 
@@ -667,35 +679,38 @@ impl SupervisorInner {
     }
 }
 
-#[expect(
-    clippy::result_large_err,
-    reason = "The typed failure retains the full published operation payload."
-)]
-fn retain_operation<T, F>(
-    operation_id: OperationId,
-    target: Option<SessionRef>,
-    operation: F,
-) -> ProviderConversationFuture<'static, T>
-where
-    T: Send + 'static,
-    F: std::future::Future<Output = Result<T, ConversationOperationFailure>> + Send + 'static,
-{
-    let (reply, result) = tokio::sync::oneshot::channel();
-    tokio::spawn(async move {
-        let _ = reply.send(operation.await);
-    });
-    Box::pin(async move {
-        result.await.unwrap_or_else(|_| {
-            Err(failure(
-                ConversationOperationFailureKind::Unavailable,
-                ConversationOperationFailureStage::Settlement,
-                ProviderOperationEffect::Unknown,
-                "provider operation owner stopped before returning admission",
-                operation_id,
-                target,
-            ))
+impl ExternalProviderSupervisor {
+    #[expect(
+        clippy::result_large_err,
+        reason = "The typed failure retains the full published operation payload."
+    )]
+    fn retain_operation<T, F>(
+        &self,
+        operation_id: OperationId,
+        target: Option<SessionRef>,
+        operation: F,
+    ) -> ProviderConversationFuture<'static, T>
+    where
+        T: Send + 'static,
+        F: std::future::Future<Output = Result<T, ConversationOperationFailure>> + Send + 'static,
+    {
+        let (reply, result) = tokio::sync::oneshot::channel();
+        self.inner.operation_tasks.spawn(async move {
+            let _ = reply.send(operation.await);
+        });
+        Box::pin(async move {
+            result.await.unwrap_or_else(|_| {
+                Err(failure(
+                    ConversationOperationFailureKind::Unavailable,
+                    ConversationOperationFailureStage::Settlement,
+                    ProviderOperationEffect::Unknown,
+                    "provider operation owner stopped before returning admission",
+                    operation_id,
+                    target,
+                ))
+            })
         })
-    })
+    }
 }
 
 fn existing_submission(

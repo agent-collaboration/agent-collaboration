@@ -5,7 +5,7 @@ use super::{
     ConversationOperationFailureKind, ConversationOperationFailureStage,
     ConversationOperationSubmission, ExternalProviderSupervisor, PreparedOperation,
     ProviderConversationFuture, ProviderOperationEffect, ProviderOperationKind,
-    admitted_submission, existing_submission, failure, provider_session_record, retain_operation,
+    admitted_submission, existing_submission, failure, provider_session_record,
 };
 use collaboration_protocol::{ConversationCloseRequest, ConversationResumeRequest};
 
@@ -17,7 +17,7 @@ pub(super) fn resume(
     let failure_target = Some(request.target.clone());
     let deadline = supervisor.admission_deadline();
     let backend = supervisor.clone();
-    retain_operation(operation_id, failure_target, async move {
+    supervisor.retain_operation(operation_id, failure_target, async move {
         let target = request.target.clone();
         let (binding, runtime) = backend.runtime_binding(
             &target.endpoint,
@@ -90,7 +90,7 @@ pub(super) fn close(
     let failure_target = Some(request.target.clone());
     let deadline = supervisor.admission_deadline();
     let backend = supervisor.clone();
-    retain_operation(operation_id, failure_target, async move {
+    supervisor.retain_operation(operation_id, failure_target, async move {
         let target = request.target.clone();
         let (binding, runtime) = backend.runtime_binding(
             &target.endpoint,
