@@ -165,6 +165,7 @@ async fn lane_stop_releases_backlog_and_retains_a_submitted_commit() {
         reconciliation: ProviderReconciliationState::Confirmed,
         stop_reason: None,
         recovery: UnknownRecovery::Blocks,
+        cancelled_input: None,
     };
     let first_ticket = lane
         .offer(owner, terminal(first))
@@ -262,6 +263,7 @@ async fn a_refused_first_queue_mark_cannot_settle_an_existing_operation() {
                 reconciliation: ProviderReconciliationState::Confirmed,
                 stop_reason: None,
                 recovery: UnknownRecovery::Blocks,
+                cancelled_input: None,
             },
         )
         .expect("known unsent cleanup accepted behind the mark");
@@ -329,6 +331,7 @@ async fn unknown_terminal_offer_blocks_the_next_owner_even_after_its_write_fails
                 reconciliation: ProviderReconciliationState::Unresolved,
                 stop_reason: None,
                 recovery: UnknownRecovery::Blocks,
+                cancelled_input: None,
             },
         )
         .expect("accept terminal while persistence is held");

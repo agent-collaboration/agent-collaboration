@@ -1,6 +1,6 @@
 //! The binding uncertainty record used at admission and at lane acceptance.
 
-use crate::provider_operation_custody::LaneCustodyLookup;
+use crate::provider_operation_custody::{LaneCustodyLookup, LatePromptRepairLookup};
 use collaboration_protocol::{OperationId, SessionRef};
 use provider_session_machines::uncertainty_cell_machine::{
     UncertaintyCellMachine, UncertaintyEvent, UncertaintyRefusal, UnknownOutcomes,
@@ -16,6 +16,7 @@ use tokio::sync::OnceCell;
 pub(crate) struct BindingUncertainty {
     pub(crate) outcomes: OnceCell<Mutex<BindingOutcomes>>,
     pub(crate) lane_custody: std::sync::OnceLock<Arc<LaneCustodyLookup>>,
+    pub(crate) late_prompt_repair: std::sync::OnceLock<Arc<LatePromptRepairLookup>>,
     #[cfg(any(test, feature = "test-support"))]
     pub(crate) fixture: crate::binding_store_fixture::BindingStoreFixture,
 }

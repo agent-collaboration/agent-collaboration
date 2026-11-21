@@ -210,12 +210,16 @@ impl SessionOwnerStorage {
             }
             SessionStoreRequest::ReconcileLateCancelledPrompt(input) => {
                 let operation = operation_id(input.operation)?;
+                let repair_input = Box::new(input.clone());
                 self.report(
                     address,
                     || {
                         self.lane.offer(
                             owner,
-                            SessionStoreWrite::ReconcileLateCancelledPrompt(operation),
+                            SessionStoreWrite::ReconcileLateCancelledPrompt {
+                                operation,
+                                input: repair_input,
+                            },
                         )
                     },
                     completions,
@@ -432,6 +436,10 @@ fn terminal_write(reply: &SessionOwnerReply) -> Result<Option<SessionStoreWrite>
         reconciliation,
         stop_reason,
         recovery,
+        cancelled_input: match reply {
+            SessionOwnerReply::PromptCancelUnconfirmed { input } => Some(Box::new(input.clone())),
+            _ => None,
+        },
     }))
 }
 

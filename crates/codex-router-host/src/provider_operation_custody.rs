@@ -1,7 +1,10 @@
 //! Transient custody of writes to a provider operation row.
 
-use collaboration_protocol::{OperationId, SessionRef};
-use provider_session_machines::operation_record_machine::OperationRecord;
+use collaboration_protocol::{CodexGeneration, OperationId, SessionRef};
+use provider_session_machines::{
+    operation_record_machine::OperationRecord,
+    session_owner::{OwnerIncarnation, OwnerInput},
+};
 use std::{
     collections::BTreeSet,
     sync::{Arc, Mutex, MutexGuard, PoisonError},
@@ -112,6 +115,19 @@ impl OperationCustody {
 pub(crate) struct OperationLifecycleState {
     pub(crate) record: OperationRecord,
     pub(crate) custody: OperationCustody,
+    cancelled_prompt: Option<CancelledPromptIdentity>,
+}
+
+#[derive(Eq, PartialEq)]
+pub(crate) struct CancelledPromptIdentity {
+    pub(crate) owner: OwnerIncarnation,
+    pub(crate) input: OwnerInput,
+}
+
+/// Pins the retained original entry while its late evidence holds the store guard.
+pub(crate) struct LatePromptRepairAuthority {
+    pub(crate) generation: CodexGeneration,
+    _lifecycle: Arc<OperationLifecycle>,
 }
 
 pub(crate) struct OperationLifecycle {
@@ -125,6 +141,7 @@ impl OperationLifecycle {
             state: Mutex::new(OperationLifecycleState {
                 record,
                 custody: OperationCustody::held(),
+                cancelled_prompt: None,
             }),
             changed,
         }
@@ -156,10 +173,27 @@ impl OperationLifecycle {
                 on_end,
             })
     }
+
+    pub(crate) fn authorize_late_prompt_repair(
+        self: &Arc<Self>,
+        generation: CodexGeneration,
+        identity: &CancelledPromptIdentity,
+    ) -> Option<LatePromptRepairAuthority> {
+        (self.state().cancelled_prompt.as_ref() == Some(identity)).then(|| {
+            LatePromptRepairAuthority {
+                generation,
+                _lifecycle: Arc::clone(self),
+            }
+        })
+    }
 }
 
 pub(crate) type LaneCustodyLookup =
     dyn Fn(&SessionRef, &OperationId) -> Option<LaneWriteCustody> + Send + Sync;
+
+pub(crate) type LatePromptRepairLookup = dyn Fn(&SessionRef, &OperationId, &CancelledPromptIdentity) -> Option<LatePromptRepairAuthority>
+    + Send
+    + Sync;
 
 /// Travels with the accepted lane entry. The reply waiter and its deadline
 /// cannot release it. An old writer retains only its own lifecycle and key.
@@ -170,6 +204,13 @@ pub(crate) struct LaneWriteCustody {
 }
 
 impl LaneWriteCustody {
+    pub(crate) fn remember_cancelled_prompt(&self, identity: CancelledPromptIdentity) {
+        self.lifecycle
+            .state()
+            .cancelled_prompt
+            .get_or_insert(identity);
+    }
+
     pub(crate) fn settle(self, reason: CustodyEnd) {
         let ended = self
             .lifecycle

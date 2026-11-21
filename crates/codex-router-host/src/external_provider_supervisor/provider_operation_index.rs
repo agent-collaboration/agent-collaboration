@@ -15,7 +15,10 @@ use super::{
     provider_operation_finish::Retention,
 };
 use crate::binding_dispatch_permit::{BindingOutcomes, BindingUncertainty};
-use crate::provider_operation_custody::{CustodyEnd, LaneWriteCustody, OperationLifecycle};
+use crate::provider_operation_custody::{
+    CancelledPromptIdentity, CustodyEnd, LaneWriteCustody, LatePromptRepairAuthority,
+    OperationLifecycle,
+};
 use collaboration_protocol::{
     CodexGeneration, ConversationOperationFailure, ConversationOperationSettlement, EndpointRef,
     OperationId, ProviderBindingIdentity, ProviderOperationKind, SessionRef,
@@ -156,15 +159,35 @@ impl LiveOperation {
         target: &SessionRef,
         on_end: Arc<dyn Fn() + Send + Sync>,
     ) -> Option<LaneWriteCustody> {
-        let (endpoint, held_generation) = self.binding.as_ref()?;
-        if endpoint == &target.endpoint
-            && held_generation == generation
-            && self.target().as_ref() == Some(target)
-        {
+        if self.matches_lane_binding(generation, target) {
             self.lifecycle.begin_lane_write(on_end)
         } else {
             None
         }
+    }
+
+    pub(super) fn authorize_late_prompt_repair(
+        &self,
+        generation: &CodexGeneration,
+        target: &SessionRef,
+        identity: &CancelledPromptIdentity,
+    ) -> Option<LatePromptRepairAuthority> {
+        if self.kind != Some(ProviderOperationKind::ConversationPrompt)
+            || !self.matches_lane_binding(generation, target)
+        {
+            return None;
+        }
+        self.lifecycle
+            .authorize_late_prompt_repair(generation.clone(), identity)
+    }
+
+    fn matches_lane_binding(&self, generation: &CodexGeneration, target: &SessionRef) -> bool {
+        self.binding
+            .as_ref()
+            .is_some_and(|(endpoint, held_generation)| {
+                endpoint == &target.endpoint && held_generation == generation
+            })
+            && self.target().as_ref() == Some(target)
     }
 
     pub(super) async fn wait_for_result(

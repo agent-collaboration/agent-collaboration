@@ -7,6 +7,7 @@ use tokio::sync::oneshot;
 #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum BindingFixtureWait {
     ExplicitSetting,
+    LatePromptRepair,
 }
 
 #[derive(Default)]

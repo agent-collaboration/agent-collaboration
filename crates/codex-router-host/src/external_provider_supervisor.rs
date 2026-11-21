@@ -415,8 +415,10 @@ impl ExternalProviderSupervisor {
             let owners = runtime.session_owner_door(Arc::clone(&store), Arc::clone(&owner_hub));
             let permit = uncertainty.slot(&endpoint);
             let operations = Arc::downgrade(&live_operations);
+            let repair_operations = operations.clone();
             let on_custody_end = Arc::clone(&on_custody_end);
             let generation = binding.identity.generation.clone();
+            let repair_generation = generation.clone();
             permit.lane_custody.get_or_init(|| {
                 Arc::new(move |target, operation| {
                     operations
@@ -429,6 +431,17 @@ impl ExternalProviderSupervisor {
                             target,
                             Arc::clone(&on_custody_end),
                         )
+                })
+            });
+            permit.late_prompt_repair.get_or_init(|| {
+                Arc::new(move |target, operation, identity| {
+                    repair_operations
+                        .upgrade()?
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .operations
+                        .get(operation)?
+                        .authorize_late_prompt_repair(&repair_generation, target, identity)
                 })
             });
             owners.install_binding_permit(permit);

@@ -1,16 +1,16 @@
 //! Ordered operation and saved-setup stores for a single provider session.
 
 use crate::binding_dispatch_permit::{BindingUncertainty, UnknownRecovery, lock};
-use crate::provider_operation_custody::{CustodyEnd, LaneWriteCustody};
+use crate::provider_operation_custody::{CancelledPromptIdentity, CustodyEnd, LaneWriteCustody};
 use collaboration_protocol::{
-    OperationId, ProviderOperationEffect, ProviderPromptStopReason, ProviderReconciliationState,
-    SessionRef,
+    ConversationBindingIdentity, OperationId, ProviderOperationEffect, ProviderOperationKind,
+    ProviderOperationStage, ProviderPromptStopReason, ProviderReconciliationState, SessionRef,
 };
 use collaboration_runtime::{
     ProviderOperationAdmission, ProviderOperationRecord, ProviderOperationStore,
     ProviderOperationStoreError, ProviderSessionRecord,
 };
-use provider_session_machines::session_owner::OwnerIncarnation;
+use provider_session_machines::session_owner::{OwnerIncarnation, OwnerInput};
 use router_clock::{ClockInstant, RuntimeClock};
 use session_event_model::InputId;
 use std::{
@@ -34,13 +34,17 @@ pub struct MarkedInput {
 pub enum SessionStoreWrite {
     MarkDispatch(MarkedInput),
     UndoDispatch(MarkedInput),
-    ReconcileLateCancelledPrompt(OperationId),
+    ReconcileLateCancelledPrompt {
+        operation: OperationId,
+        input: Box<OwnerInput>,
+    },
     Terminal {
         operation: OperationId,
         effect: ProviderOperationEffect,
         reconciliation: ProviderReconciliationState,
         stop_reason: Option<ProviderPromptStopReason>,
         recovery: UnknownRecovery,
+        cancelled_input: Option<Box<OwnerInput>>,
     },
     ActivatedSession {
         operation: OperationId,
@@ -190,10 +194,14 @@ impl LaneRequest {
             | Self::SettleFailedOwnerMark(marked) => Some(&marked.operation),
             Self::Write(
                 SessionStoreWrite::Terminal { operation, .. }
-                | SessionStoreWrite::ActivatedSession { operation, .. }
-                | SessionStoreWrite::ReconcileLateCancelledPrompt(operation),
+                | SessionStoreWrite::ActivatedSession { operation, .. },
             ) => Some(operation),
-            Self::Write(SessionStoreWrite::SaveMode(_)) | Self::ReadSetup | Self::Handover => None,
+            Self::Write(
+                SessionStoreWrite::SaveMode(_)
+                | SessionStoreWrite::ReconcileLateCancelledPrompt { .. },
+            )
+            | Self::ReadSetup
+            | Self::Handover => None,
         }
     }
 }
@@ -389,6 +397,17 @@ impl SessionStoreLane {
             }
         }
         entry.custody = self.borrow_write_custody(&entry.request);
+        if let Some(custody) = &entry.custody
+            && let LaneRequest::Write(SessionStoreWrite::Terminal {
+                cancelled_input: Some(input),
+                ..
+            }) = &entry.request
+        {
+            custody.remember_cancelled_prompt(CancelledPromptIdentity {
+                owner,
+                input: (**input).clone(),
+            });
+        }
         state.queue.push_back(entry);
         drop(outcomes);
         self.inner.ready.notify_one();
@@ -562,6 +581,11 @@ impl SessionStoreLaneWriter {
             custody,
             reply,
         } = entry;
+        #[cfg(any(test, feature = "test-support"))]
+        let late_repair = matches!(
+            &request,
+            LaneRequest::Write(SessionStoreWrite::ReconcileLateCancelledPrompt { .. })
+        );
         let result = match request {
             LaneRequest::Write(write) => self.write(owner, write, offered_at_ms).await,
             LaneRequest::FirstQueuedDispatch { marked, admission } => {
@@ -619,6 +643,7 @@ impl SessionStoreLaneWriter {
                             reconciliation: ProviderReconciliationState::Confirmed,
                             stop_reason: None,
                             recovery: UnknownRecovery::Blocks,
+                            cancelled_input: None,
                         },
                         offered_at_ms,
                     )
@@ -634,6 +659,13 @@ impl SessionStoreLaneWriter {
                 Ok(_) => CustodyEnd::Written,
                 Err(_) => CustodyEnd::Failed,
             });
+        }
+        #[cfg(any(test, feature = "test-support"))]
+        if late_repair && let Some(binding) = self.lane.inner.binding.get() {
+            binding.fixture.waiting(
+                &self.target,
+                crate::binding_store_fixture::BindingFixtureWait::LatePromptRepair,
+            );
         }
         let _caller_stopped_waiting = reply.send(result);
     }
@@ -680,20 +712,17 @@ impl SessionStoreLaneWriter {
                 self.lane.state().marks.remove(&marked.operation);
                 Ok(SessionStoreSettlement::Operation(Box::new(row)))
             }
-            SessionStoreWrite::ReconcileLateCancelledPrompt(operation) => {
-                let row = store
-                    .confirm_recorded_target(&operation, offered_at_ms)
-                    .await?;
-                if let Some(outcomes) = self
-                    .lane
-                    .inner
-                    .binding
-                    .get()
-                    .and_then(|binding| binding.outcomes.get())
-                {
-                    lock(outcomes).record_reconciled(operation);
-                }
-                Ok(SessionStoreSettlement::Operation(Box::new(row)))
+            SessionStoreWrite::ReconcileLateCancelledPrompt { operation, input } => {
+                self.repair_cancelled_prompt(
+                    &mut store,
+                    operation,
+                    CancelledPromptIdentity {
+                        owner,
+                        input: *input,
+                    },
+                    offered_at_ms,
+                )
+                .await
             }
             SessionStoreWrite::Terminal {
                 operation,
@@ -727,6 +756,53 @@ impl SessionStoreLaneWriter {
                 Ok(SessionStoreSettlement::ModeSaved)
             }
         }
+    }
+
+    async fn repair_cancelled_prompt(
+        &self,
+        store: &mut ProviderOperationStore,
+        operation: OperationId,
+        identity: CancelledPromptIdentity,
+        offered_at_ms: i64,
+    ) -> Result<SessionStoreSettlement, ProviderOperationStoreError> {
+        // A queued repair is only evidence. Authority starts under the store
+        // guard and requires the original still-retained lifecycle.
+        let binding = self
+            .lane
+            .inner
+            .binding
+            .get()
+            .ok_or(ProviderOperationStoreError::TransitionConflict)?;
+        let authority = binding
+            .late_prompt_repair
+            .get()
+            .and_then(|authorize| authorize(&self.target, &operation, &identity))
+            .ok_or(ProviderOperationStoreError::TransitionConflict)?;
+        let row = store
+            .inspect(&operation)
+            .await?
+            .ok_or(ProviderOperationStoreError::NotFound)?;
+        if row.target.as_ref() != Some(&self.target)
+            || row.operation_kind != ProviderOperationKind::ConversationPrompt
+            || row.stage != ProviderOperationStage::Terminal
+            || row.effect != ProviderOperationEffect::Unknown
+            || !matches!(
+                row.reconciliation_state,
+                ProviderReconciliationState::Unresolved
+                    | ProviderReconciliationState::NotReconcilable
+            )
+            || !matches!(&row.binding, ConversationBindingIdentity::ExternalProvider { binding }
+                if binding.endpoint == self.target.endpoint && binding.generation == authority.generation)
+        {
+            return Err(ProviderOperationStoreError::TransitionConflict);
+        }
+        let row = store
+            .confirm_recorded_target(&operation, offered_at_ms)
+            .await?;
+        if let Some(outcomes) = binding.outcomes.get() {
+            lock(outcomes).record_reconciled(operation);
+        }
+        Ok(SessionStoreSettlement::Operation(Box::new(row)))
     }
 
     fn record_mark_result(

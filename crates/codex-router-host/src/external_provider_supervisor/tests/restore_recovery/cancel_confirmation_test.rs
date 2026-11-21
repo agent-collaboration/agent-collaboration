@@ -157,6 +157,132 @@ async fn unconfirmed_cancel_keeps_a_fence_until_the_exact_late_prompt_end_is_rec
     host.shutdown().await.expect("shutdown");
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn late_cancel_repair_cannot_write_after_the_original_lifecycle_is_evicted() {
+    let rig = RestoreRig::new();
+    rig.seed_session().await;
+    let host = rig.open_host("late-cancel-confirmation").await;
+    rig.assert_loads(&host).await;
+    let (foreground, _) = submit_and_cancel(&rig, &host).await;
+    expire_confirmation(&rig, &host, &foreground).await;
+    for _ in 0..MAX_RETAINED_SETTLEMENTS {
+        let later = OperationId::generate();
+        host.hold_live_operation(later.clone());
+        assert!(host.publish_held_result(&later).await);
+    }
+    assert!(
+        host.held_result_for_test(&foreground).is_none(),
+        "the original lifecycle was evicted"
+    );
+    let finished = release_late_cancel(&rig, &host);
+    finished
+        .await
+        .expect("the real lane attempted the late repair");
+
+    let row = host
+        .show(ConversationOperationShowRequest {
+            operation_id: foreground.clone(),
+        })
+        .await
+        .expect("existing row");
+    assert_eq!(row.stage, ProviderOperationStage::Terminal);
+    assert_eq!(
+        row.effect,
+        ProviderOperationEffect::Unknown,
+        "late repair needs the original retained lifecycle"
+    );
+    let reconciled = host
+        .reconcile(ConversationOperationReconcileRequest {
+            operation_id: foreground,
+        })
+        .await
+        .expect("explicit reconcile remains available");
+    assert_eq!(
+        reconciled.reconciliation,
+        ProviderReconciliationState::NotReconcilable
+    );
+    host.shutdown().await.expect("shutdown");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn late_cancel_repair_and_reconcile_follow_store_guard_order() {
+    for repair_first in [false, true] {
+        let rig = RestoreRig::new();
+        rig.seed_session().await;
+        let host = rig.open_host("late-cancel-confirmation").await;
+        rig.assert_loads(&host).await;
+        let (foreground, _) = submit_and_cancel(&rig, &host).await;
+        expire_confirmation(&rig, &host, &foreground).await;
+
+        let mut reconcile = host.reconcile(ConversationOperationReconcileRequest {
+            operation_id: foreground.clone(),
+        });
+        if repair_first {
+            let mut commit = host
+                .inner
+                .store
+                .lock()
+                .await
+                .pause_next_write_before_commit_for_test();
+            let finished = release_late_cancel(&rig, &host);
+            commit.reached().await;
+            assert!(futures_util::poll!(&mut reconcile).is_pending());
+            commit.release();
+            let observed = reconcile.await.expect("reconcile reads the repaired row");
+            assert_eq!(observed.effect, ProviderOperationEffect::Applied);
+            assert_eq!(
+                observed.reconciliation,
+                ProviderReconciliationState::Confirmed
+            );
+            finished.await.expect("repair finished");
+        } else {
+            let observed = reconcile.await.expect("reconcile takes the guard first");
+            assert_eq!(observed.effect, ProviderOperationEffect::Unknown);
+            assert_eq!(
+                observed.reconciliation,
+                ProviderReconciliationState::NotReconcilable
+            );
+            release_late_cancel(&rig, &host)
+                .await
+                .expect("later repair finished");
+        }
+        let row = host
+            .show(ConversationOperationShowRequest {
+                operation_id: foreground.clone(),
+            })
+            .await
+            .expect("original row");
+        assert_eq!(row.effect, ProviderOperationEffect::Applied);
+        assert_eq!(row.reconciliation, ProviderReconciliationState::Confirmed);
+        assert_eq!(
+            host.wait(wait_request(foreground))
+                .await
+                .expect_err("original answer remains unknown")
+                .effect,
+            ProviderOperationEffect::Unknown
+        );
+        host.shutdown().await.expect("shutdown");
+    }
+}
+
+fn release_late_cancel(
+    rig: &RestoreRig,
+    host: &ExternalProviderSupervisor,
+) -> tokio::sync::oneshot::Receiver<()> {
+    let finished = host
+        .inner
+        .uncertainty
+        .slot(&rig.target.endpoint)
+        .fixture
+        .notice_wait(
+            rig.target.clone(),
+            crate::binding_store_fixture::BindingFixtureWait::LatePromptRepair,
+        );
+    node_test_fixture::release_fixture(&rig.root.path().join("wire.json"), ".release-cancel")
+        .expect("release the original wire request");
+    finished
+}
+
 #[tokio::test]
 async fn unconfirmed_cancel_same_generation_store_reopen_requires_reconcile() {
     let rig = RestoreRig::new();
