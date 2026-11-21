@@ -682,9 +682,23 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
         &self,
         request: ConversationOperationReconcileRequest,
     ) -> ProviderConversationFuture<'_, ConversationOperationSnapshot> {
+        let deadline = self.admission_deadline();
         Box::pin(async move {
             // Let an existing reservation use the store before taking it here.
-            self.wait_for_reservation(&request.operation_id).await;
+            router_clock::timeout_at(
+                self.inner.clock.as_ref(),
+                deadline,
+                self.wait_for_reservation(&request.operation_id),
+            )
+            .await
+            .map_err(|_| {
+                super::operation_store_deadline_failed(
+                    request.operation_id.clone(),
+                    None,
+                    ConversationOperationFailureStage::Reconciliation,
+                    ProviderOperationEffect::None,
+                )
+            })?;
             // Every admission is indexed before it can insert its durable row.
             // Holding the store across the sample and write excludes a commit
             // by a reservation that arrives after the sample.

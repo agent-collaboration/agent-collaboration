@@ -397,6 +397,14 @@ impl ProviderOperationStore {
             .pause_next_commit_at(sqlite_storage_maintenance::CommitPoint::AfterCommitReturned)
     }
 
+    #[cfg(feature = "test-support")]
+    pub fn pause_next_write_before_commit_for_test(
+        &self,
+    ) -> sqlite_storage_maintenance::CommitPause {
+        self.commits
+            .pause_next_commit_at(sqlite_storage_maintenance::CommitPoint::BeforeCommitInvoked)
+    }
+
     /// Unacknowledged unknown operations for this binding, excluding completed
     /// restore attempts whose local owner is already retired.
     pub async fn unknown_operations(

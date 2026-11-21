@@ -1,5 +1,7 @@
+#[path = "reconcile_admission_test.rs"]
+mod reconcile_admission_tests;
+
 use super::*;
-use crate::external_provider_supervisor::supervisor_test_pauses::ReconcilePausePoint;
 use collaboration_protocol::{
     ConversationAdmissionState, ProviderOperationKind, ProviderOperationStage,
 };
@@ -208,140 +210,6 @@ fn pause_dispatch_mark(
         .lock()
         .expect("mark pause") = Some(AdmissionTestPause { entered, release });
     (mark_waiting, finish_mark)
-}
-
-fn admission_pause() -> (
-    AdmissionTestPause,
-    tokio::sync::oneshot::Receiver<()>,
-    tokio::sync::oneshot::Sender<()>,
-) {
-    let (entered, reached) = tokio::sync::oneshot::channel();
-    let (resume, release) = tokio::sync::oneshot::channel();
-    (AdmissionTestPause { entered, release }, reached, resume)
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn reconcile_rechecks_liveness_after_admission_commits_before_its_store_guard() {
-    let rig = RestoreRig::new();
-    rig.seed_session().await;
-    let host = rig.open_host("restored-in-auto").await;
-    let operation_id = OperationId::generate();
-    let (pause, before_store, take_store) = admission_pause();
-    *host
-        .inner
-        .reconcile_test_pause
-        .lock()
-        .expect("reconcile pause") = Some((ReconcilePausePoint::BeforeStore, pause));
-    let (mark_waiting, finish_mark) = pause_dispatch_mark(&host);
-
-    let mut reconcile = host.reconcile(ConversationOperationReconcileRequest {
-        operation_id: operation_id.clone(),
-    });
-    tokio::select! {
-        reached = before_store => reached.expect("reconcile reached store boundary"),
-        result = &mut reconcile => panic!("reconcile answered before the crossing: {result:?}"),
-    }
-    assert!(host.held_result_for_test(&operation_id).is_none());
-    host.load(rig.load_request(operation_id.clone()))
-        .await
-        .expect("the retained admission committed");
-    mark_waiting.await.expect("dispatch has not marked the row");
-
-    take_store.send(()).expect("let reconcile take the store");
-    let reconciled = reconcile.await.expect("reconcile observes the live row");
-    assert_eq!(reconciled.stage, ProviderOperationStage::Admitted);
-    assert_eq!(reconciled.effect, ProviderOperationEffect::None);
-    assert_eq!(
-        reconciled.reconciliation,
-        ProviderReconciliationState::Unresolved
-    );
-    finish_mark.send(()).expect("continue normal restore");
-    assert!(matches!(
-        host.wait(wait_request(operation_id))
-            .await
-            .expect("restore finishes")
-            .output,
-        ConversationOperationWaitOutput::Available {
-            settlement: ConversationOperationSettlement::Loaded { .. }
-        }
-    ));
-    host.shutdown().await.expect("fixture shutdown");
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn reservation_indexed_under_reconciles_store_guard_commits_after_reconcile() {
-    let rig = RestoreRig::new();
-    rig.seed_session().await;
-    let host = rig.open_host("restored-in-auto").await;
-    let operation_id = OperationId::generate();
-    let (before_index, preflight_done, allow_reservation) = admission_pause();
-    *host
-        .inner
-        .admission_before_reservation_test_pause
-        .lock()
-        .expect("pre-index pause") = Some(before_index);
-    let (before_write, reserved, allow_write) = admission_pause();
-    *host
-        .inner
-        .admission_test_pause
-        .lock()
-        .expect("pre-write pause") = Some(before_write);
-    let (with_store, reconcile_holds_store, inspect_row) = admission_pause();
-    *host
-        .inner
-        .reconcile_test_pause
-        .lock()
-        .expect("reconcile pause") = Some((ReconcilePausePoint::HoldingStore, with_store));
-
-    let mut load = host.load(rig.load_request(operation_id.clone()));
-    tokio::select! {
-        reached = preflight_done => reached.expect("admission has read before indexing"),
-        result = &mut load => panic!("load answered before reservation: {result:?}"),
-    }
-    let mut reconcile = host.reconcile(ConversationOperationReconcileRequest {
-        operation_id: operation_id.clone(),
-    });
-    tokio::select! {
-        reached = reconcile_holds_store => reached.expect("reconcile checked under the guard"),
-        result = &mut reconcile => panic!("reconcile answered before admission was released: {result:?}"),
-    }
-    assert!(host.held_result_for_test(&operation_id).is_none());
-    allow_reservation
-        .send(())
-        .expect("admission may index under the held store");
-    reserved.await.expect("admission has indexed a reservation");
-    let reservation = host
-        .held_result_for_test(&operation_id)
-        .expect("indexed reservation")
-        .0;
-    assert!(reservation.is_reserving());
-    assert!(host.inner.store.try_lock().is_err());
-
-    allow_write.send(()).expect("admission may try the store");
-    inspect_row
-        .send(())
-        .expect("reconcile may inspect before releasing the store");
-    let failure = reconcile
-        .await
-        .expect_err("the reservation has no row under reconcile's guard");
-    assert_eq!(failure.kind, ConversationOperationFailureKind::NotFound);
-    assert_eq!(
-        load.await
-            .expect("admission commits afterward")
-            .operation
-            .stage,
-        ProviderOperationStage::Admitted
-    );
-    assert!(matches!(
-        host.wait(wait_request(operation_id))
-            .await
-            .expect("restore finishes")
-            .output,
-        ConversationOperationWaitOutput::Available {
-            settlement: ConversationOperationSettlement::Loaded { .. }
-        }
-    ));
-    host.shutdown().await.expect("fixture shutdown");
 }
 
 #[tokio::test(flavor = "current_thread")]
