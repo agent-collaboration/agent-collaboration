@@ -1,5 +1,5 @@
 use crate::{
-    stored_rows::{WAKE_FAILURE, decode_wakes, timestamp},
+    stored_rows::{WAKE_FAILURE, decode_wakes},
     wake_timer as wake,
 };
 use central_engine_model::{InstanceKey, StateTag};
@@ -8,6 +8,7 @@ use fleet_engine::{
     EngineHost, LoadFailure, StoreAdapter, Versioned, decode_load_failure, load_store_failure,
     raw_version,
 };
+use fleet_runtime_ports::stored_values::format_utc_millis;
 use fleet_runtime_ports::{
     CentralStore as _,
     guarded_statements::{exact, text},
@@ -62,7 +63,10 @@ where
         prior: &Versioned<wake::State>,
         next: &wake::State,
     ) -> Result<GuardedStatement, StoreFailure> {
-        let mut args = vec![text(next.state_tag()), text(timestamp(self.runtime.now()?))];
+        let mut args = vec![
+            text(next.state_tag()),
+            text(format_utc_millis(self.runtime.now()?)),
+        ];
         args.extend(prior.version.0.clone());
         Ok(exact(
             "UPDATE automation_wakes SET state=?1,updated_at=?2 WHERE wake_id IS ?3 AND target IS ?4 AND due_at IS ?5 AND text IS ?6 AND state IS ?7 AND created_at IS ?8 AND updated_at IS ?9",

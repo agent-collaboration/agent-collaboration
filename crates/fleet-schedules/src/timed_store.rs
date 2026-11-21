@@ -1,6 +1,6 @@
 use crate::{
     automation_timer as automation,
-    stored_rows::{AUTOMATION_FAILURE, decode_automations, timestamp},
+    stored_rows::{AUTOMATION_FAILURE, decode_automations},
 };
 use central_engine_model::{InstanceKey, StateTag};
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
@@ -8,6 +8,7 @@ use fleet_engine::{
     EngineHost, LoadFailure, StoreAdapter, Versioned, decode_load_failure, load_store_failure,
     raw_version,
 };
+use fleet_runtime_ports::stored_values::format_utc_millis;
 use fleet_runtime_ports::{
     CentralStore as _,
     guarded_statements::{exact, text},
@@ -76,9 +77,9 @@ where
             }
         };
         let mut args = vec![
-            evaluated.map_or(SqlValue::Null, |time| text(timestamp(time))),
+            evaluated.map_or(SqlValue::Null, |time| text(format_utc_millis(time))),
             text(next.state_tag()),
-            text(timestamp(self.runtime.now()?)),
+            text(format_utc_millis(self.runtime.now()?)),
         ];
         args.extend(prior.version.0.clone());
         Ok(exact(
@@ -95,7 +96,7 @@ where
             automation::Effect::QueueMessage(message) => vec![(self.plan_queued)(message)?],
             automation::Effect::ScheduleAt(due) => vec![exact(
                 "UPDATE automation_schedules SET next_due_at=? WHERE automation_id=?",
-                vec![text(timestamp(*due)), text(&key.0)],
+                vec![text(format_utc_millis(*due)), text(&key.0)],
             )],
             automation::Effect::ClearSchedule => vec![exact(
                 "UPDATE automation_schedules SET next_due_at=NULL WHERE automation_id=?",

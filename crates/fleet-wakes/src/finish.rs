@@ -1,7 +1,8 @@
-use crate::stored_rows::{WAKE_FAILURE, timestamp};
+use crate::stored_rows::WAKE_FAILURE;
 use central_engine_model::{EngineTime, ItemFailureClass, MachineKind};
 use central_storage::ReadOutcome;
 use fleet_engine::{DiscardStore, LoadFailure, Versioned, raw_version};
+use fleet_runtime_ports::stored_values::format_utc_millis;
 use fleet_runtime_ports::{
     guarded_statements::{exact, text},
     stored_values::string,
@@ -46,7 +47,7 @@ pub fn wake_finish_store() -> DiscardStore<WakeFinish> {
         save: |prior, next, now: EngineTime| {
             let mut args = vec![
                 text(central_engine_model::StateTag::state_tag(next)),
-                text(timestamp(now)),
+                text(format_utc_millis(now)),
             ];
             args.extend(prior.version.0.clone());
             Ok(exact(

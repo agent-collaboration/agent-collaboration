@@ -1,7 +1,6 @@
 //! Persistence and guarded settlement for system-message expiry.
 use crate::{
     message_deadline::{EXPIRED_24_HOURS, system_message_deadline},
-    message_values::timestamp,
     system_message_expiry::{State, SystemMessageExpiry},
 };
 use central_engine_model::{EngineTime, InstanceKey, StateTag};
@@ -11,6 +10,7 @@ use fleet_engine::{
     load_store_failure, raw_version,
 };
 use fleet_runtime_ports::CentralStore as _;
+use fleet_runtime_ports::stored_values::format_utc_millis;
 use fleet_runtime_ports::{
     guarded_statements::{exact, text},
     stored_values::{column, string},
@@ -72,7 +72,7 @@ impl<R: EngineHost> StoreAdapter<SystemMessageExpiry> for SystemMessageExpirySto
         let mut args = vec![
             text(next.state_tag()),
             text(EXPIRED_24_HOURS),
-            text(timestamp(self.0.now()?)),
+            text(format_utc_millis(self.0.now()?)),
         ];
         args.extend(prior.version.0.clone());
         Ok(exact(

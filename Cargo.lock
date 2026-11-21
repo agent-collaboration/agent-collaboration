@@ -2463,13 +2463,11 @@ version = "0.1.156"
 dependencies = [
  "central-engine-model",
  "central-storage",
- "chrono",
  "fleet-contracts",
  "fleet-engine",
  "fleet-runtime",
  "fleet-runtime-ports",
  "fleet-workspace-access",
- "serde_json",
  "workspace-ids",
  "workspace-model",
 ]
@@ -2498,6 +2496,7 @@ version = "0.1.156"
 dependencies = [
  "central-engine-model",
  "central-storage",
+ "chrono",
  "serde",
  "serde_json",
  "uuid",
@@ -2518,7 +2517,6 @@ dependencies = [
  "fleet-runtime-ports",
  "fleet-timer-policy",
  "hegeltest",
- "serde",
  "serde_json",
  "workspace-ids",
  "workspace-model",
@@ -2558,13 +2556,11 @@ dependencies = [
  "central-engine-model",
  "central-engine-test-support",
  "central-storage",
- "chrono",
  "fleet-contracts",
  "fleet-engine",
  "fleet-runtime-ports",
  "fleet-timer-policy",
  "hegeltest",
- "serde",
  "serde_json",
  "sqlx",
  "tokio",
@@ -2577,7 +2573,6 @@ name = "fleet-workspace-access"
 version = "0.1.156"
 dependencies = [
  "central-storage",
- "chrono",
  "fleet-contracts",
  "fleet-runtime",
  "fleet-runtime-ports",

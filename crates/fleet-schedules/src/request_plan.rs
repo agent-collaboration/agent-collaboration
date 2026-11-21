@@ -1,11 +1,8 @@
 use crate::stored_rows::decode_automations;
-use crate::stored_rows::timestamp;
 use agent_automation::TimingRule;
-use central_storage::{GuardedStatement, ReadOutcome, SqlValue, Statement, StoreFailure};
-use fleet_runtime_ports::{
-    guarded_statements::{exact, text},
-    workspace_decode_error::corrupt,
-};
+use central_storage::{GuardedStatement, ReadOutcome, Statement, StoreFailure};
+use fleet_runtime_ports::guarded_statements::{exact, text};
+use fleet_runtime_ports::stored_values::{encode_json, format_utc_millis};
 use mail::{CentralMailAnswer as Answer, CentralMailRefusal as Refusal};
 use workspace_ids::{AutomationId, SessionRef};
 use workspace_model::{PostText, Timestamp, central_mail as mail};
@@ -16,12 +13,6 @@ type SchedulePlan = Result<
     StoreFailure,
 >;
 
-fn encode<T: serde::Serialize>(value: &T) -> Result<SqlValue, StoreFailure> {
-    serde_json::to_string(value)
-        .map(text)
-        .map_err(|_| corrupt("mail JSON"))
-}
-
 pub fn plan_set_automation(
     target: &SessionRef,
     timing: &TimingRule,
@@ -29,7 +20,7 @@ pub fn plan_set_automation(
     now: Timestamp,
     mint: impl FnOnce() -> Result<AutomationId, StoreFailure>,
 ) -> SchedulePlan {
-    let at = || text(timestamp(now));
+    let at = || text(format_utc_millis(now));
     let first = match crate::timing::first_due(timing, now) {
         Ok(Some(first)) => first,
         Ok(None) | Err(agent_automation::TimingError::OutOfRange) => {
@@ -68,12 +59,12 @@ pub fn plan_set_automation(
             "INSERT INTO automation_schedules(automation_id,target,timing_rule,anchor_at,expires_at,evaluated_through_at,text,next_due_at,state,created_at,updated_at) VALUES (?,?,?,?,?,NULL,?,?,'active',?,?)",
             vec![
                 text(&id),
-                encode(target)?,
-                encode(timing)?,
-                text(timestamp(anchor)),
-                text(timestamp(expires_at)),
+                encode_json(target, "mail JSON")?,
+                encode_json(timing, "mail JSON")?,
+                text(format_utc_millis(anchor)),
+                text(format_utc_millis(expires_at)),
                 text(body.as_str()),
-                text(timestamp(first)),
+                text(format_utc_millis(first)),
                 at(),
                 at(),
             ],
@@ -98,7 +89,7 @@ pub fn plan_disable_automation(
     now: Timestamp,
     rows: &ReadOutcome,
 ) -> SchedulePlan {
-    let at = || text(timestamp(now));
+    let at = || text(format_utc_millis(now));
     let rows = decode_automations(rows)?;
     let Some(row) = rows.first() else {
         return Ok(Err(Refusal::AutomationNotFound {

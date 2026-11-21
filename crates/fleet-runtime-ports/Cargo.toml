@@ -13,6 +13,7 @@ workspace = true
 [dependencies]
 central-storage.workspace = true
 central-engine-model.workspace = true
+chrono = { version = "0.4.45", default-features = false, features = ["alloc"] }
 workspace-ids.workspace = true
 serde.workspace = true
 serde_json.workspace = true

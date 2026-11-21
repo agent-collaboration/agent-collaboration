@@ -1,8 +1,8 @@
 use super::attempt_records::failure_detail;
-use super::timestamp;
 use central_engine_model::{AttemptState, FailureRecord};
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
 use fleet_contracts::{AttemptGuard, EngineSubject};
+use fleet_runtime_ports::stored_values::format_utc_millis;
 use fleet_runtime_ports::{
     guarded_statements::{any, exact, text},
     workspace_decode_error::corrupt,
@@ -79,12 +79,16 @@ pub(crate) fn write_attempt(
     subject_version: Vec<SqlValue>,
 ) -> Result<GuardedStatement, StoreFailure> {
     let (state, next_try, retired_at) = match record.state {
-        AttemptState::Failing { next_try_at } => {
-            ("failing", text(timestamp(next_try_at)), SqlValue::Null)
-        }
-        AttemptState::Retired { retired_at } => {
-            ("retired", SqlValue::Null, text(timestamp(retired_at)))
-        }
+        AttemptState::Failing { next_try_at } => (
+            "failing",
+            text(format_utc_millis(next_try_at)),
+            SqlValue::Null,
+        ),
+        AttemptState::Retired { retired_at } => (
+            "retired",
+            SqlValue::Null,
+            text(format_utc_millis(retired_at)),
+        ),
     };
     let mut args = vec![
         text(record.attempt_id),
@@ -95,11 +99,11 @@ pub(crate) fn write_attempt(
         next_try,
         text(record.last_failure.storage_tag()),
         failure_detail(&record.last_failure).map_or(SqlValue::Null, text),
-        text(timestamp(record.first_failed_at)),
-        text(timestamp(record.last_failed_at)),
+        text(format_utc_millis(record.first_failed_at)),
+        text(format_utc_millis(record.last_failed_at)),
         retired_at,
-        text(timestamp(record.created_at)),
-        text(timestamp(record.updated_at)),
+        text(format_utc_millis(record.created_at)),
+        text(format_utc_millis(record.updated_at)),
         integer(i64::from(prior.is_some()))?,
     ];
     match prior {

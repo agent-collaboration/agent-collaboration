@@ -2,12 +2,9 @@
 use crate::window_rows::NotificationWindow;
 use central_storage::{GuardedStatement, SqlValue};
 use fleet_runtime_ports::guarded_statements::{any, exact, text};
+use fleet_runtime_ports::stored_values::format_utc_millis;
 use workspace_ids::{NotificationWindowId, NotificationWindowItemId};
 use workspace_model::{ChangeId, ThreadId, Timestamp, WorkspaceId};
-
-pub(crate) fn timestamp(value: Timestamp) -> String {
-    value.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
-}
 
 pub(crate) fn delete_window_items_for_thread(
     workspace: &WorkspaceId,
@@ -58,10 +55,10 @@ pub(crate) fn window_statements(
             vec![
                 text(&window.id),
                 text(&window.recipient),
-                text(timestamp(window.first)),
-                text(timestamp(window.due)),
-                text(timestamp(now)),
-                text(timestamp(now)),
+                text(format_utc_millis(window.first)),
+                text(format_utc_millis(window.due)),
+                text(format_utc_millis(now)),
+                text(format_utc_millis(now)),
             ],
         ),
         any(
@@ -72,8 +69,8 @@ pub(crate) fn window_statements(
                 text(workspace),
                 thread.map_or(SqlValue::Null, text),
                 text(change),
-                text(timestamp(now)),
-                text(timestamp(now)),
+                text(format_utc_millis(now)),
+                text(format_utc_millis(now)),
             ],
         ),
     ]

@@ -28,7 +28,7 @@ impl<Host: fleet_runtime_ports::CentralStore, Stores: fleet_runtime_ports::Works
         &self,
         seed: SeedOwedReply,
     ) -> Result<central_storage::BatchOutcome, central_storage::StoreFailure> {
-        use crate::central_statement_values::timestamp;
+        use fleet_runtime_ports::stored_values::format_utc_millis;
         use fleet_runtime_ports::{
             guarded_statements::{any, exact, text},
             workspace_decode_error::corrupt,
@@ -39,7 +39,7 @@ impl<Host: fleet_runtime_ports::CentralStore, Stores: fleet_runtime_ports::Works
         if seed.key.get_version_num() != 7 || seed.group.get_version_num() != 7 {
             return Err(corrupt("engine_probe_items.id"));
         }
-        let now = timestamp(self.execution.now()?);
+        let now = format_utc_millis(self.execution.now()?);
         self.execution.statement_host().run_batch(central_storage::StatementBatch {
             statements: vec![
                 any("INSERT INTO engine_probe_groups(group_id,effect_count,created_at,updated_at) VALUES (?,0,?,?) ON CONFLICT(group_id) DO NOTHING",vec![text(seed.group),text(&now),text(&now)]),

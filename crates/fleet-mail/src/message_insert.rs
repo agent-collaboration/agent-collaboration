@@ -1,6 +1,6 @@
 //! The canonical mailbox insert and its stored delivery terms.
-use crate::message_values::{encode, timestamp};
 use central_storage::{GuardedStatement, SqlValue, StoreFailure};
+use fleet_runtime_ports::stored_values::{encode_json, format_utc_millis};
 use fleet_runtime_ports::{
     guarded_statements::{any, text},
     workspace_decode_error::corrupt,
@@ -49,11 +49,11 @@ pub(crate) fn insert_message_due(
         "INSERT INTO mail_messages(message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at,cancel_due_at,sender_request_id,delivery_window_ends_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(source_change_id,recipient_actor) WHERE source_change_id IS NOT NULL DO NOTHING",
         vec![
             text(&message.message_id),
-            encode(&message.sender)?,
+            encode_json(&message.sender, "mail JSON")?,
             text(&message.target.machine_id),
-            encode(&message.target)?,
+            encode_json(&message.target, "mail JSON")?,
             text(kind),
-            encode(&message.body)?,
+            encode_json(&message.body, "mail JSON")?,
             text(state),
             failure,
             source.map_or(SqlValue::Null, |source| text(&source.change_id)),
@@ -62,11 +62,13 @@ pub(crate) fn insert_message_due(
             source
                 .and_then(|source| source.thread_id.as_ref())
                 .map_or(SqlValue::Null, text),
-            text(timestamp(message.created_at)),
-            text(timestamp(message.updated_at)),
-            direct.map_or(SqlValue::Null, |terms| text(timestamp(terms.cancel_due_at))),
+            text(format_utc_millis(message.created_at)),
+            text(format_utc_millis(message.updated_at)),
+            direct.map_or(SqlValue::Null, |terms| {
+                text(format_utc_millis(terms.cancel_due_at))
+            }),
             direct.map_or(SqlValue::Null, |terms| text(&terms.sender_request_id)),
-            delivery_window.map_or(SqlValue::Null, |due| text(timestamp(due))),
+            delivery_window.map_or(SqlValue::Null, |due| text(format_utc_millis(due))),
         ],
     ))
 }

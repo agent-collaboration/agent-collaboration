@@ -6,7 +6,7 @@ use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use workspace_ids::SessionRef;
 use workspace_model::{
     ActorIdentityId, ThreadId, Timestamp, WorkspaceId,
-    central_mail::{MessageBody, MessageSender, NoticeItem, NoticeSource},
+    central_mail::{NoticeItem, NoticeSource},
 };
 
 pub(crate) struct NoticeMailbox<'runtime, Host: CentralStore, Stores: WorkspaceStores>(
@@ -44,15 +44,6 @@ impl<Host: CentralStore, Stores: WorkspaceStores> fleet_notices::NoticeMailbox
         source: NoticeSource,
         now: Timestamp,
     ) -> Result<(GuardedStatement, MailDeliveryReady), StoreFailure> {
-        let message = fleet_mail::prepare_message_record(
-            MessageSender::Central,
-            target,
-            MessageBody::Notice { items },
-            Some(source),
-            now,
-            || self.0.mint(),
-        )?;
-        let insert = fleet_mail::insert_message(&message)?;
-        Ok((insert, (&message).into()))
+        fleet_mail::plan_sourced_notice(target, items, source, now, || self.0.mint())
     }
 }

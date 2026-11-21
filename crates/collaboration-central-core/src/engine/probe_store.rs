@@ -1,5 +1,4 @@
 use super::probe_machine::{EngineProbe, ProbeEffect, ProbeState};
-use crate::central_statement_values::timestamp;
 use central_engine_model::{EngineTime, InstanceKey, StateTag};
 use central_storage::{GuardedStatement, ReadOutcome, SqlValue, Statement, StoreFailure};
 use fleet_engine::{
@@ -7,6 +6,7 @@ use fleet_engine::{
     load_store_failure, raw_version,
 };
 use fleet_runtime_ports::CentralStore as _;
+use fleet_runtime_ports::stored_values::format_utc_millis;
 use fleet_runtime_ports::{
     guarded_statements::{exact, text},
     stored_values::{column, string},
@@ -84,7 +84,10 @@ impl<R: EngineHost> StoreAdapter<EngineProbe> for ProbeStore<'_, R> {
         prior: &Versioned<ProbeState>,
         next: &ProbeState,
     ) -> Result<GuardedStatement, StoreFailure> {
-        let mut args = vec![text(next.state_tag()), text(timestamp(self.0.now()?))];
+        let mut args = vec![
+            text(next.state_tag()),
+            text(format_utc_millis(self.0.now()?)),
+        ];
         args.extend(prior.version.0.clone());
         Ok(exact(
             "UPDATE engine_probe_items SET state=?1,updated_at=?2 WHERE item_id IS ?3 AND group_id IS ?4 AND due_at IS ?5 AND claim IS ?6 AND state IS ?7 AND completed_claim IS ?8 AND created_at IS ?9 AND updated_at IS ?10 AND machine_kind='engine_probe'",
@@ -99,7 +102,7 @@ impl<R: EngineHost> StoreAdapter<EngineProbe> for ProbeStore<'_, R> {
         Ok(match effect {
             ProbeEffect::BumpGroup { group, at } => vec![exact(
                 "UPDATE engine_probe_groups SET effect_count=effect_count+1,updated_at=? WHERE group_id=?",
-                vec![text(timestamp(*at)), text(group)],
+                vec![text(format_utc_millis(*at)), text(group)],
             )],
             ProbeEffect::Claim => vec![exact(
                 "UPDATE engine_probe_items SET completed_claim=claim WHERE item_id=? AND machine_kind='engine_probe'",

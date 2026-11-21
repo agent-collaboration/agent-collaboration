@@ -3,7 +3,6 @@ use crate::{
     direct_message::{DirectMessage, DirectMessageRefusal, Event},
     direct_message_rows::refusal_text,
     direct_message_store::DirectMessageStore,
-    message_values::timestamp,
 };
 use central_engine_model::{InstanceKey, TransitionError};
 use central_storage::{
@@ -11,6 +10,7 @@ use central_storage::{
 };
 use fleet_contracts::mail_link::{MailAckIgnored, MailAckSettlement};
 use fleet_engine::{Engine, EngineHost, HandleOutcome};
+use fleet_runtime_ports::stored_values::format_utc_millis;
 use fleet_runtime_ports::{
     CentralStore,
     guarded_statements::{exact, text},
@@ -105,7 +105,7 @@ async fn settle_system_ack<R: EngineHost>(
             vec![
                 text(state),
                 reason,
-                text(timestamp(runtime.now()?)),
+                text(format_utc_millis(runtime.now()?)),
                 text(message_id),
                 text(target),
                 text(kind),
