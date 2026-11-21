@@ -4,7 +4,44 @@
 
 use super::{AdmissionTestPause, ExternalProviderSupervisor, OperationId};
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum ReconcilePausePoint {
+    BeforeStore,
+    HoldingStore,
+}
+
+impl AdmissionTestPause {
+    async fn wait(self) {
+        let _test_ended = self.entered.send(());
+        let _test_ended = self.release.await;
+    }
+}
+
 impl ExternalProviderSupervisor {
+    pub(super) async fn pause_before_admission_reservation_for_test(&self) {
+        let pause = self
+            .inner
+            .admission_before_reservation_test_pause
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some(pause) = pause {
+            pause.wait().await;
+        }
+    }
+
+    pub(super) async fn pause_reconcile_for_test(&self, point: ReconcilePausePoint) {
+        let pause = self
+            .inner
+            .reconcile_test_pause
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take_if(|(selected, _)| *selected == point);
+        if let Some((_, pause)) = pause {
+            pause.wait().await;
+        }
+    }
+
     pub(crate) fn tracked_operation_tasks_for_test(&self) -> tokio_util::task::TaskTracker {
         self.inner.operation_tasks.clone()
     }

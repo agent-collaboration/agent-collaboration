@@ -102,6 +102,15 @@ struct SupervisorInner {
     #[cfg(test)]
     admission_test_pause: StdMutex<Option<AdmissionTestPause>>,
     #[cfg(test)]
+    admission_before_reservation_test_pause: StdMutex<Option<AdmissionTestPause>>,
+    #[cfg(test)]
+    reconcile_test_pause: StdMutex<
+        Option<(
+            supervisor_test_pauses::ReconcilePausePoint,
+            AdmissionTestPause,
+        )>,
+    >,
+    #[cfg(test)]
     dispatch_mark_test_pause: StdMutex<Option<AdmissionTestPause>>,
     #[cfg(test)]
     cancel_admission_test_pause: StdMutex<Option<AdmissionTestPause>>,
@@ -410,6 +419,10 @@ impl ExternalProviderSupervisor {
                 started_at_ms,
                 #[cfg(test)]
                 admission_test_pause: StdMutex::new(None),
+                #[cfg(test)]
+                admission_before_reservation_test_pause: StdMutex::new(None),
+                #[cfg(test)]
+                reconcile_test_pause: StdMutex::new(None),
                 #[cfg(test)]
                 dispatch_mark_test_pause: StdMutex::new(None),
                 #[cfg(test)]

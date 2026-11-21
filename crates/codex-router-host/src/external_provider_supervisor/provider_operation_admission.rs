@@ -474,6 +474,8 @@ impl ExternalProviderSupervisor {
         )
         .await??;
 
+        #[cfg(test)]
+        self.pause_before_admission_reservation_for_test().await;
         let live = Arc::new(LiveOperation::reserving(
             binding.endpoint.clone(),
             known_target.cloned(),

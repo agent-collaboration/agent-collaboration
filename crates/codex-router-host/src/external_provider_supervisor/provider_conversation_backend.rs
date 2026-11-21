@@ -683,9 +683,17 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
         request: ConversationOperationReconcileRequest,
     ) -> ProviderConversationFuture<'_, ConversationOperationSnapshot> {
         Box::pin(async move {
-            // Admission reserves an operation in the live index before its
-            // durable insert, so a row with no live owner here has none
-            // (design note §15.3); no store lock is held across this read.
+            // Let an existing reservation use the store before taking it here.
+            self.wait_for_reservation(&request.operation_id).await;
+            // Every admission is indexed before it can insert its durable row.
+            // Holding the store across the sample and write excludes a commit
+            // by a reservation that arrives after the sample.
+            #[cfg(test)]
+            self.pause_reconcile_for_test(
+                super::supervisor_test_pauses::ReconcilePausePoint::BeforeStore,
+            )
+            .await;
+            let mut store = self.inner.store.lock().await;
             let is_live = self
                 .inner
                 .live_operations
@@ -698,29 +706,11 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                     Err(_) => true,
                 })
                 .unwrap_or(false);
-            if is_live {
-                // A reservation answers once its durable insert does.
-                self.wait_for_reservation(&request.operation_id).await;
-            }
-            let mut store = self.inner.store.lock().await;
-            if is_live {
-                let record = store
-                    .inspect(&request.operation_id)
-                    .await
-                    .map_err(|_| unavailable_failure(request.operation_id.clone(), None))?
-                    .ok_or_else(|| {
-                        failure(
-                            ConversationOperationFailureKind::NotFound,
-                            ConversationOperationFailureStage::Settlement,
-                            ProviderOperationEffect::None,
-                            "the Router has no record of this operation ID",
-                            request.operation_id.clone(),
-                            None,
-                        )
-                    })?;
-                return snapshot_from_record(record)
-                    .map_err(|message| snapshot_failure(request.operation_id, message));
-            }
+            #[cfg(test)]
+            self.pause_reconcile_for_test(
+                super::supervisor_test_pauses::ReconcilePausePoint::HoldingStore,
+            )
+            .await;
             let record = store
                 .inspect(&request.operation_id)
                 .await
@@ -735,6 +725,10 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                         None,
                     )
                 })?;
+            if is_live {
+                return snapshot_from_record(record)
+                    .map_err(|message| snapshot_failure(request.operation_id, message));
+            }
             let record = if record.reconciliation_state == ProviderReconciliationState::Unresolved {
                 store
                     .record_not_reconcilable(&request.operation_id, self.inner.now_ms())
