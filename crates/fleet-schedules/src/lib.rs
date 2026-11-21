@@ -1,19 +1,20 @@
 //! The schedule job's owned rules, rows and plans.
 #![forbid(unsafe_code)]
 
-mod central_mail_time;
-mod engine;
-mod query_registry;
+mod automation_timer;
+mod due_queries;
+mod finish;
 mod request_plan;
-mod rows;
-mod store;
+mod stored_rows;
+mod timed_store;
+mod timing;
 
-pub use central_mail_time::set_automation_refusal;
-pub use engine::machines::{
-    automation_timer::{AutomationTimer, Effect, Event, State},
-    lifecycle_finish::{AutomationFinish, AutomationKind, automation_finish_store},
-};
-pub use query_registry::{__controlled_machine, __machine_rows, AUTOMATION_LIST};
+pub use automation_timer::{AutomationTimer, Effect, Event, State};
+pub use due_queries::AUTOMATION_LIST;
+#[doc(hidden)]
+pub use due_queries::{__controlled_machine, __machine_rows};
+pub use finish::{AutomationFinish, automation_finish_store};
 pub use request_plan::{disable_automation_read, plan_disable_automation, plan_set_automation};
-pub use rows::AutomationRow;
-pub use store::AutomationStore;
+pub use stored_rows::AutomationRow;
+pub use timed_store::AutomationStore;
+pub use timing::set_automation_refusal;

@@ -1,5 +1,5 @@
-use crate::rows::decode_automations;
-use crate::rows::timestamp;
+use crate::stored_rows::decode_automations;
+use crate::stored_rows::timestamp;
 use agent_automation::TimingRule;
 use central_storage::{GuardedStatement, ReadOutcome, SqlValue, Statement, StoreFailure};
 use fleet_runtime_ports::{
@@ -9,7 +9,9 @@ use fleet_runtime_ports::{
 use mail::{CentralMailAnswer as Answer, CentralMailRefusal as Refusal};
 use workspace_ids::{AutomationId, SessionRef};
 use workspace_model::{PostText, Timestamp, central_mail as mail};
-type TimerPlan = Result<
+/// Storage failures are outer errors and retained refusals are inner results.
+/// The caller owns admission and commit.
+type SchedulePlan = Result<
     Result<(Vec<GuardedStatement>, mail::CentralMailAnswer), mail::CentralMailRefusal>,
     StoreFailure,
 >;
@@ -26,9 +28,9 @@ pub fn plan_set_automation(
     body: &PostText,
     now: Timestamp,
     mint: impl FnOnce() -> Result<AutomationId, StoreFailure>,
-) -> TimerPlan {
+) -> SchedulePlan {
     let at = || text(timestamp(now));
-    let first = match crate::central_mail_time::first_due(timing, now) {
+    let first = match crate::timing::first_due(timing, now) {
         Ok(Some(first)) => first,
         Ok(None) | Err(agent_automation::TimingError::OutOfRange) => {
             return Ok(Err(Refusal::NoOccurrence));
@@ -95,7 +97,7 @@ pub fn plan_disable_automation(
     automation_id: &AutomationId,
     now: Timestamp,
     rows: &ReadOutcome,
-) -> TimerPlan {
+) -> SchedulePlan {
     let at = || text(timestamp(now));
     let rows = decode_automations(rows)?;
     let Some(row) = rows.first() else {

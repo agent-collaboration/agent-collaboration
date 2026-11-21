@@ -189,6 +189,8 @@ pub(super) fn check_boundaries(
     for (name, allowed) in TIMER_CRATES {
         check_closed_workspace_edges(graph, name, allowed)?;
     }
+    check_timer_job_reachability(graph, FLEET_WAKES, FLEET_SCHEDULES)?;
+    check_timer_job_reachability(graph, FLEET_SCHEDULES, FLEET_WAKES)?;
     for name in PROXY_CRATES {
         let Some(source) = graph.workspace_id(name) else {
             continue;
@@ -206,6 +208,70 @@ pub(super) fn check_boundaries(
         }
     }
     Ok(())
+}
+
+const TIMER_FORBIDDEN_SERVICES: &[&str] = &[
+    "fleet-mail",
+    "collaboration-central-core",
+    "collaboration-central-tokio",
+    "collaboration-central-cloudflare",
+    "codex-router-host",
+    "codex-router-debug-hosts",
+    "codex-router-tailnet-verification-host",
+];
+
+fn check_timer_job_reachability(
+    graph: &NonDevDependencyGraph,
+    job: &str,
+    sibling: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let Some(source) = graph.workspace_id(job) else {
+        return Ok(());
+    };
+    for destination in reachable(graph, source) {
+        if !graph.workspace_members.contains(destination) {
+            continue;
+        }
+        let target = graph
+            .names
+            .get(destination)
+            .ok_or("dependency name absent")?;
+        if target == sibling || TIMER_FORBIDDEN_SERVICES.contains(&target.as_str()) {
+            return Err(format!("BD1: forbidden reachable dependency {job} -> {target}").into());
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn timer_job_reachability_rejects_forbidden_edges_through_an_allowed_leaf() {
+    let allowed = graph(&[
+        (FLEET_WAKES, "workspace-model", DependencyKind::Normal),
+        (
+            "workspace-model",
+            "collaboration-mail-protocol",
+            DependencyKind::Normal,
+        ),
+    ]);
+    assert!(check_boundaries(&allowed).is_ok());
+
+    for kind in [DependencyKind::Normal, DependencyKind::Build] {
+        for target in [FLEET_WAKES]
+            .into_iter()
+            .chain(TIMER_FORBIDDEN_SERVICES.iter().copied())
+        {
+            let indirect = graph(&[
+                (FLEET_SCHEDULES, "agent-automation", DependencyKind::Normal),
+                ("agent-automation", target, kind),
+            ]);
+            let failure = check_boundaries(&indirect)
+                .expect_err("a timer must not reach a forbidden crate through an allowed leaf");
+            assert_eq!(
+                failure.to_string(),
+                format!("BD1: forbidden reachable dependency {FLEET_SCHEDULES} -> {target}")
+            );
+        }
+    }
 }
 
 fn check_closed_workspace_edges(

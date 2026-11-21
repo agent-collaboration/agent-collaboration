@@ -158,5 +158,5 @@ pub fn set_automation_refusal(timing: &TimingRule, now: Timestamp) -> Option<Cen
 }
 
 #[cfg(test)]
-#[path = "central_mail_time_test.rs"]
+#[path = "timing_test.rs"]
 mod tests;

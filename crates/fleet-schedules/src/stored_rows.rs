@@ -8,6 +8,7 @@ use workspace_ids::SessionRef;
 use workspace_model::{PostText, Timestamp, central_mail as mail};
 
 use agent_automation::TimingRule;
+use fleet_timer_policy::LIFETIME_SECONDS;
 use workspace_ids::AutomationId;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -100,15 +101,15 @@ pub(crate) fn decode_automations(rows: &ReadOutcome) -> Result<Vec<AutomationRow
                     TimingRule::At { at } => *at > admission && due == *at,
                     TimingRule::After { seconds } => {
                         *seconds >= 300
-                            && *seconds <= 604_800
+                            && i64::from(*seconds) <= LIFETIME_SECONDS
                             && *seconds % 300 == 0
-                            && crate::central_mail_time::first_due(&timing, admission)
+                            && crate::timing::first_due(&timing, admission)
                                 .map_err(|_| corrupt("automation_schedules.timing_rule"))?
                                 == Some(due)
                     }
                     TimingRule::Interval { seconds } => {
                         *seconds >= 300
-                            && *seconds <= 604_800
+                            && i64::from(*seconds) <= LIFETIME_SECONDS
                             && *seconds % 300 == 0
                             && due.signed_duration_since(anchor).num_seconds() % i64::from(*seconds)
                                 == 0

@@ -1,6 +1,6 @@
 use crate::{
-    engine::machines::automation_timer as automation,
-    rows::{AUTOMATION_FAILURE, decode_automations, timestamp},
+    automation_timer as automation,
+    stored_rows::{AUTOMATION_FAILURE, decode_automations, timestamp},
 };
 use central_engine_model::{InstanceKey, StateTag};
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
@@ -19,7 +19,11 @@ pub struct AutomationStore<'a, R: EngineHost, PlanQueued> {
     runtime: &'a R,
     plan_queued: PlanQueued,
 }
-impl<'a, R: EngineHost, PlanQueued> AutomationStore<'a, R, PlanQueued> {
+impl<'a, R, PlanQueued> AutomationStore<'a, R, PlanQueued>
+where
+    R: EngineHost,
+    PlanQueued: Fn(&mail::MessageRecord) -> Result<GuardedStatement, StoreFailure> + Send + Sync,
+{
     pub fn new(runtime: &'a R, plan_queued: PlanQueued) -> Self {
         Self {
             runtime,

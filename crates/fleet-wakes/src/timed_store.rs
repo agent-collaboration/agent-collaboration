@@ -1,6 +1,6 @@
 use crate::{
-    engine::machines::wake_timer as wake,
-    rows::{WAKE_FAILURE, decode_wakes, timestamp},
+    stored_rows::{WAKE_FAILURE, decode_wakes, timestamp},
+    wake_timer as wake,
 };
 use central_engine_model::{InstanceKey, StateTag};
 use central_storage::{GuardedStatement, Statement, StoreFailure};
@@ -19,7 +19,11 @@ pub struct WakeStore<'a, R: EngineHost, PlanQueued> {
     runtime: &'a R,
     plan_queued: PlanQueued,
 }
-impl<'a, R: EngineHost, PlanQueued> WakeStore<'a, R, PlanQueued> {
+impl<'a, R, PlanQueued> WakeStore<'a, R, PlanQueued>
+where
+    R: EngineHost,
+    PlanQueued: Fn(&mail::MessageRecord) -> Result<GuardedStatement, StoreFailure> + Send + Sync,
+{
     pub fn new(runtime: &'a R, plan_queued: PlanQueued) -> Self {
         Self {
             runtime,

@@ -1,7 +1,8 @@
 #![deny(clippy::wildcard_enum_match_arm)]
-//! The finishing view admin Discard runs (P8): a subject's lifecycle facts only,
-//! never its execution payload, so a retired subject whose timing_rule, due_at or
-//! target won't decode can still be finished. The same rule CancelWake follows.
+//! Shared seven-day timer lifetime and state-only discard policy.
+//!
+//! Discard uses the stored lifecycle tag and raw comparison values, so a retired
+//! timer whose execution payload cannot decode can still be finished.
 use central_engine_model::{
     Context, EngineTime, EventTag, Machine, MachineKind, RefusalTag, StateTag, Transition,
     TransitionError,

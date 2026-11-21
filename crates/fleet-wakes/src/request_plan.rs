@@ -1,4 +1,4 @@
-use crate::rows::timestamp;
+use crate::stored_rows::timestamp;
 use central_storage::{GuardedStatement, ReadOutcome, SqlValue, Statement, StoreFailure};
 use fleet_runtime_ports::stored_values::string;
 use fleet_runtime_ports::{
@@ -8,7 +8,9 @@ use fleet_runtime_ports::{
 use mail::{CentralMailAnswer as Answer, CentralMailRefusal as Refusal};
 use workspace_ids::{SessionRef, WakeId};
 use workspace_model::{PostText, Timestamp, central_mail as mail};
-type TimerPlan = Result<
+/// Storage failures are outer errors and retained refusals are inner results.
+/// The caller owns admission and commit.
+type WakePlan = Result<
     Result<(Vec<GuardedStatement>, mail::CentralMailAnswer), mail::CentralMailRefusal>,
     StoreFailure,
 >;
@@ -25,7 +27,7 @@ pub fn plan_set_wake(
     body: &PostText,
     now: Timestamp,
     mint: impl FnOnce() -> Result<WakeId, StoreFailure>,
-) -> TimerPlan {
+) -> WakePlan {
     let at = || text(timestamp(now));
     let id: WakeId = mint()?;
     Ok(Ok((
@@ -54,7 +56,7 @@ pub fn cancel_wake_read(wake_id: &WakeId) -> Statement {
     }
 }
 
-pub fn plan_cancel_wake(wake_id: &WakeId, now: Timestamp, rows: &ReadOutcome) -> TimerPlan {
+pub fn plan_cancel_wake(wake_id: &WakeId, now: Timestamp, rows: &ReadOutcome) -> WakePlan {
     let at = || text(timestamp(now));
     let Some(row) = rows.rows.first() else {
         return Ok(Err(Refusal::WakeNotFound {

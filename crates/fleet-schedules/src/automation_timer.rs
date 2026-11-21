@@ -1,5 +1,5 @@
 #![deny(clippy::wildcard_enum_match_arm)]
-use crate::rows::AutomationRow;
+use crate::stored_rows::AutomationRow;
 use central_engine_model::{
     Context, EngineTime, EventTag, Machine, MachineKind, StateTag, Transition, TransitionError,
 };

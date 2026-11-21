@@ -25,5 +25,5 @@ pub const WAKE_LIST: &str = concat!(
 );
 
 #[cfg(test)]
-#[path = "query_registry_test.rs"]
+#[path = "due_queries_test.rs"]
 mod tests;
