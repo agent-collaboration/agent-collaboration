@@ -457,9 +457,8 @@ impl ExternalProviderSupervisor {
             });
             let dispatch_binding = binding.identity.clone();
             permit.live_dispatch_blocker.get_or_init(|| {
-                use crate::binding_dispatch_permit::DispatchEligibilityCheck;
                 use provider_admission_policy::{AdmissionClass, AdmissionMode, AdmissionRequest};
-                Arc::new(move |operation, target, check| {
+                Arc::new(move |operation, target| {
                     let index = dispatch_operations.upgrade()?;
                     let index = index
                         .lock()
@@ -470,14 +469,7 @@ impl ExternalProviderSupervisor {
                         target: Some(target),
                         mode: AdmissionMode::deferred(AdmissionClass::Independent),
                     };
-                    match check {
-                        DispatchEligibilityCheck::Observe => {
-                            index.lane_mark_blocker(&dispatch_binding, request)
-                        }
-                        DispatchEligibilityCheck::ClaimIndependentStart => {
-                            index.claim_independent_start(&dispatch_binding, request)
-                        }
-                    }
+                    index.lane_mark_blocker(&dispatch_binding, request)
                 })
             });
             owners.install_binding_permit(permit);

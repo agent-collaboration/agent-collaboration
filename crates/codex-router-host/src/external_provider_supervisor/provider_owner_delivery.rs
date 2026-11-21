@@ -212,23 +212,12 @@ impl ExternalProviderSupervisor {
                 | DeliveryAdmission::QueueOnRun(_)
         );
         let class = match admission {
-            DeliveryAdmission::Requested(MessageDelivery::Queue)
-            | DeliveryAdmission::QueueOnRun(_) => AdmissionClass::LinePlacement,
-            DeliveryAdmission::SteerExisting(_) => AdmissionClass::ExactTurn,
-            DeliveryAdmission::Requested(MessageDelivery::Steer)
-                if matches!(snapshot.turn, SessionTurn::Running { .. }) =>
-            {
-                AdmissionClass::ExactTurn
-            }
-            DeliveryAdmission::Requested(MessageDelivery::Auto)
-                if matches!(snapshot.turn, SessionTurn::Running { .. }) =>
-            {
-                AdmissionClass::LinePlacement
-            }
-            DeliveryAdmission::Requested(MessageDelivery::Auto) if !snapshot.queue.is_empty() => {
-                AdmissionClass::LinePlacement
-            }
-            _ => AdmissionClass::Independent,
+            DeliveryAdmission::Requested(_)
+            | DeliveryAdmission::QueueOnRun(_)
+            | DeliveryAdmission::SteerExisting(_) => AdmissionClass::OwnerPlaced,
+            DeliveryAdmission::Warm(_) => AdmissionClass::Independent,
+            #[cfg(test)]
+            DeliveryAdmission::Direct => AdmissionClass::Independent,
         };
         let mode = AdmissionMode::deferred(class);
         let live = if can_queue {

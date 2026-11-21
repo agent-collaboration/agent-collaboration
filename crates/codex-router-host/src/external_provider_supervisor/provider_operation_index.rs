@@ -58,7 +58,7 @@ pub(super) struct LiveOperation {
     binding: Option<(EndpointRef, CodexGeneration)>,
     kind: Option<ProviderOperationKind>,
     mark: DispatchMark,
-    class: StdMutex<AdmissionClass>,
+    class: AdmissionClass,
     target: StdMutex<Option<SessionRef>>,
     lifecycle: Arc<OperationLifecycle>,
     cancel_target: Option<uuid::Uuid>,
@@ -72,7 +72,7 @@ impl LiveOperation {
             None,
             None,
             None,
-            AdmissionMode::deferred(AdmissionClass::LinePlacement),
+            AdmissionMode::deferred(AdmissionClass::OwnerPlaced),
             OperationRecord::Admitted { queued: false },
         )
     }
@@ -126,7 +126,7 @@ impl LiveOperation {
             binding: binding.map(|binding| (binding.endpoint.clone(), binding.generation.clone())),
             kind,
             mark: mode.mark,
-            class: StdMutex::new(mode.class),
+            class: mode.class,
             target: StdMutex::new(target),
             lifecycle: Arc::new(OperationLifecycle::new(record, changed)),
             cancel_target: mode.cancel_target,
@@ -293,9 +293,9 @@ impl LiveOperation {
         }
     }
 
-    fn holds_admission(&self) -> bool {
+    fn blocks_independent_admission(&self) -> bool {
         let lifecycle = self.lifecycle.state();
-        (lock(&self.class).holds_admission() && lifecycle.custody.holds_custody())
+        (self.class.holds_admission() && lifecycle.custody.holds_custody())
             || self.holds_dispatch_at(&lifecycle)
     }
 
@@ -438,9 +438,13 @@ impl LiveOperations {
         binding: &ProviderBindingIdentity,
         request: AdmissionRequest<'_>,
     ) -> Vec<OperationId> {
-        self.overlapping_holders(binding, request, LiveOperation::holds_admission)
-            .map(|(operation, _)| operation.clone())
-            .collect()
+        self.overlapping_holders(
+            binding,
+            request,
+            LiveOperation::blocks_independent_admission,
+        )
+        .map(|(operation, _)| operation.clone())
+        .collect()
     }
 
     pub(super) fn lane_mark_blocker(
@@ -451,27 +455,6 @@ impl LiveOperations {
         self.overlapping_holders(binding, request, LiveOperation::holds_dispatch)
             .find(|(_, holder)| !request.is_own_cancel_holder(holder.kind, holder.cancel_target))
             .map(|(operation, _)| operation.clone())
-    }
-
-    // The lane checks its blockers and claims an independent start under one
-    // index guard. A stale placement class must not outlive that decision.
-    pub(super) fn claim_independent_start(
-        &self,
-        binding: &ProviderBindingIdentity,
-        request: AdmissionRequest<'_>,
-    ) -> Option<OperationId> {
-        let blocker = self.lane_mark_blocker(binding, request);
-        if blocker.is_none()
-            && let Some(live) = self.operations.get(request.operation)
-            && live.kind == Some(ProviderOperationKind::ConversationPrompt)
-            && live.holds_custody()
-            && request
-                .target
-                .is_some_and(|target| live.matches_lane_binding(&binding.generation, target))
-        {
-            *lock(&live.class) = AdmissionClass::Independent;
-        }
-        blocker
     }
 
     fn overlapping_holders<'a>(

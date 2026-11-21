@@ -28,15 +28,7 @@ pub(crate) struct BindingUncertainty {
     pub(crate) fixture: crate::binding_store_fixture::BindingStoreFixture,
 }
 
-#[derive(Clone, Copy)]
-pub(crate) enum DispatchEligibilityCheck {
-    Observe,
-    ClaimIndependentStart,
-}
-
-type LiveDispatchBlocker = dyn Fn(&OperationId, &SessionRef, DispatchEligibilityCheck) -> Option<OperationId>
-    + Send
-    + Sync;
+type LiveDispatchBlocker = dyn Fn(&OperationId, &SessionRef) -> Option<OperationId> + Send + Sync;
 
 impl Default for BindingUncertainty {
     fn default() -> Self {

@@ -412,6 +412,27 @@ impl OwnerTransition {
         self.drive_prompt_line()
     }
 
+    pub(super) fn dispatch_blocked_by_live(
+        &mut self,
+        input: &OwnerInput,
+        operation: uuid::Uuid,
+    ) -> OwnerResult {
+        let sequence = self.prompt_sequence(input, InputWait::DispatchStore)?;
+        if self
+            .next
+            .prompts
+            .get(&sequence)
+            .is_none_or(|prompt| prompt.queued)
+        {
+            return Err(OwnerRejection::IgnoredLate);
+        }
+        self.next.ports.unsent_prompts.insert(
+            input.clone(),
+            RevokeReason::EarlierSendInFlight { operation },
+        );
+        self.dispatch_marked(input, EffectOutcome::Failed)
+    }
+
     pub(super) fn dispatch_blocked_by_unknown(
         &mut self,
         input: &OwnerInput,

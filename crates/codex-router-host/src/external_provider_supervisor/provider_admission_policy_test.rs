@@ -170,7 +170,7 @@ fn cancel_line_placement_and_reused_ids_keep_their_existing_boundaries() {
 
     let placement = AdmissionRequest {
         kind: ProviderOperationKind::ConversationPrompt,
-        mode: AdmissionMode::deferred(AdmissionClass::LinePlacement),
+        mode: AdmissionMode::deferred(AdmissionClass::OwnerPlaced),
         ..cancel
     };
     assert!(placement.blocked_by(&earlier, EarlierOperation::Unknown, None));

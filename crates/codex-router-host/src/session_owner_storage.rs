@@ -404,6 +404,15 @@ impl SessionOwnerStorage {
                     ));
                     return;
                 }
+                Err(SessionStoreOfferError::DispatchBusy {
+                    operation,
+                    pending: false,
+                }) if kind == LaneDispatchKind::Prompt => {
+                    completion.send(OwnerEvent::Store(
+                        SessionStoreResult::DispatchBlockedByLive { input, operation },
+                    ));
+                    return;
+                }
                 Err(_) => EffectOutcome::Failed,
             };
             let result = if kind == LaneDispatchKind::Steer {

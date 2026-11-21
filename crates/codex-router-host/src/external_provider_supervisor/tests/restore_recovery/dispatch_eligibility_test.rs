@@ -6,15 +6,6 @@ use std::time::Duration;
 
 #[tokio::test(flavor = "current_thread")]
 async fn an_admitted_independent_prompt_blocks_before_its_owner_command() {
-    independent_reservation_precedes_the_owner_command(false).await;
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn a_rowless_idle_auto_reservation_blocks_before_its_owner_command() {
-    independent_reservation_precedes_the_owner_command(true).await;
-}
-
-async fn independent_reservation_precedes_the_owner_command(rowless: bool) {
     let rig = RestoreRig::new();
     rig.seed_session().await;
     let host = rig.open_host("restored-in-auto").await;
@@ -23,36 +14,25 @@ async fn independent_reservation_precedes_the_owner_command(rowless: bool) {
     let second = OperationId::generate();
     let (pause, before_owner, let_owner_run) = admission_pause();
     *host.inner.before_owner_prompt_test_pause.lock().unwrap() = Some((first.clone(), pause));
-    let first_request = rig.prompt_request(first.clone(), "first independent request");
-    let first_submission = async {
-        if rowless {
-            let request = ProviderPromptContentsRequest::from_prompt_request(first_request)
-                .expect("valid Auto contents");
-            host.submit_owned_delivery(request, MessageDelivery::Auto)
-                .await
-                .expect("Auto request admitted");
-        } else {
-            let mut request = ProviderPromptContentsRequest::from_prompt_request(first_request)
-                .expect("valid direct contents");
-            request.busy = PromptBusyPolicy::RefuseBusy;
-            host.prompt_contents(request)
-                .await
-                .expect("direct prompt admitted");
-        }
-    };
+    let first_request = direct_contents(&rig, first.clone(), "first independent request");
+    let first_submission = host.prompt_contents(first_request);
     tokio::pin!(first_submission);
     tokio::select! {
         reached = before_owner => reached.expect("first reservation reached the owner boundary"),
-        () = &mut first_submission => panic!("the first request passed its pause"),
+        result = &mut first_submission => panic!("the first request passed its pause: {result:?}"),
     }
     let row = host.inner.store.lock().await.inspect(&first).await.unwrap();
     assert_eq!(
         row.as_ref().map(|row| row.stage),
-        (!rowless).then_some(ProviderOperationStage::Admitted),
+        Some(ProviderOperationStage::Admitted),
     );
 
     let refusal = host
-        .prompt(rig.prompt_request(second.clone(), "competing independent prompt"))
+        .prompt_contents(direct_contents(
+            &rig,
+            second.clone(),
+            "competing independent prompt",
+        ))
         .await
         .expect_err("the second independent request must be refused at admission");
     assert_eq!(refusal.stage, ConversationOperationFailureStage::Validation);
@@ -71,11 +51,63 @@ async fn independent_reservation_precedes_the_owner_command(rowless: bool) {
     assert!(rig.wire_receipt()["prompts"].as_array().unwrap().is_empty());
 
     let_owner_run.send(()).expect("release the first request");
-    first_submission.await;
+    first_submission.await.expect("direct prompt admitted");
     host.wait(wait_request(first))
         .await
         .expect("first request completes");
     assert_eq!(rig.wire_receipt()["prompts"].as_array().unwrap().len(), 1);
+    host.shutdown().await.expect("shutdown");
+}
+
+fn direct_contents(
+    rig: &RestoreRig,
+    operation: OperationId,
+    text: &str,
+) -> ProviderPromptContentsRequest {
+    let mut request =
+        ProviderPromptContentsRequest::from_prompt_request(rig.prompt_request(operation, text))
+            .expect("valid direct contents");
+    request.busy = PromptBusyPolicy::RefuseBusy;
+    request
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_rowless_idle_auto_keeps_owner_placement_behind_an_independent_reservation() {
+    let rig = RestoreRig::new();
+    rig.seed_session().await;
+    let host = rig.open_host("restored-in-auto").await;
+    rig.assert_loads(&host).await;
+    let held = OperationId::generate();
+    let auto = OperationId::generate();
+    let (pause, before_owner, let_owner_run) = admission_pause();
+    *host.inner.before_owner_prompt_test_pause.lock().unwrap() = Some((held.clone(), pause));
+    let first = host.prompt_contents(direct_contents(&rig, held.clone(), "held independent"));
+    tokio::pin!(first);
+    tokio::select! {
+        reached = before_owner => reached.expect("hold the independent prompt before placement"),
+        result = &mut first => panic!("independent request returned before its pause: {result:?}"),
+    }
+    let request = ProviderPromptContentsRequest::from_prompt_request(
+        rig.prompt_request(auto.clone(), "rowless Auto reaches the owner"),
+    )
+    .unwrap();
+    assert_eq!(
+        host.submit_owned_delivery(request, MessageDelivery::Auto)
+            .await
+            .unwrap(),
+        crate::session_owner_calls::InputAcceptance::Started,
+    );
+    host.wait(wait_request(auto))
+        .await
+        .expect("Auto sends while the independent prompt is held");
+    let_owner_run
+        .send(())
+        .expect("release the independent request");
+    first.await.expect("the direct request is admitted");
+    host.wait(wait_request(held))
+        .await
+        .expect("the direct request sends");
+    assert_eq!(rig.wire_receipt()["prompts"].as_array().unwrap().len(), 2);
     host.shutdown().await.expect("shutdown");
 }
 
@@ -89,11 +121,7 @@ async fn the_owner_line_progresses_while_an_independent_reservation_has_no_mark(
     let queue_head = OperationId::generate();
     let (pause, before_owner, let_owner_run) = admission_pause();
     *host.inner.before_owner_prompt_test_pause.lock().unwrap() = Some((independent.clone(), pause));
-    let mut request = ProviderPromptContentsRequest::from_prompt_request(
-        rig.prompt_request(independent.clone(), "held independent"),
-    )
-    .unwrap();
-    request.busy = PromptBusyPolicy::RefuseBusy;
+    let request = direct_contents(&rig, independent.clone(), "held independent");
     let first = host.prompt_contents(request);
     tokio::pin!(first);
     tokio::select! {

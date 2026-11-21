@@ -22,15 +22,18 @@ fn session(name: &str) -> SessionRef {
 }
 
 fn in_flight_on(index: &LiveOperations, target: &SessionRef) -> Vec<OperationId> {
-    index.admission_blockers(
-        &binding(),
-        AdmissionRequest {
-            operation: &OperationId::generate(),
-            kind: ProviderOperationKind::ConversationLoad,
-            mode: AdmissionMode::HANDOFF,
-            target: Some(target),
-        },
-    )
+    index
+        .lane_mark_blocker(
+            &binding(),
+            AdmissionRequest {
+                operation: &OperationId::generate(),
+                kind: ProviderOperationKind::ConversationLoad,
+                mode: AdmissionMode::HANDOFF,
+                target: Some(target),
+            },
+        )
+        .into_iter()
+        .collect()
 }
 
 fn index_with(
@@ -57,7 +60,7 @@ fn a_send_counts_in_flight_from_its_marker_until_it_settles() {
             &binding(),
             Some(session("a")),
             ProviderOperationKind::ConversationPrompt,
-            AdmissionMode::deferred(AdmissionClass::LinePlacement),
+            AdmissionMode::deferred(AdmissionClass::OwnerPlaced),
         ),
     );
     live.admitted();
@@ -113,7 +116,7 @@ fn an_undone_marker_and_a_dropped_reservation_leave_nothing_in_flight() {
             &binding(),
             None,
             ProviderOperationKind::ConversationPrompt,
-            AdmissionMode::deferred(AdmissionClass::LinePlacement),
+            AdmissionMode::deferred(AdmissionClass::OwnerPlaced),
         ),
     );
     live.admitted();
@@ -123,7 +126,7 @@ fn an_undone_marker_and_a_dropped_reservation_leave_nothing_in_flight() {
         &binding(),
         None,
         ProviderOperationKind::ConversationPrompt,
-        AdmissionMode::deferred(AdmissionClass::LinePlacement),
+        AdmissionMode::deferred(AdmissionClass::OwnerPlaced),
     );
 
     // Act
@@ -151,7 +154,7 @@ fn an_undispatched_operation_settles_not_sent() {
         &binding(),
         None,
         ProviderOperationKind::ConversationPrompt,
-        AdmissionMode::deferred(AdmissionClass::LinePlacement),
+        AdmissionMode::deferred(AdmissionClass::OwnerPlaced),
     );
     live.admitted();
 
@@ -179,7 +182,7 @@ fn lane_receipts_are_bound_to_the_reserved_operation_generation_and_target() {
             &binding,
             Some(target.clone()),
             ProviderOperationKind::ConversationPrompt,
-            AdmissionMode::deferred(AdmissionClass::LinePlacement),
+            AdmissionMode::deferred(AdmissionClass::OwnerPlaced),
         ),
     );
     let lookup = |index: &LiveOperations,
@@ -197,7 +200,7 @@ fn lane_receipts_are_bound_to_the_reserved_operation_generation_and_target() {
         &replacement_binding,
         Some(target.clone()),
         ProviderOperationKind::ConversationPrompt,
-        AdmissionMode::deferred(AdmissionClass::LinePlacement),
+        AdmissionMode::deferred(AdmissionClass::OwnerPlaced),
     ));
     index
         .operations

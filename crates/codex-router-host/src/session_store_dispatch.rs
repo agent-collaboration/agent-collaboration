@@ -4,7 +4,7 @@ use super::{
     LaneRequest, LaneState, MarkedInput, SessionStoreLane, SessionStoreLaneWriter,
     SessionStoreOfferError, SessionStoreSettlement, SessionStoreTicket, SessionStoreWrite,
 };
-use crate::binding_dispatch_permit::{BindingOutcomes, DispatchEligibilityCheck, PendingDispatch};
+use crate::binding_dispatch_permit::{BindingOutcomes, PendingDispatch};
 use crate::binding_dispatch_permit::{BindingUncertainty, lock};
 use crate::provider_operation_custody::LaneWriteCustody;
 use collaboration_protocol::{OperationId, ProviderOperationStage};
@@ -92,13 +92,7 @@ impl SessionStoreLane {
             return false;
         };
         matches!(
-            self.dispatch_blocker(
-                operation,
-                kind,
-                &lock(outcomes),
-                binding,
-                DispatchEligibilityCheck::Observe
-            ),
+            self.dispatch_blocker(operation, kind, &lock(outcomes), binding),
             Err(SessionStoreOfferError::DispatchBusy { .. })
         )
     }
@@ -109,7 +103,6 @@ impl SessionStoreLane {
         kind: LaneDispatchKind,
         outcomes: &BindingOutcomes,
         binding: &BindingUncertainty,
-        check: DispatchEligibilityCheck,
     ) -> Result<(), SessionStoreOfferError> {
         fn key(operation: &OperationId) -> Result<Uuid, SessionStoreOfferError> {
             Uuid::parse_str(operation.as_str()).map_err(|_| SessionStoreOfferError::Stopped)
@@ -138,7 +131,7 @@ impl SessionStoreLane {
             if let Some(blocker) = binding
                 .live_dispatch_blocker
                 .get()
-                .and_then(|gate| gate(operation, &self.inner.target, check))
+                .and_then(|gate| gate(operation, &self.inner.target))
             {
                 return Err(SessionStoreOfferError::DispatchBusy {
                     operation: key(&blocker)?,
@@ -159,12 +152,7 @@ impl SessionStoreLane {
     ) -> Result<LaneDispatchWrite, SessionStoreOfferError> {
         // Lane state -> binding outcomes -> live index. Mark permission and
         // the pending writer are registered in one binding decision section.
-        let check = if offer.kind == LaneDispatchKind::Prompt {
-            DispatchEligibilityCheck::ClaimIndependentStart
-        } else {
-            DispatchEligibilityCheck::Observe
-        };
-        self.dispatch_blocker(&offer.operation, offer.kind, outcomes, binding, check)?;
+        self.dispatch_blocker(&offer.operation, offer.kind, outcomes, binding)?;
         let undo_mark = if offer.kind == LaneDispatchKind::Undo {
             Some(
                 state

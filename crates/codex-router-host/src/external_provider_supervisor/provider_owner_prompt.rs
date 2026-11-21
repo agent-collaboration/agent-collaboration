@@ -95,23 +95,7 @@ impl ExternalProviderSupervisor {
                             })
                     })
                     .unwrap_or(AdmissionClass::Independent),
-                PromptBusyPolicy::Send(MessageDelivery::Queue) => AdmissionClass::LinePlacement,
-                PromptBusyPolicy::Send(MessageDelivery::Steer)
-                    if snapshot
-                        .as_ref()
-                        .is_some_and(|owner| matches!(owner.turn, SessionTurn::Running { .. })) =>
-                {
-                    AdmissionClass::ExactTurn
-                }
-                PromptBusyPolicy::Send(MessageDelivery::Auto)
-                    if snapshot.as_ref().is_some_and(|owner| {
-                        matches!(owner.turn, SessionTurn::Running { .. })
-                            || matches!(owner.lifecycle, SessionLifecycle::Loading { .. })
-                    }) =>
-                {
-                    AdmissionClass::LinePlacement
-                }
-                PromptBusyPolicy::Send(_) => AdmissionClass::Independent,
+                PromptBusyPolicy::Send(_) => AdmissionClass::OwnerPlaced,
             };
             let prepared = backend
                 .admit_operation(
@@ -470,6 +454,7 @@ pub(super) fn retained_prompt(
                 provider_session_machines::session_owner::RevokeReason::SettingsUnresolved => {
                     ConversationOperationFailureKind::SettingsUnresolved
                 }
+                RevokeReason::EarlierSendInFlight { .. } => ConversationOperationFailureKind::Busy,
                 _ => ConversationOperationFailureKind::Unavailable,
             },
             ConversationOperationFailureStage::Dispatch,

@@ -252,6 +252,10 @@ pub enum SessionStoreResult {
         input: OwnerInput,
         operation: uuid::Uuid,
     },
+    DispatchBlockedByLive {
+        input: OwnerInput,
+        operation: uuid::Uuid,
+    },
     QueuedDispatchBusy {
         input: OwnerInput,
         attempt: uuid::Uuid,
