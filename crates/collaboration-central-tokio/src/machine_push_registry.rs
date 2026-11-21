@@ -25,7 +25,7 @@ impl MachinePushRegistry {
         machine: MachineId,
     ) -> MachinePushRegistration {
         let key = (organization, machine);
-        let (sender, receiver) = mpsc::channel(collaboration_central_core::WELCOME_PAGE_SIZE);
+        let (sender, receiver) = mpsc::channel(fleet_contracts::mail_link::WELCOME_PAGE_SIZE);
         let replaced = CancellationToken::new();
         let mut sockets = self.0.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(older) = sockets.insert(

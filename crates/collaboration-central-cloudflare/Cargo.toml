@@ -53,6 +53,7 @@ web-sys = { version = "=0.3.106", features = ["WorkerGlobalScope", "Crypto", "Su
 js-sys = "=0.3.106"
 
 [dev-dependencies]
+fleet-mail.workspace = true
 runtime-primitives.workspace = true
 base64 = "0.22.1"
 central-link-client = { path = "../central-link-client", version = "0.1.152" }

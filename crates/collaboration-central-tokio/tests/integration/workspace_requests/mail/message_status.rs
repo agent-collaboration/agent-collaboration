@@ -2,7 +2,7 @@ use super::super::{m, support::*};
 use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, Statement, StatementBatch,
 };
-use collaboration_central_core::{MailAckIgnored, MailAckSettlement, WindowedDeliveryDecision};
+use fleet_contracts::mail_link::{MailAckIgnored, MailAckSettlement, WindowedDeliveryDecision};
 use router_clock::RuntimeClock;
 use workspace_model::central_mail::{
     CentralMailAnswer, CentralMailOperation, CentralMailRequest, CentralMailResult, DeliveryAnswer,
@@ -98,7 +98,7 @@ async fn only_the_original_sender_can_read_direct_message_status() {
             )
             .await
             .unwrap(),
-        collaboration_central_core::MailAckSettlement::Applied
+        fleet_contracts::mail_link::MailAckSettlement::Applied
     );
     assert_eq!(
         runtime

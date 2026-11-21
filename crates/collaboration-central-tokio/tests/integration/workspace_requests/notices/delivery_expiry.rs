@@ -2,7 +2,7 @@ use super::*;
 use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, StatementBatch,
 };
-use collaboration_central_core::WelcomeDeliveryPage;
+use fleet_contracts::mail_link::WelcomeDeliveryPage;
 
 #[hegel::test(test_cases = 15)]
 fn an_expired_notice_stays_cancelled_through_a_replayed_drain(case: hegel::TestCase) {

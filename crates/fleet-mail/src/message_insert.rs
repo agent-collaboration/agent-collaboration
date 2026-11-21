@@ -1,29 +1,14 @@
-//! Pure mail-row encoding shared by central request paths and the engine; it
-//! names no runtime, so the engine can use it without a module cycle.
-use central_storage::{BatchOutcome, GuardedStatement, SqlValue, StoreFailure};
-use fleet_runtime_ports::guarded_statements::{any, text};
-use fleet_runtime_ports::workspace_decode_error::corrupt;
-use serde::Serialize;
-use workspace_model::Timestamp;
-use workspace_model::central_mail as mail;
-pub(crate) fn encode(value: &impl Serialize) -> Result<SqlValue, StoreFailure> {
-    serde_json::to_string(value)
-        .map(text)
-        .map_err(|_| corrupt("mail JSON"))
-}
-pub(crate) fn timestamp(value: Timestamp) -> String {
-    value.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
-}
-pub(crate) fn applied(outcome: BatchOutcome) -> Result<(), StoreFailure> {
-    match outcome {
-        BatchOutcome::Applied { .. } => Ok(()),
-        _ => Err(StoreFailure::Unavailable),
-    }
-}
+//! The canonical mailbox insert and its stored delivery terms.
+use crate::message_values::{encode, timestamp};
+use central_storage::{GuardedStatement, SqlValue, StoreFailure};
+use fleet_runtime_ports::{
+    guarded_statements::{any, text},
+    workspace_decode_error::corrupt,
+};
+use workspace_model::{Timestamp, central_mail as mail};
+
 /// Central-authored notices, outcomes, wakes and automation messages.
-pub(crate) fn insert_message(
-    message: &mail::MessageRecord,
-) -> Result<GuardedStatement, StoreFailure> {
+pub fn insert_message(message: &mail::MessageRecord) -> Result<GuardedStatement, StoreFailure> {
     insert_message_due(message, None)
 }
 

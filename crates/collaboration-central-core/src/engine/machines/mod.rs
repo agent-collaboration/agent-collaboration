@@ -1,5 +1,3 @@
-pub(crate) mod direct_message;
-pub(crate) mod direct_message_store;
 #[cfg(test)]
 mod lifecycle_finish;
 #[cfg_attr(
@@ -10,6 +8,3 @@ mod lifecycle_finish;
     )
 )]
 pub(crate) mod owed_reply;
-pub(crate) mod system_message_expiry;
-
-mod message_effects;

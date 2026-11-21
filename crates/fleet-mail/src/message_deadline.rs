@@ -7,11 +7,11 @@
 use chrono::{DateTime, Duration, Utc};
 
 /// The one delivery window, from when the agent sent the message.
-pub const DELIVERY_WINDOW: Duration = Duration::minutes(15);
+pub(crate) const DELIVERY_WINDOW: Duration = Duration::minutes(15);
 const SYSTEM_MESSAGE_DELIVERY_WINDOW: Duration = Duration::hours(24);
 pub(crate) const EXPIRED_24_HOURS: &str = "expired24Hours";
 /// Room for the recipient's Ack before the cancel runs.
-pub const ACK_MARGIN: Duration = Duration::minutes(2);
+pub(crate) const ACK_MARGIN: Duration = Duration::minutes(2);
 /// Due items run on this grid, like wakes.
 const DUE_GRID_SECONDS: u32 = 5 * 60;
 
@@ -41,8 +41,9 @@ pub(crate) fn delivery_window_ends_at(
 
 /// Whether the message's delivery window has run out at `now`: central never
 /// pushes it after this, not even on reconnect.
+#[cfg(test)]
 #[must_use]
-pub fn delivery_window_open(
+fn delivery_window_open(
     sent_at: DateTime<Utc>,
     accepted_at: DateTime<Utc>,
     now: DateTime<Utc>,

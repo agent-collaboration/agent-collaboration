@@ -1,12 +1,10 @@
-//! A queued notice or delivery outcome reaches its delivery deadline here.
+//! Persistence and guarded settlement for system-message expiry.
 use crate::{
-    central_mail_rows::timestamp,
     message_deadline::{EXPIRED_24_HOURS, system_message_deadline},
+    message_values::timestamp,
+    system_message_expiry::{State, SystemMessageExpiry},
 };
-use central_engine_model::{
-    Context, EngineTime, EventTag, InstanceKey, Machine, MachineKind, RefusalTag, StateTag,
-    Transition, TransitionError, TransitionResult,
-};
+use central_engine_model::{EngineTime, InstanceKey, StateTag};
 use central_storage::{GuardedStatement, ReadOutcome, SqlValue, Statement, StoreFailure};
 use fleet_engine::{
     EngineHost, LoadFailure, StoreAdapter, Versioned, decode_load_failure, guarded_attempt_sql,
@@ -19,81 +17,6 @@ use fleet_runtime_ports::{
     workspace_decode_error::corrupt,
 };
 use std::convert::Infallible;
-
-pub(crate) struct SystemMessageExpiry;
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum State {
-    Queued { deadline: EngineTime },
-    Cancelled,
-}
-
-impl StateTag for State {
-    fn state_tag(&self) -> &'static str {
-        match self {
-            Self::Queued { .. } => "queued",
-            Self::Cancelled => "cancelled",
-        }
-    }
-    fn is_terminal(&self) -> bool {
-        matches!(self, Self::Cancelled)
-    }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct ExpireAt(pub(crate) EngineTime);
-
-impl EventTag for ExpireAt {
-    fn event_tag(&self) -> &'static str {
-        "expire"
-    }
-}
-
-#[derive(Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-pub(crate) enum ExpiryRefusal {}
-
-impl RefusalTag for ExpiryRefusal {
-    fn refusal_tag(&self) -> &'static str {
-        match *self {}
-    }
-}
-
-impl Machine for SystemMessageExpiry {
-    const KIND: MachineKind = MachineKind("system_message_expiry");
-    type State = State;
-    type Event = ExpireAt;
-    type Effect = Infallible;
-    type Error = ExpiryRefusal;
-
-    fn transition(
-        state: &State,
-        event: ExpireAt,
-        context: &mut Context<'_>,
-    ) -> TransitionResult<Self> {
-        match state {
-            State::Queued { deadline } if *deadline == event.0 && *deadline <= context.now => {
-                Ok((State::Cancelled, vec![]))
-            }
-            State::Queued { .. } | State::Cancelled => Err(TransitionError::Stale),
-        }
-    }
-
-    fn transitions() -> &'static [Transition] {
-        &[Transition {
-            from: "queued",
-            event: "expire",
-            to: "cancelled",
-            terminal: true,
-        }]
-    }
-
-    fn next_due(state: &State) -> Option<EngineTime> {
-        match state {
-            State::Queued { deadline } => Some(*deadline),
-            State::Cancelled => None,
-        }
-    }
-}
 
 const EXPIRY_FAILURE: &str = guarded_attempt_sql!(
     "EXISTS(SELECT 1 FROM mail_messages WHERE message_id IS ?20 AND message_kind IS ?21 AND state IS ?22 AND failure_reason IS ?23 AND delivery_window_ends_at IS ?24 AND created_at IS ?25 AND updated_at IS ?26)"
@@ -118,7 +41,13 @@ fn decode_queued(rows: &ReadOutcome, row: &[SqlValue]) -> Result<State, StoreFai
     Ok(State::Queued { deadline })
 }
 
-pub(crate) struct SystemMessageExpiryStore<'a, R: EngineHost>(pub &'a R);
+pub struct SystemMessageExpiryStore<'a, R: EngineHost>(&'a R);
+
+impl<'a, R: EngineHost> SystemMessageExpiryStore<'a, R> {
+    pub fn new(runtime: &'a R) -> Self {
+        Self(runtime)
+    }
+}
 
 impl<R: EngineHost> StoreAdapter<SystemMessageExpiry> for SystemMessageExpiryStore<'_, R> {
     async fn load(&self, key: &InstanceKey) -> Result<Option<Versioned<State>>, LoadFailure> {
@@ -164,7 +93,3 @@ impl<R: EngineHost> StoreAdapter<SystemMessageExpiry> for SystemMessageExpirySto
         EXPIRY_FAILURE
     }
 }
-
-#[cfg(test)]
-#[path = "system_message_expiry_test.rs"]
-mod tests;

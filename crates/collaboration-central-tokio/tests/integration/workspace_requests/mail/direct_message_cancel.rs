@@ -47,7 +47,7 @@ async fn an_unacknowledged_direct_message_is_cancelled_at_its_mark_and_the_sende
     let Result::Done(Answer::Queued { message_id }) = answer else {
         panic!("send refused: {answer:?}")
     };
-    let mark = collaboration_central_core::message_deadline::cancel_due_at(sent_at, sent_at);
+    let mark = fleet_mail::message_deadline::cancel_due_at(sent_at, sent_at);
     let stored = |sql: &'static str| {
         let runtime = &runtime;
         let message_id = message_id.clone();

@@ -1,7 +1,7 @@
 //! Recipient windows collate source-owned activity across workspace boundaries.
 use crate::{
     WorkspaceRuntime,
-    central_mail_store::{self, timestamp},
+    central_statement_values::{self, timestamp},
 };
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
 use fleet_contracts::LegacyUnitOutcome;
@@ -143,7 +143,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         let mut items = Vec::new();
         for (workspace, changes) in grouped {
             let ids: Vec<_> = changes.iter().map(|(id, _)| id).collect();
-            let rows=self.execution.read_workspace(&workspace,Statement{sql:"SELECT json_object('changeId',change_id,'position',position,'item',json_object('kind',item_kind,'id',item_id),'actor',actor,'changeKind',change_kind,'threadId',thread_id,'projectId',project_id,'subjectActor',subject_actor,'role',role,'createdAt',created_at) AS payload FROM workspace_changes WHERE change_id IN (SELECT value FROM json_each(?)) ORDER BY position",args:vec![central_mail_store::encode(&ids)?]}).await.map_err(|failure| match failure { StoreFailure::Unavailable | StoreFailure::AlarmUnpublishable { .. } => LegacyUnitOutcome::RemoteUnavailable { workspaces: vec![workspace.clone()] }, failure @ (StoreFailure::Corrupt { .. } | StoreFailure::AnswerLost) => failure.into() })?;
+            let rows=self.execution.read_workspace(&workspace,Statement{sql:"SELECT json_object('changeId',change_id,'position',position,'item',json_object('kind',item_kind,'id',item_id),'actor',actor,'changeKind',change_kind,'threadId',thread_id,'projectId',project_id,'subjectActor',subject_actor,'role',role,'createdAt',created_at) AS payload FROM workspace_changes WHERE change_id IN (SELECT value FROM json_each(?)) ORDER BY position",args:vec![central_statement_values::encode(&ids)?]}).await.map_err(|failure| match failure { StoreFailure::Unavailable | StoreFailure::AlarmUnpublishable { .. } => LegacyUnitOutcome::RemoteUnavailable { workspaces: vec![workspace.clone()] }, failure @ (StoreFailure::Corrupt { .. } | StoreFailure::AnswerLost) => failure.into() })?;
             if rows.rows.len() != changes.len() {
                 return Err(corrupt("mail_notification_window_items.change_id").into());
             }
@@ -190,52 +190,20 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                     workspace_id: first.workspace_id.clone(),
                     thread_id: first.thread_id.clone(),
                 };
-                let message = self.prepare_message_record(
+                let message = fleet_mail::prepare_message_record(
                     mail::MessageSender::Central,
                     target,
                     mail::MessageBody::Notice { items },
                     Some(source),
                     now,
+                    || self.execution.mint(),
                 )?;
-                statements.push(central_mail_store::insert_message(&message)?);
+                statements.push(fleet_mail::insert_message(&message)?);
                 deliveries.push((&message).into());
             }
             statements.extend(delete_window(&window.id));
         }
         Ok((statements, deliveries))
-    }
-    pub(crate) async fn cancel_queued_notices(
-        &self,
-        workspace: &WorkspaceId,
-        thread: &ThreadId,
-        recipient: Option<&ActorIdentityId>,
-        now: Timestamp,
-    ) -> Result<Vec<GuardedStatement>, StoreFailure> {
-        let rows = self
-            .execution
-            .statement_host()
-            .read(crate::central_mail_records::notice_messages())
-            .await?;
-        crate::central_mail_records::decode_messages(&rows)?;
-        let recipient = recipient.map_or(SqlValue::Null, text);
-        // Apply each cancellation against the transaction's current body. Two source
-        // cancellations in one drain must never restore each other's removed items.
-        Ok(vec![
-            any(
-                "UPDATE mail_messages SET body=json_set(body,'$.items',json(COALESCE((SELECT json_group_array(json(value)) FROM json_each(json_extract(mail_messages.body,'$.items')) WHERE json_extract(value,'$.workspaceId')!=? OR json_extract(value,'$.threadId') IS NOT ?),'[]'))),updated_at=? WHERE message_kind='notice' AND state='queued' AND (? IS NULL OR recipient_actor=?)",
-                vec![
-                    text(workspace),
-                    text(thread),
-                    text(timestamp(now)),
-                    recipient.clone(),
-                    recipient,
-                ],
-            ),
-            any(
-                "UPDATE mail_messages SET state=CASE WHEN json_array_length(body,'$.items')=0 THEN 'cancelled' ELSE state END,source_change_id=COALESCE(json_extract(body,'$.items[0].changeId'),source_change_id),source_workspace_id=COALESCE(json_extract(body,'$.items[0].workspaceId'),source_workspace_id),source_thread_id=CASE WHEN json_array_length(body,'$.items')=0 THEN source_thread_id ELSE json_extract(body,'$.items[0].threadId') END WHERE message_kind='notice' AND state='queued'",
-                vec![],
-            ),
-        ])
     }
 }
 pub(crate) fn notice_item(

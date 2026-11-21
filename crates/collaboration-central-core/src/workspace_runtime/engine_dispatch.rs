@@ -1,18 +1,16 @@
 //! Core's concrete timed jobs and whole-unit execution.
-use crate::engine::{
-    machines::{
-        direct_message::DirectMessage,
-        direct_message_store::DirectMessageStore,
-        system_message_expiry::{ExpireAt, SystemMessageExpiry, SystemMessageExpiryStore},
-    },
-    query_registry,
-};
-use crate::{WorkspaceRuntime, central_mail_rows::insert_message};
+use crate::WorkspaceRuntime;
+#[cfg(feature = "test-support")]
+use crate::engine::query_registry;
 use central_engine_model::{DueRow, EngineTime, InstanceKey, MachineKind, RetirementThreshold};
 use central_storage::{AlarmUpdate, StatementBatch};
 use fleet_contracts::{AlarmResult, EngineSubject, LegacyUnitOutcome, ObservedControl};
 use fleet_engine::{
     DueCutoff, Engine, TimedRowOutcome, TimedRows, TimedSource, WholeUnit, WholeUnitOutcome,
+};
+use fleet_mail::{
+    DirectMessage, DirectMessageEvent, DirectMessageStore, ExpireAt, SystemMessageExpiry,
+    SystemMessageExpiryStore, insert_message,
 };
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_schedules::{self as automation_timer, AutomationStore};
@@ -44,8 +42,8 @@ impl DueKind {
         match self {
             Self::Wake => fleet_wakes::WAKE_LIST,
             Self::Automation => fleet_schedules::AUTOMATION_LIST,
-            Self::DirectMessage => query_registry::DIRECT_MESSAGE_LIST,
-            Self::SystemMessageExpiry => query_registry::SYSTEM_MESSAGE_EXPIRY_LIST,
+            Self::DirectMessage => fleet_mail::DIRECT_MESSAGE_LIST,
+            Self::SystemMessageExpiry => fleet_mail::SYSTEM_MESSAGE_EXPIRY_LIST,
             #[cfg(feature = "test-support")]
             Self::Probe => query_registry::PROBE_LIST,
         }
@@ -119,19 +117,17 @@ impl<H: CentralStore, S: WorkspaceStores> TimedRows<WorkspaceRuntime<H, S>> for 
             DueKind::DirectMessage => {
                 engine
                     .run_machine_unit::<DirectMessage, _>(
-                        &DirectMessageStore(runtime),
+                        &DirectMessageStore::new(runtime),
                         row,
                         "mail_messages.cancel_due_at",
-                        |occurrence| crate::engine::machines::direct_message::Event::Due {
-                            occurrence,
-                        },
+                        |occurrence| DirectMessageEvent::Due { occurrence },
                     )
                     .await
             }
             DueKind::SystemMessageExpiry => {
                 engine
                     .run_machine_unit::<SystemMessageExpiry, _>(
-                        &SystemMessageExpiryStore(runtime),
+                        &SystemMessageExpiryStore::new(runtime),
                         row,
                         "mail_messages.delivery_window_ends_at",
                         ExpireAt,

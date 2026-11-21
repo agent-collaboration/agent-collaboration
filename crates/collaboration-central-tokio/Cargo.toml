@@ -42,6 +42,7 @@ collaboration-central-core = { version = "0.1.96", path = "../collaboration-cent
 sqlx = { workspace = true, features = ["sqlite", "migrate"] }
 
 [dev-dependencies]
+fleet-mail.workspace = true
 collaboration-central-tokio = { path = ".", features = ["test-support"] }
 central-link-client = { path = "../central-link-client", version = "0.1.152" }
 reqwest-websocket = "=0.5.1"
