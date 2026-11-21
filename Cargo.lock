@@ -6257,6 +6257,7 @@ dependencies = [
  "agent-client-protocol-schema",
  "serde",
  "serde_json",
+ "tracing",
  "trybuild",
 ]
 

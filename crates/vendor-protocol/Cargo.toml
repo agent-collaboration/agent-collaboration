@@ -17,6 +17,7 @@ path = "tests/integration/main.rs"
 agent-client-protocol-schema.workspace = true
 serde.workspace = true
 serde_json = { workspace = true, features = ["raw_value"] }
+tracing.workspace = true
 
 [dev-dependencies]
 trybuild.workspace = true

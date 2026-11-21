@@ -2,8 +2,135 @@
 
 use agent_client_protocol_schema::v1::{
     SessionConfigId, SessionConfigKind, SessionConfigOption, SessionConfigOptionCategory,
-    SessionConfigSelectOption, SessionConfigSelectOptions, SessionConfigValueId,
+    SessionConfigSelectGroup, SessionConfigSelectOption, SessionConfigSelectOptions,
+    SessionConfigValueId, SessionNotification, SessionUpdate,
 };
+use serde::Deserialize;
+use serde_json::Value;
+
+/// A session notification that cannot be applied by the ACP runtime.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SessionNotificationError {
+    Malformed,
+    InvalidSettingsArray,
+    IncompleteSettingsOptions,
+    InvalidSettingsMetadata,
+    MalformedSettingsNotification,
+}
+
+/// Decode ACP v1 session/update parameters. Settings updates are full snapshots,
+/// so reject them if the pinned decoder defaulted a field or skipped an option.
+pub fn decode_session_notification(
+    params: &Value,
+) -> Result<SessionNotification, SessionNotificationError> {
+    use SessionNotificationError::{
+        IncompleteSettingsOptions, InvalidSettingsArray, InvalidSettingsMetadata, Malformed,
+        MalformedSettingsNotification,
+    };
+
+    let is_settings_update = |update: &Value| {
+        update.get("sessionUpdate").and_then(Value::as_str) == Some("config_option_update")
+    };
+    let Some(raw_settings) = params
+        .get("update")
+        .filter(|update| is_settings_update(update))
+    else {
+        // Serde also accepts positional structs. Reject this settings shape before
+        // decoding so even an unrouted positional frame cannot emit skip warnings.
+        if params.get(1).is_some_and(is_settings_update) {
+            return Err(MalformedSettingsNotification);
+        }
+        let notification = SessionNotification::deserialize(params).map_err(|_| Malformed)?;
+        return if matches!(&notification.update, SessionUpdate::ConfigOptionUpdate(_)) {
+            Err(MalformedSettingsNotification)
+        } else {
+            Ok(notification)
+        };
+    };
+
+    let raw_options = raw_settings
+        .get("configOptions")
+        .and_then(Value::as_array)
+        .ok_or(InvalidSettingsArray)?;
+    if !valid_optional_field(raw_settings, "_meta", Value::is_object) {
+        return Err(InvalidSettingsMetadata);
+    }
+    // ACP's skip listener includes provider values in its warnings. This synchronous
+    // settings decode uses a thread-local no-op dispatcher. The caller reports the
+    // resulting rejection reason through its ordinary telemetry dispatcher.
+    let notification = tracing::dispatcher::with_default(&tracing::Dispatch::none(), || {
+        SessionNotification::deserialize(params)
+    })
+    .map_err(|_| MalformedSettingsNotification)?;
+    let SessionUpdate::ConfigOptionUpdate(settings) = &notification.update else {
+        return Err(MalformedSettingsNotification);
+    };
+    if !complete_list(
+        raw_options,
+        &settings.config_options,
+        complete_config_option,
+    ) {
+        return Err(IncompleteSettingsOptions);
+    }
+    Ok(notification)
+}
+
+fn complete_config_option(raw: &Value, option: &SessionConfigOption) -> bool {
+    if !raw.is_object() || !valid_optional_field(raw, "category", Value::is_string) {
+        return false;
+    }
+    match &option.kind {
+        SessionConfigKind::Boolean(_) => true,
+        SessionConfigKind::Select(select) => {
+            let Some(raw_options) = raw.get("options").and_then(Value::as_array) else {
+                return false;
+            };
+            match &select.options {
+                SessionConfigSelectOptions::Ungrouped(choices) => {
+                    complete_list(raw_options, choices, |raw, _| complete_flat_choice(raw))
+                }
+                SessionConfigSelectOptions::Grouped(groups) => {
+                    complete_list(raw_options, groups, complete_config_group)
+                }
+                _ => false,
+            }
+        }
+        _ => false,
+    }
+}
+
+fn complete_flat_choice(raw: &Value) -> bool {
+    // ACP's untagged enum tries flat choices first. If a group also contains a
+    // value, the flat decode can succeed while discarding its nested choices.
+    let has_group_shape =
+        raw.get("group").is_some_and(Value::is_string) && raw.get("options").is_some();
+    raw.is_object() && !has_group_shape
+}
+
+fn complete_config_group(raw: &Value, group: &SessionConfigSelectGroup) -> bool {
+    raw.get("options")
+        .and_then(Value::as_array)
+        .is_some_and(|choices| complete_list(choices, &group.options, |raw, _| raw.is_object()))
+}
+
+fn complete_list<Decoded>(
+    raw: &[Value],
+    decoded: &[Decoded],
+    complete_entry: impl Fn(&Value, &Decoded) -> bool,
+) -> bool {
+    raw.len() == decoded.len()
+        && raw
+            .iter()
+            .zip(decoded)
+            .all(|(raw, decoded)| complete_entry(raw, decoded))
+}
+
+// Check optional fields that affect the catalog or update-level settings facts.
+// ACP can default ancillary descriptions and option, group and choice metadata.
+fn valid_optional_field(raw: &Value, field: &str, valid: fn(&Value) -> bool) -> bool {
+    raw.get(field)
+        .is_none_or(|value| value.is_null() || valid(value))
+}
 
 /// The settings roles recognized from ACP categories and provider option IDs.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -48,7 +175,8 @@ pub enum ObservedSettingValue<'option> {
 /// or unrecognized entries and default a malformed `configOptions` field to
 /// absence or an empty list, depending on the message. A list whose entries are
 /// all skipped is also empty. Skipped-entry warnings require the upstream
-/// `tracing` feature.
+/// `tracing` feature. Use [`decode_session_notification`] for full snapshots
+/// received as session updates.
 ///
 /// The Router's set-config-option reply path rejects the entire array if any
 /// item fails to decode before it calls this function.
