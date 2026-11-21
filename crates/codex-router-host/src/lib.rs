@@ -6,6 +6,7 @@ mod binding_dispatch_permit;
 #[cfg(any(test, feature = "test-support"))]
 mod binding_store_fixture;
 mod live_session_ownership_check;
+mod operation_machines;
 mod provider_operation_custody;
 pub use live_session_ownership_check::{LiveSessionOwnership, LiveSessionOwnershipCheck};
 mod app_server_shutdown;

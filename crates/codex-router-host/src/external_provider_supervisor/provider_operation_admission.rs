@@ -426,6 +426,7 @@ impl ExternalProviderSupervisor {
             live,
         } = write;
         let operation_id = operation.operation_id.clone();
+        live.host_write_begun();
         let kind = operation.operation_kind;
         let target = target.as_ref();
         let clock = self.inner.clock.as_ref();

@@ -139,8 +139,7 @@ impl LiveOperation {
         let previous = lifecycle.record;
         match OperationRecordMachine::transition(&previous, event) {
             Ok((next, _effects)) => {
-                lifecycle.custody.record_moved(previous, next);
-                lifecycle.record = next;
+                lifecycle.commit_record(previous, next);
                 true
             }
             Err(_) => false,
@@ -158,6 +157,10 @@ impl LiveOperation {
 
     pub(super) fn finish_write(&self, reason: CustodyEnd) -> bool {
         self.lifecycle.finish_host(reason)
+    }
+
+    pub(super) fn host_write_begun(&self) {
+        self.lifecycle.host_write_begun();
     }
 
     pub(super) fn begin_lane_write(
@@ -294,7 +297,7 @@ impl LiveOperation {
         if let Some(marked) = lifecycle.lane_marked() {
             return lifecycle.custody.holds_custody() && marked;
         }
-        let record = lifecycle.custody.admission_record(lifecycle.record);
+        let record = lifecycle.admission_record();
         lifecycle.custody.holds_custody()
             && (record == OperationRecord::Reserving && self.mark == DispatchMark::BeforeHandoff
                 || matches!(

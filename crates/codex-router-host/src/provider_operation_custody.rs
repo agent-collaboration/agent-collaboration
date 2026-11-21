@@ -1,5 +1,9 @@
 //! Transient custody of writes to a provider operation row.
 
+pub(crate) use crate::operation_machines::custody_machine::CustodyEnd;
+use crate::operation_machines::custody_machine::{
+    Custodian, CustodyEffect, CustodyEvent, OperationCustody, OperationCustodyMachine,
+};
 use collaboration_protocol::{CodexGeneration, OperationId, SessionRef};
 use provider_session_machines::{
     operation_record_machine::{
@@ -8,116 +12,14 @@ use provider_session_machines::{
     session_owner::{OwnerIncarnation, OwnerInput},
 };
 use state_machine_core::StateMachine;
-use std::{
-    collections::BTreeSet,
-    sync::{Arc, Mutex, MutexGuard, PoisonError},
-};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use tokio::sync::Notify;
 use uuid::Uuid;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum CustodyEnd {
-    Written,
-    Failed,
-    NoWrite,
-    Dropped,
-    Released,
-}
-
-#[derive(Debug, Eq, PartialEq)]
-pub(crate) enum OperationCustody {
-    Held {
-        host_end: Option<CustodyEnd>,
-        lane_writes: BTreeSet<Uuid>,
-        lane_end: Option<CustodyEnd>,
-        settling_from: Option<OperationRecord>,
-    },
-    Ended(CustodyEnd),
-}
-
-impl OperationCustody {
-    pub(crate) fn held() -> Self {
-        Self::Held {
-            host_end: None,
-            lane_writes: BTreeSet::new(),
-            lane_end: None,
-            settling_from: None,
-        }
-    }
-
-    pub(crate) fn holds_custody(&self) -> bool {
-        matches!(self, Self::Held { .. })
-    }
-
-    pub(crate) fn admission_record(&self, current: OperationRecord) -> OperationRecord {
-        match self {
-            Self::Held { settling_from, .. } => settling_from.unwrap_or(current),
-            Self::Ended(_) => current,
-        }
-    }
-
-    pub(crate) fn record_moved(&mut self, previous: OperationRecord, next: OperationRecord) {
-        if let Self::Held { settling_from, .. } = self
-            && matches!(next, OperationRecord::Settled { .. })
-        {
-            *settling_from = Some(previous);
-        }
-    }
-
-    fn begin_lane_write(&mut self, ticket: Uuid) -> bool {
-        match self {
-            Self::Held { lane_writes, .. } => lane_writes.insert(ticket),
-            Self::Ended(_) => false,
-        }
-    }
-
-    fn finish_lane_write(&mut self, ticket: Uuid, end: CustodyEnd) -> bool {
-        if let Self::Held {
-            lane_writes,
-            lane_end,
-            ..
-        } = self
-            && lane_writes.remove(&ticket)
-        {
-            *lane_end = Some(end);
-            return self.finish_if_released();
-        }
-        false
-    }
-
-    fn finish_host(&mut self, end: CustodyEnd) -> bool {
-        if let Self::Held { host_end, .. } = self
-            && host_end.is_none()
-        {
-            *host_end = Some(end);
-            return self.finish_if_released();
-        }
-        false
-    }
-
-    fn finish_if_released(&mut self) -> bool {
-        if let Self::Held {
-            host_end: Some(host_end),
-            lane_writes,
-            lane_end,
-            ..
-        } = self
-            && lane_writes.is_empty()
-        {
-            let end = match host_end {
-                CustodyEnd::NoWrite => lane_end.unwrap_or(*host_end),
-                _ => *host_end,
-            };
-            *self = Self::Ended(end);
-            return true;
-        }
-        false
-    }
-}
 
 pub(crate) struct OperationLifecycleState {
     pub(crate) record: OperationRecord,
     pub(crate) custody: OperationCustody,
+    settling_from: Option<OperationRecord>,
     cancelled_prompt: Option<CancelledPromptIdentity>,
     lane_mark: Option<(Uuid, bool)>,
     lane_transition: Option<(Uuid, Uuid)>,
@@ -126,6 +28,34 @@ pub(crate) struct OperationLifecycleState {
 impl OperationLifecycleState {
     pub(crate) fn lane_marked(&self) -> Option<bool> {
         self.lane_mark.map(|(_, marked)| marked)
+    }
+
+    pub(crate) fn admission_record(&self) -> OperationRecord {
+        if self.custody.holds_custody() {
+            self.settling_from.unwrap_or(self.record)
+        } else {
+            self.record
+        }
+    }
+
+    pub(crate) fn commit_record(&mut self, previous: OperationRecord, next: OperationRecord) {
+        if self.custody.holds_custody() && matches!(next, OperationRecord::Settled { .. }) {
+            self.settling_from = Some(previous);
+        }
+        self.record = next;
+    }
+
+    fn apply_custody(&mut self, event: CustodyEvent) -> Option<bool> {
+        match OperationCustodyMachine::transition(&self.custody, event) {
+            Ok((next, effects)) => {
+                self.custody = next;
+                Some(effects.contains(&CustodyEffect::OrdinaryCustodyEnded))
+            }
+            Err(refusal) => {
+                tracing::debug!(?event, ?refusal, "operation custody transition refused");
+                None
+            }
+        }
     }
 }
 
@@ -138,7 +68,17 @@ pub(crate) struct CancelledPromptIdentity {
 /// Pins the retained original entry while its late evidence holds the store guard.
 pub(crate) struct LatePromptRepairAuthority {
     pub(crate) generation: CodexGeneration,
-    _lifecycle: Arc<OperationLifecycle>,
+    lifecycle: Arc<OperationLifecycle>,
+    authority: Uuid,
+}
+
+impl Drop for LatePromptRepairAuthority {
+    fn drop(&mut self) {
+        let _ = self
+            .lifecycle
+            .state()
+            .apply_custody(CustodyEvent::RepairReleased(self.authority));
+    }
 }
 
 pub(crate) struct OperationLifecycle {
@@ -148,14 +88,17 @@ pub(crate) struct OperationLifecycle {
 
 impl OperationLifecycle {
     pub(crate) fn new(record: OperationRecord, changed: Arc<Notify>) -> Self {
+        let mut state = OperationLifecycleState {
+            record,
+            custody: OperationCustody::Vacant,
+            settling_from: None,
+            cancelled_prompt: None,
+            lane_mark: None,
+            lane_transition: None,
+        };
+        let _ = state.apply_custody(CustodyEvent::Reserve);
         Self {
-            state: Mutex::new(OperationLifecycleState {
-                record,
-                custody: OperationCustody::held(),
-                cancelled_prompt: None,
-                lane_mark: None,
-                lane_transition: None,
-            }),
+            state: Mutex::new(state),
             changed,
         }
     }
@@ -165,11 +108,20 @@ impl OperationLifecycle {
     }
 
     pub(crate) fn finish_host(&self, reason: CustodyEnd) -> bool {
-        let ended = self.state().custody.finish_host(reason);
+        let event = match reason {
+            CustodyEnd::Dropped => CustodyEvent::DropReservation,
+            CustodyEnd::Released => CustodyEvent::ReleasedAtShutdown(Custodian::Host),
+            _ => CustodyEvent::HostWriteEnded(reason),
+        };
+        let ended = self.state().apply_custody(event) == Some(true);
         if ended {
             self.changed.notify_waiters();
         }
         ended
+    }
+
+    pub(crate) fn host_write_begun(&self) {
+        let _ = self.state().apply_custody(CustodyEvent::HostWriteBegun);
     }
 
     pub(crate) fn begin_lane_write(
@@ -178,9 +130,8 @@ impl OperationLifecycle {
     ) -> Option<LaneWriteCustody> {
         let ticket = Uuid::now_v7();
         self.state()
-            .custody
-            .begin_lane_write(ticket)
-            .then(|| LaneWriteCustody {
+            .apply_custody(CustodyEvent::LaneOffered(ticket))
+            .map(|_| LaneWriteCustody {
                 lifecycle: Arc::clone(self),
                 ticket,
                 on_end,
@@ -192,11 +143,16 @@ impl OperationLifecycle {
         generation: CodexGeneration,
         identity: &CancelledPromptIdentity,
     ) -> Option<LatePromptRepairAuthority> {
-        (self.state().cancelled_prompt.as_ref() == Some(identity)).then(|| {
-            LatePromptRepairAuthority {
-                generation,
-                _lifecycle: Arc::clone(self),
-            }
+        let mut state = self.state();
+        if state.cancelled_prompt.as_ref() != Some(identity) {
+            return None;
+        }
+        let authority = Uuid::now_v7();
+        state.apply_custody(CustodyEvent::RepairTaken(authority))?;
+        Some(LatePromptRepairAuthority {
+            generation,
+            lifecycle: Arc::clone(self),
+            authority,
         })
     }
 }
@@ -265,6 +221,14 @@ impl LaneWriteCustody {
     }
 
     pub(crate) fn settle(self, reason: CustodyEnd) {
+        let event = if reason == CustodyEnd::Released {
+            CustodyEvent::ReleasedAtShutdown(Custodian::Lane(self.ticket))
+        } else {
+            CustodyEvent::LaneReturned {
+                ticket: self.ticket,
+                reason,
+            }
+        };
         let ended = {
             let mut state = self.lifecycle.state();
             if state
@@ -273,7 +237,7 @@ impl LaneWriteCustody {
             {
                 state.lane_transition = None;
             }
-            state.custody.finish_lane_write(self.ticket, reason)
+            state.apply_custody(event) == Some(true)
         };
         if ended {
             self.lifecycle.changed.notify_waiters();
