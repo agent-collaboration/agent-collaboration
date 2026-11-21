@@ -240,12 +240,19 @@ impl Fixture {
 
     fn last_permission_reply(&self, session: &str) -> Value {
         let receipt = self.receipt();
-        let answer = receipt["permissionAnswers"]
-            .as_array()
+        let answer = receipt
+            .get("permissionAnswers")
+            .and_then(Value::as_array)
             .and_then(|answers| answers.last())
             .expect("one permission reply for the prompt");
-        assert_eq!(answer["sessionId"], session);
-        answer["answer"].clone()
+        assert_eq!(
+            answer.get("sessionId").and_then(Value::as_str),
+            Some(session)
+        );
+        answer
+            .get("answer")
+            .expect("permission reply payload")
+            .clone()
     }
 
     async fn assert_managed_allowance(&self, session: &str) {
