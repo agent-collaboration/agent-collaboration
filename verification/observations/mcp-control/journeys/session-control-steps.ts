@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import {
   wireEntrySchema,
+  userMessageChunkText,
   type Hold,
   type WireEntry,
 } from "../../providers/acp/session-control-stdio-gate.ts";
@@ -447,7 +448,7 @@ export async function verifyCompletedPrompt(
       entry.sequence < terminal.sequence &&
       entry.frame?.params?.update?.sessionUpdate === "user_message_chunk",
   );
-  const echoed = chunks.map((entry) => entry.frame?.params?.update?.content?.text ?? "").join("");
+  const echoed = chunks.map(userMessageChunkText).join("");
   record(inputs.context, {
     step: step + "-prompt-echo",
     target,

@@ -25,7 +25,7 @@ const paramsSchema = z.looseObject({
   update: z
     .looseObject({
       sessionUpdate: z.string(),
-      content: z.looseObject({ text: z.string().optional() }).optional(),
+      content: z.unknown().optional(),
     })
     .optional(),
 });
@@ -65,6 +65,13 @@ export const wireEntrySchema = z.strictObject({
 });
 export type WireEntry = z.infer<typeof wireEntrySchema>;
 
+export function userMessageChunkText(entry: WireEntry): string {
+  const content = z
+    .looseObject({ text: z.string() })
+    .safeParse(entry.frame?.params?.update?.content);
+  return content.success ? content.data.text : "";
+}
+
 const recordedMethods = new Set([
   "initialize",
   "session/new",
@@ -77,6 +84,7 @@ const recordedMethods = new Set([
   "session/set_config_option",
   "session/set_mode",
   "session/update",
+  "session/request_permission",
 ]);
 const recordedUpdates = new Set([
   "user_message_chunk",
@@ -111,6 +119,7 @@ export class SessionControlStdioGate {
     { method: string; sessionId: string | null }
   >();
   private readonly heldReplies = new Map<string | number, boolean>();
+  private readonly permissionRequests = new Map<string | number, string>();
   private delayedReply: { line: string; entry: WireEntry } | null = null;
   private selected: Hold | null = null;
   private selectedRequest = false;
@@ -119,6 +128,9 @@ export class SessionControlStdioGate {
   private readonly record: (entry: WireEntry) => void;
   private readonly onDelayed: (() => void) | undefined;
   private readonly projection: (() => z.infer<typeof loadModeProjectionSchema> | null) | undefined;
+  private readonly permissionProbe:
+    | (() => { sessionId: string; marker: string } | null)
+    | undefined;
 
   constructor(
     connection: string,
@@ -126,12 +138,14 @@ export class SessionControlStdioGate {
     record: (entry: WireEntry) => void,
     onDelayed?: () => void,
     projection?: () => z.infer<typeof loadModeProjectionSchema> | null,
+    permissionProbe?: () => { sessionId: string; marker: string } | null,
   ) {
     this.connection = connection;
     this.readHold = readHold;
     this.record = record;
     this.onDelayed = onDelayed;
     this.projection = projection;
+    this.permissionProbe = permissionProbe;
   }
 
   get active(): boolean {
@@ -178,8 +192,12 @@ export class SessionControlStdioGate {
       frame.method === undefined && direction === "agentToHost" && requestId !== null
         ? this.outstanding.get(requestId)
         : undefined;
-    const method = frame.method ?? reply?.method ?? null;
-    const sessionId = params?.sessionId ?? reply?.sessionId ?? null;
+    const permission = this.permissionReceipt(direction, frame, requestId);
+    const method =
+      frame.method ??
+      reply?.method ??
+      (permission === undefined ? null : "session/request_permission");
+    const sessionId = params?.sessionId ?? reply?.sessionId ?? permission ?? null;
     if (direction === "hostToAgent" && frame.method !== undefined && requestId !== null) {
       this.outstanding.set(requestId, { method: frame.method, sessionId });
       if (
@@ -228,7 +246,10 @@ export class SessionControlStdioGate {
       disposition: withheld ? "withheld" : "forwarded",
       method,
       sessionId,
-      frame: evidenceFrame(frame, method),
+      frame:
+        method === "session/request_permission" && permission === undefined
+          ? null
+          : evidenceFrame(frame, method),
       ...(forwardedFrame === undefined
         ? {}
         : {
@@ -243,6 +264,30 @@ export class SessionControlStdioGate {
     }
     this.record(entry);
     return withheld ? null : forwardedFrame === undefined ? line : JSON.stringify(forwardedFrame);
+  }
+
+  private permissionReceipt(
+    direction: Direction,
+    frame: Frame,
+    id: string | number | null,
+  ): string | undefined {
+    if (id === null) return undefined;
+    if (direction === "hostToAgent" && frame.method === undefined) {
+      const session = this.permissionRequests.get(id);
+      this.permissionRequests.delete(id);
+      return session;
+    }
+    if (direction !== "agentToHost" || frame.method !== "session/request_permission")
+      return undefined;
+    const probe = this.permissionProbe?.();
+    if (
+      probe == null ||
+      frame.params?.sessionId !== probe.sessionId ||
+      !JSON.stringify(frame.params["toolCall"] ?? null).includes(probe.marker)
+    )
+      return undefined;
+    this.permissionRequests.set(id, probe.sessionId);
+    return probe.sessionId;
   }
 }
 
@@ -293,6 +338,14 @@ function privateGate(directory: string, write: (line: string) => void): SessionC
       const path = join(directory, "load-mode.json");
       return existsSync(path)
         ? loadModeProjectionSchema.parse(JSON.parse(readFileSync(path, "utf8")))
+        : null;
+    },
+    () => {
+      const path = join(directory, "permission-probe.json");
+      return existsSync(path)
+        ? z
+            .strictObject({ sessionId: z.string(), marker: z.string().min(1) })
+            .parse(JSON.parse(readFileSync(path, "utf8")))
         : null;
     },
   );

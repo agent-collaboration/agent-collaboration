@@ -1,5 +1,6 @@
 // Unconfirmed cancel, local close and explicit reconciliation in a single Host lifetime.
 import { z } from "zod";
+import { userMessageChunkText } from "../../providers/acp/session-control-stdio-gate.ts";
 import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { sessionRefSchema, type SessionRef } from "../observations/observation-models.ts";
@@ -386,7 +387,7 @@ async function holdAndClose(
           entry.sequence < withheld.sequence &&
           entry.frame?.params?.update?.sessionUpdate === "user_message_chunk",
       )
-      .map((entry) => entry.frame?.params?.update?.content?.text ?? "")
+      .map(userMessageChunkText)
       .join("");
     record(inputs.context, {
       step: "cancel-gate-proof",

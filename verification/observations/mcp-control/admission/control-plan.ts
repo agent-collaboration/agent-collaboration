@@ -49,6 +49,7 @@ const sessionControlCases = z.enum([
   "cancelRestart",
   "cancelQueued",
   "refusedSteer",
+  "inFolderAllowance",
 ]);
 export const controlCaseSchema = z.enum([
   "lifecycle",
@@ -139,6 +140,7 @@ export const controlPlanSchema = z.strictObject({
       cursorCancelLoad: z.enum(["firstPrompt", "afterPrimer"]).optional(),
       primedCancelGuidance: z.literal(true).optional(),
       restoreReapply: z.enum(["named", "auto", "unconfirmed"]).optional(),
+      allowanceJourney: z.enum(["autoSeed", "autoReopen", "default"]).optional(),
       restart: z
         .discriminatedUnion("phase", [
           z.strictObject({ phase: z.literal("seed"), record: absolutePath }),
@@ -177,6 +179,7 @@ const CASE_EFFECTS: Readonly<
   cancelRestart: { sessions: 1, prompts: 2 },
   cancelQueued: { sessions: 1, prompts: 2 },
   refusedSteer: { sessions: 1, prompts: 2 },
+  inFolderAllowance: { sessions: 1, prompts: 2 },
 };
 const CONTINUATION_CASE = { retain: "continuationRetain", reload: "continuationReload" } as const;
 const OWNER_LOOKUP_COMMAND = "/usr/bin/id"; // collaboration-client owner_identity_resolution.rs:8
@@ -393,13 +396,17 @@ function checkSessionControlDeclaration(plan: ControlPlan): void {
     throw new Error("declare one session-control case on its own gated Host connection");
   if (
     (control.restart !== undefined) !==
-    (selected[0] === "savedModeRestart" || selected[0] === "cancelRestart")
+    (selected[0] === "savedModeRestart" ||
+      selected[0] === "cancelRestart" ||
+      control.allowanceJourney === "autoSeed" ||
+      control.allowanceJourney === "autoReopen")
   )
     throw new Error("only the restart cases declare seed and reopen lifetimes");
   if (control.closePrimer === false && selected[0] !== "unansweredClose")
     throw new Error("only the unanswered-close case declares a metadata-only seed");
   checkCursorCancelDeclaration(plan, selected[0], control.cursorCancelLoad);
   checkReapplyDeclaration(plan, selected[0], control.restoreReapply);
+  checkAllowanceDeclaration(plan, selected[0], control.allowanceJourney);
   if (
     control.primedCancelGuidance &&
     (selected[0] !== "unconfirmedCancel" ||
@@ -416,26 +423,7 @@ function checkSessionControlDeclaration(plan: ControlPlan): void {
       plan.endpointId !== "cursor-local")
   )
     throw new Error("the silence observation requires the reopened Cursor saved-mode case");
-  if (plan.host.kind === "automationDebugHost") {
-    if (plan.hostContext === null)
-      throw new Error("the automation Host needs its prepared context");
-    const prepared = z
-      .looseObject({
-        kind: z.literal("debugHostPrepared"),
-        runDirectory: absolutePath,
-        serviceDirectory: absolutePath,
-        hostPid: z.number().int().positive(),
-      })
-      .parse(JSON.parse(readFileSync(plan.hostContext, "utf8")));
-    if (
-      prepared.hostPid !== plan.host.pid ||
-      prepared.serviceDirectory !== plan.serviceDirectory ||
-      join(prepared.runDirectory, "agent-communication") !== plan.serviceDirectory
-    )
-      throw new Error(
-        "the automation Host did not publish a private run-local collaboration store",
-      );
-  }
+  checkAutomationContext(plan);
   if (
     control.restart?.phase === "seed" &&
     (dirname(control.restart.record) !== plan.evidence || existsSync(control.restart.record))
@@ -470,6 +458,50 @@ function checkSessionControlDeclaration(plan: ControlPlan): void {
     )
       throw new Error("scripted mode requires this Host's isolated fixture launch receipt");
   }
+}
+
+function checkAutomationContext(plan: ControlPlan): void {
+  if (plan.host.kind === "automationDebugHost") {
+    if (plan.hostContext === null)
+      throw new Error("the automation Host needs its prepared context");
+    const prepared = z
+      .looseObject({
+        kind: z.literal("debugHostPrepared"),
+        runDirectory: absolutePath,
+        serviceDirectory: absolutePath,
+        hostPid: z.number().int().positive(),
+      })
+      .parse(JSON.parse(readFileSync(plan.hostContext, "utf8")));
+    if (
+      prepared.hostPid !== plan.host.pid ||
+      prepared.serviceDirectory !== plan.serviceDirectory ||
+      join(prepared.runDirectory, "agent-communication") !== plan.serviceDirectory
+    )
+      throw new Error(
+        "the automation Host did not publish a private run-local collaboration store",
+      );
+  }
+}
+
+function checkAllowanceDeclaration(
+  plan: ControlPlan,
+  selected: ControlCase | undefined,
+  variant: NonNullable<ControlPlan["sessionControl"]>["allowanceJourney"],
+): void {
+  if ((variant !== undefined) !== (selected === "inFolderAllowance"))
+    throw new Error("the private allowance journey needs its declared phase");
+  if (variant === undefined) return;
+  const expected = variant === "default" ? "default" : "auto";
+  if (
+    plan.peer.kind !== "provider" ||
+    plan.host.kind !== "automationDebugHost" ||
+    plan.sessionControl?.savedMode !== expected ||
+    (variant === "autoSeed" && plan.sessionControl.restart?.phase !== "seed") ||
+    (variant === "autoReopen" && plan.sessionControl.restart?.phase !== "reopen")
+  )
+    throw new Error(
+      "the allowance probe needs the declared real provider, mode and private Host lifetime",
+    );
 }
 
 function checkReapplyDeclaration(
@@ -535,6 +567,7 @@ function checkActor(plan: ControlPlan): void {
 }
 
 function casePromptBudget(plan: ControlPlan, name: ControlCase): number {
+  if (name === "inFolderAllowance" && plan.sessionControl?.allowanceJourney === "default") return 1;
   if (name === "unansweredClose" && plan.sessionControl?.closePrimer === false) return 1;
   if (name === "unconfirmedCancel") {
     const variant = plan.sessionControl?.cursorCancelLoad;

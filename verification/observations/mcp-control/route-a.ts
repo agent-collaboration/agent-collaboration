@@ -91,12 +91,18 @@ const routePlanSchema = z.strictObject({
     }),
     z.strictObject({ kind: z.literal("cancelRestartSeed") }),
     z.strictObject({ kind: z.literal("cancelRestartReopen"), record: pathSchema }),
+    z.strictObject({ kind: z.enum(["allowanceAutoSeed", "allowanceDefault"]) }),
+    z.strictObject({ kind: z.literal("allowanceAutoReopen"), record: pathSchema }),
   ]),
 });
 type RoutePlan = z.infer<typeof routePlanSchema>;
 
 function isReopen(plan: RoutePlan): boolean {
-  return plan.journey.kind === "savedModeReopen" || plan.journey.kind === "cancelRestartReopen";
+  return (
+    plan.journey.kind === "savedModeReopen" ||
+    plan.journey.kind === "cancelRestartReopen" ||
+    plan.journey.kind === "allowanceAutoReopen"
+  );
 }
 const publicationSchema = z.looseObject({
   serviceId: z.uuid(),
@@ -300,6 +306,25 @@ async function ready(
   throw new Error("private Host readiness timed out");
 }
 
+function restartIntent(
+  plan: RoutePlan,
+  evidence: string,
+): NonNullable<ControlPlan["sessionControl"]>["restart"] {
+  return plan.journey.kind === "savedModeSeed" ||
+    plan.journey.kind === "cancelRestartSeed" ||
+    plan.journey.kind === "allowanceAutoSeed"
+    ? { phase: "seed", record: join(evidence, "seed.json") }
+    : plan.journey.kind === "savedModeReopen" ||
+        plan.journey.kind === "cancelRestartReopen" ||
+        plan.journey.kind === "allowanceAutoReopen"
+      ? {
+          phase: "reopen",
+          record: plan.journey.record,
+          sha256: sha256(plan.journey.record),
+        }
+      : undefined;
+}
+
 function makeControlPlan(
   plan: RoutePlan,
   prepared: ReturnType<typeof prepare>,
@@ -309,22 +334,23 @@ function makeControlPlan(
 ): ControlPlan {
   if (plan.journey.kind === "preflight") throw new Error("preflight does not drive MCP cases");
   const evidence = join(prepared.evidence, "case");
-  const restart: NonNullable<ControlPlan["sessionControl"]>["restart"] =
-    plan.journey.kind === "savedModeSeed" || plan.journey.kind === "cancelRestartSeed"
-      ? { phase: "seed", record: join(evidence, "seed.json") }
-      : plan.journey.kind === "savedModeReopen" || plan.journey.kind === "cancelRestartReopen"
-        ? {
-            phase: "reopen",
-            record: plan.journey.record,
-            sha256: sha256(plan.journey.record),
-          }
-        : undefined;
+  const allowanceJourney =
+    plan.journey.kind === "allowanceAutoSeed"
+      ? "autoSeed"
+      : plan.journey.kind === "allowanceAutoReopen"
+        ? "autoReopen"
+        : plan.journey.kind === "allowanceDefault"
+          ? "default"
+          : undefined;
+  const restart = restartIntent(plan, evidence);
   const caseName =
-    plan.journey.kind === "savedModeReopen" || plan.journey.kind === "savedModeSeed"
-      ? "savedModeRestart"
-      : plan.journey.kind === "cancelRestartReopen" || plan.journey.kind === "cancelRestartSeed"
-        ? "cancelRestart"
-        : plan.journey.kind;
+    allowanceJourney !== undefined
+      ? "inFolderAllowance"
+      : plan.journey.kind === "savedModeReopen" || plan.journey.kind === "savedModeSeed"
+        ? "savedModeRestart"
+        : plan.journey.kind === "cancelRestartReopen" || plan.journey.kind === "cancelRestartSeed"
+          ? "cancelRestart"
+          : plan.journey.kind;
   const actor = localActor();
   const cursorCancelLoad =
     plan.journey.kind === "unconfirmedCancel" ? plan.journey.cursorCancelLoad : undefined;
@@ -376,12 +402,17 @@ function makeControlPlan(
       gateDirectory: capture,
       restore: "load",
       savedMode:
-        restoreReapply === "auto"
+        allowanceJourney === "autoSeed" || allowanceJourney === "autoReopen"
           ? "auto"
-          : restoreReapply === "unconfirmed"
+          : allowanceJourney === "default"
             ? "default"
-            : (plan.cursor?.mode ?? "plan"),
+            : restoreReapply === "auto"
+              ? "auto"
+              : restoreReapply === "unconfirmed"
+                ? "default"
+                : (plan.cursor?.mode ?? "plan"),
       ...(restoreReapply === undefined ? {} : { restoreReapply }),
+      ...(allowanceJourney === undefined ? {} : { allowanceJourney }),
       ...(cursorCancelLoad === undefined ? {} : { cursorCancelLoad }),
       ...(primedCancelGuidance ? { primedCancelGuidance: true } : {}),
       ...(plan.journey.kind === "savedModeReopen" && plan.journey.observeSilentRestorePrompt

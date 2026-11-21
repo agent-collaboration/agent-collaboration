@@ -35,6 +35,7 @@ import { ProviderStoreReadback } from "./evidence/role-readback.ts";
 import { StreamingMcpClient } from "./transport/streaming-mcp-client.ts";
 import { z } from "zod";
 import { savedModeRestartCase } from "./journeys/saved-mode-restart.ts";
+import { inFolderAllowanceCase } from "./journeys/in-folder-allowance.ts";
 import { unansweredReopenCase } from "./journeys/unanswered-reopen.ts";
 import { unansweredCloseCase } from "./journeys/unanswered-close.ts";
 import { cancelRestartCase, unconfirmedCancelCase } from "./journeys/unconfirmed-cancel.ts";
@@ -50,6 +51,7 @@ const CASES: Readonly<Record<ControlCase, (inputs: CaseInputs) => Promise<CaseRe
   continuationRetain: continuationRetainCase,
   continuationReload: continuationReloadCase,
   savedModeRestart: savedModeRestartCase,
+  inFolderAllowance: inFolderAllowanceCase,
   unansweredReopen: unansweredReopenCase,
   unansweredClose: unansweredCloseCase,
   unconfirmedCancel: unconfirmedCancelCase,
@@ -85,6 +87,11 @@ function sessionControlTools(plan: ControlPlan): string[] {
     "conversation_operation_show",
     "provider_session_inspect",
   ];
+  if (plan.cases.includes("inFolderAllowance")) {
+    return plan.sessionControl?.allowanceJourney === "autoReopen"
+      ? [...common, "conversation_load", "conversation_settings_set"]
+      : common;
+  }
   if (plan.cases.includes("cancelQueued"))
     return [...common, "events_observe", "conversation_cancel"];
   if (plan.cases.includes("refusedSteer")) return [...common, "events_observe"];

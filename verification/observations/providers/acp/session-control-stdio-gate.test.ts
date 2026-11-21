@@ -13,6 +13,78 @@ import {
 
 const rpc = (frame: object): string => JSON.stringify({ jsonrpc: "2.0", ...frame });
 
+test("a genuine tool update's array content passes the gate unchanged", () => {
+  const gate = new SessionControlStdioGate(
+    "tools",
+    () => null,
+    () => {},
+  );
+  gate.relayLine(
+    "hostToAgent",
+    rpc({ id: 0, method: "initialize", params: { protocolVersion: 1 } }),
+  );
+  const toolUpdate = rpc({
+    method: "session/update",
+    params: {
+      sessionId: "owned-fixture",
+      update: {
+        sessionUpdate: "tool_call_update",
+        toolCallId: "owned-edit",
+        content: [{ type: "diff", path: "/tmp/owned-fixture.txt", newText: "OK" }],
+      },
+    },
+  });
+  assert.equal(gate.relayLine("agentToHost", toolUpdate), toolUpdate);
+});
+
+test("permission receipts retain only the authorized marker and its correlated reply", () => {
+  const entries: WireEntry[] = [];
+  const gate = new SessionControlStdioGate(
+    "permission",
+    () => null,
+    (entry) => entries.push(entry),
+    undefined,
+    undefined,
+    () => ({ sessionId: "A", marker: "owned-marker.txt" }),
+  );
+  gate.relayLine(
+    "hostToAgent",
+    rpc({ id: 0, method: "initialize", params: { protocolVersion: 1 } }),
+  );
+  const callback = (id: number, file: string) =>
+    rpc({
+      id,
+      method: "session/request_permission",
+      params: { sessionId: "A", toolCall: { title: "Edit " + file } },
+    });
+  const reply = (id: number) =>
+    rpc({ id, result: { outcome: { outcome: "selected", optionId: "once" } } });
+  assert.equal(
+    gate.relayLine("agentToHost", callback(1, "unrelated.txt")),
+    callback(1, "unrelated.txt"),
+  );
+  assert.equal(gate.relayLine("hostToAgent", reply(1)), reply(1));
+  assert.equal(
+    gate.relayLine("agentToHost", callback(2, "owned-marker.txt")),
+    callback(2, "owned-marker.txt"),
+  );
+  assert.equal(gate.relayLine("hostToAgent", reply(2)), reply(2));
+  assert.deepEqual(
+    entries
+      .filter((row) => row.method === "session/request_permission")
+      .map((row) => ({
+        direction: row.direction,
+        id: row.frame?.id ?? null,
+        session: row.sessionId,
+      })),
+    [
+      { direction: "agentToHost", id: null, session: "A" },
+      { direction: "agentToHost", id: 2, session: "A" },
+      { direction: "hostToAgent", id: 2, session: "A" },
+    ],
+  );
+});
+
 test("a load projection changes only the named session's advertised mode and retains both frames", () => {
   const entries: WireEntry[] = [];
   const gate = new SessionControlStdioGate(
