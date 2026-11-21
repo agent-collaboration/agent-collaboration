@@ -77,8 +77,8 @@ impl SupervisorInner {
             ProviderOperationCompletion::DispatchMarkNotWritten(_) => Some(CustodyEnd::Failed),
             _ => None,
         };
-        let prompt_refusal_deadline = match &completion {
-            ProviderOperationCompletion::PromptAdmissionRefused { deadline, .. } => Some(*deadline),
+        let prompt_failure_deadline = match &completion {
+            ProviderOperationCompletion::PromptStartFailed { deadline, .. } => Some(*deadline),
             _ => None,
         };
         // The operation's record takes its outcome first; an unknown one
@@ -89,7 +89,7 @@ impl SupervisorInner {
                 provider_session_machines::operation_record_machine::AttemptEnding::Applied
             }
             ProviderOperationCompletion::Failure(failure)
-            | ProviderOperationCompletion::PromptAdmissionRefused { failure, .. } => {
+            | ProviderOperationCompletion::PromptStartFailed { failure, .. } => {
                 match failure.effect {
                     ProviderOperationEffect::Applied => {
                         provider_session_machines::operation_record_machine::AttemptEnding::Applied
@@ -162,11 +162,11 @@ impl SupervisorInner {
                 }
             }
             ProviderOperationCompletion::Failure(operation_failure)
-            | ProviderOperationCompletion::PromptAdmissionRefused {
+            | ProviderOperationCompletion::PromptStartFailed {
                 failure: operation_failure,
                 ..
             } => {
-                let observed_failure = (live.is_restore() || prompt_refusal_deadline.is_some())
+                let observed_failure = (live.is_restore() || prompt_failure_deadline.is_some())
                     .then(|| operation_failure.clone());
                 let reconciliation = if operation_failure.effect == ProviderOperationEffect::Unknown
                 {
@@ -191,7 +191,7 @@ impl SupervisorInner {
                 let persistence =
                     self.persist_failed_operation(&operation_id, operation_failure, reconciliation);
                 if let Some(observed_failure) = observed_failure {
-                    let deadline = prompt_refusal_deadline
+                    let deadline = prompt_failure_deadline
                         .unwrap_or_else(|| self.clock.monotonic_now().after(STORE_WAIT));
                     match self
                         .persist_with_early_failure(

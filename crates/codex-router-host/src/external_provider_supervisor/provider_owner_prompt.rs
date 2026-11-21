@@ -1,13 +1,12 @@
 //! Submit CLI and MCP input to the owner after Host operation reservation.
 
 use super::{
-    ConversationOperationFailureKind, ConversationOperationFailureStage,
-    ConversationOperationSettlement, ExternalProviderSupervisor, OperationId, PreparedOperation,
-    ProviderConversationFuture, ProviderOperationCompletion, ProviderOperationEffect,
-    ProviderOperationKind, SessionRef, admitted_submission, existing_submission, failure,
-    optional_message_text,
+    ConversationOperationFailure, ConversationOperationFailureKind,
+    ConversationOperationFailureStage, ConversationOperationSettlement, ExternalProviderSupervisor,
+    OperationId, PreparedOperation, ProviderConversationFuture, ProviderOperationCompletion,
+    ProviderOperationEffect, ProviderOperationKind, SessionRef, admitted_submission,
+    existing_submission, failure, optional_message_text,
     provider_admission_policy::DispatchMark,
-    provider_operation_failure::PromptStartFailure,
     provider_owner_operations::owner_failure,
     provider_prompt_contents::{PromptBusyPolicy, ProviderPromptContentsRequest},
     runtime_failure,
@@ -162,14 +161,14 @@ impl ExternalProviderSupervisor {
                             });
                             Ok(admitted_submission(snapshot))
                         }
-                        Err(PromptStartFailure::OwnerRefused(failure)) => {
+                        Err(failure) => {
                             let clock = backend.inner.clock.as_ref();
                             let deadline = clock.monotonic_now().after(STORE_WAIT);
                             backend.spawn_operation(
                                 operation,
                                 Arc::clone(&live),
                                 std::future::ready(
-                                    ProviderOperationCompletion::PromptAdmissionRefused {
+                                    ProviderOperationCompletion::PromptStartFailed {
                                         failure: failure.clone(),
                                         deadline,
                                     },
@@ -178,17 +177,6 @@ impl ExternalProviderSupervisor {
                             let _publication =
                                 router_clock::timeout_at(clock, deadline, live.wait_for_result())
                                     .await;
-                            Err(failure)
-                        }
-                        Err(PromptStartFailure::Other(failure)) => {
-                            backend
-                                .inner
-                                .finish(
-                                    operation,
-                                    live,
-                                    ProviderOperationCompletion::Failure(failure.clone()),
-                                )
-                                .await;
                             Err(failure)
                         }
                     }
@@ -206,7 +194,7 @@ impl ExternalProviderSupervisor {
         request: ProviderPromptContentsRequest,
         binding: &collaboration_protocol::ProviderBindingIdentity,
         runtime: &crate::ExternalProviderRuntime,
-    ) -> Result<crate::session_owner_door::OwnerDeliveryHandle, PromptStartFailure> {
+    ) -> Result<crate::session_owner_door::OwnerDeliveryHandle, ConversationOperationFailure> {
         use provider_session_machines::session_owner::SessionOwnerCommand;
         let target = request.target;
         let operation = request.operation_id;
@@ -234,8 +222,7 @@ impl ExternalProviderSupervisor {
                     &state_answer(&snapshot.lifecycle),
                     operation,
                     Some(target),
-                )
-                .into());
+                ));
             }
         };
         let id = Uuid::parse_str(operation.as_str()).map_err(|_| {
@@ -307,26 +294,16 @@ impl ExternalProviderSupervisor {
             .start_delivery(input, content, command)
             .await
             .map_err(|error| {
-                let owner_refused = matches!(
-                    &error,
-                    crate::session_owner_door::OwnerDoorError::Refused { .. }
-                );
                 let refusal = owner_failure(operation.clone(), target.clone(), error);
-                let refusal =
-                    if matches!(request.busy, PromptBusyPolicy::Send(MessageDelivery::Steer))
-                        && refusal.kind == ConversationOperationFailureKind::CannotSteer
-                    {
-                        explicit_steer_refusal(
-                            refusal,
-                            ConversationOperationFailureKind::UnsupportedCapability,
-                        )
-                    } else {
-                        refusal
-                    };
-                if owner_refused {
-                    PromptStartFailure::OwnerRefused(refusal)
+                if matches!(request.busy, PromptBusyPolicy::Send(MessageDelivery::Steer))
+                    && refusal.kind == ConversationOperationFailureKind::CannotSteer
+                {
+                    explicit_steer_refusal(
+                        refusal,
+                        ConversationOperationFailureKind::UnsupportedCapability,
+                    )
                 } else {
-                    refusal.into()
+                    refusal
                 }
             })
     }

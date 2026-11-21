@@ -3,6 +3,94 @@ use collaboration_protocol::ProviderOperationStage;
 use std::{task::Poll, time::Duration};
 
 #[tokio::test(flavor = "current_thread")]
+async fn unloaded_prompt_answers_at_l_with_its_terminal_store_held() {
+    use provider_session_machines::session_lifecycle_answers::state_answer;
+
+    let rig = RestoreRig::new();
+    rig.seed_session().await;
+    let host = rig.open_host("restored-in-auto").await;
+    let owner = host
+        .session_owner_for(&rig.target)
+        .expect("saved session owner");
+    let expected = state_answer(&owner.snapshots().borrow().lifecycle);
+    assert_eq!(expected, "session is not loaded; load it or resume it");
+    let operation = OperationId::generate();
+    let request = ProviderPromptContentsRequest::from_prompt_request(
+        rig.prompt_request(operation.clone(), "unloaded target"),
+    )
+    .expect("valid prompt");
+    let mut admitted = host
+        .inner
+        .store
+        .lock()
+        .await
+        .pause_next_admission_after_commit_for_test();
+    let mut submit = host.submit_owner_prompt(request);
+    tokio::select! {
+        () = admitted.reached() => {},
+        answer = &mut submit => panic!("prompt answered before its admission committed: {answer:?}"),
+    }
+
+    // Register this guard before the commit can hand back admission, so
+    // the immediate snapshot refusal will have no terminal write slot.
+    let store_claim = host.inner.store.lock();
+    tokio::pin!(store_claim);
+    assert!(futures_util::poll!(&mut store_claim).is_pending());
+    admitted.release();
+    let mut store = tokio::select! {
+        biased;
+        guard = &mut store_claim => guard,
+        answer = &mut submit => panic!("prompt answered before the terminal guard was held: {answer:?}"),
+    };
+    assert!(futures_util::poll!(&mut submit).is_pending());
+    rig.clock
+        .advance(Duration::from_secs(10))
+        .expect("reach the refusal deadline");
+
+    let Poll::Ready(Err(failure)) = futures_util::poll!(&mut submit) else {
+        panic!("the submitter must receive the unloaded-session refusal at L with the store held");
+    };
+    assert_eq!(failure.kind, ConversationOperationFailureKind::Unavailable);
+    assert_eq!(failure.stage, ConversationOperationFailureStage::Admission);
+    assert_eq!(failure.effect, ProviderOperationEffect::None);
+    assert_eq!(String::from(failure.message), expected);
+    let row = store
+        .inspect(&operation)
+        .await
+        .unwrap()
+        .expect("admitted row");
+    assert_eq!(row.stage, ProviderOperationStage::Admitted);
+    assert_eq!(row.effect, ProviderOperationEffect::None);
+    assert_eq!(
+        row.reconciliation_state,
+        ProviderReconciliationState::Unresolved
+    );
+    assert!(host.live_operation_ids().contains(&operation));
+    drop(store);
+
+    host.shutdown()
+        .await
+        .expect("drain the retained refusal writer");
+    let row = host
+        .inner
+        .store
+        .lock()
+        .await
+        .inspect(&operation)
+        .await
+        .unwrap()
+        .expect("terminal row");
+    assert_eq!(row.stage, ProviderOperationStage::Terminal);
+    assert_eq!(row.effect, ProviderOperationEffect::None);
+    assert_eq!(
+        row.reconciliation_state,
+        ProviderReconciliationState::Confirmed
+    );
+    assert!(!host.live_operation_ids().contains(&operation));
+    assert!(!rig.root.path().join("wire.json").exists());
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn owner_reply_unsaved_leaves_its_accepted_terminal_writer_in_custody() {
     let rig = RestoreRig::new();
     rig.seed_session().await;
