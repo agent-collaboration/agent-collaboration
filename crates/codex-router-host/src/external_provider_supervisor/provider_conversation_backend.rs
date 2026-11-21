@@ -628,17 +628,9 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                 let deadline = clock
                     .monotonic_now()
                     .after(Duration::from_secs(timeout_seconds.into()));
-                // Read the Pending fallback within the caller's budget too.
-                // A held store must never keep a live refusal from reaching the caller.
-                let mut pending = self.show(ConversationOperationShowRequest {
-                    operation_id: operation_id.clone(),
-                });
-                let mut pending_snapshot = None;
                 loop {
                     let changed = live.changed.notified();
-                    let result = live.result.lock().await.clone();
-                    if let Some(result) = result {
-                        drop(pending);
+                    if let Some(result) = live.result.lock().await.clone() {
                         let settlement = result?;
                         let operation =
                             snapshot_from_record(self.inspect_record(&operation_id).await?)
@@ -650,29 +642,20 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                             output: ConversationOperationWaitOutput::Available { settlement },
                         });
                     }
-                    tokio::select! {
-                        biased;
-                        () = changed => {}
-                        () = clock.sleep_until(deadline) => {
-                            if let Some(Err(failure)) = &*live.result.lock().await {
-                                return Err(failure.clone());
-                            }
-                            let Some(snapshot) = pending_snapshot else {
-                                return Err(super::operation_store_deadline_failed(
-                                    operation_id.clone(),
-                                    live.target(),
-                                    ConversationOperationFailureStage::Settlement,
-                                    ProviderOperationEffect::Unknown,
-                                ));
-                            };
-                            return Ok(ConversationOperationWaitResult {
-                                operation: snapshot?,
-                                output: ConversationOperationWaitOutput::Pending,
-                            });
-                        }
-                        snapshot = &mut pending, if pending_snapshot.is_none() => {
-                            pending_snapshot = Some(snapshot);
-                        }
+                    if router_clock::timeout_at(clock, deadline, changed)
+                        .await
+                        .is_err()
+                    {
+                        // Through show, so a queued prompt says so (D1 R12).
+                        let operation = self
+                            .show(ConversationOperationShowRequest {
+                                operation_id: operation_id.clone(),
+                            })
+                            .await?;
+                        return Ok(ConversationOperationWaitResult {
+                            operation,
+                            output: ConversationOperationWaitOutput::Pending,
+                        });
                     }
                 }
             }
