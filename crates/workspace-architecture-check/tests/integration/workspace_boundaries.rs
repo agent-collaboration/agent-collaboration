@@ -255,11 +255,18 @@ fn timer_job_reachability_rejects_forbidden_edges_through_an_allowed_leaf() {
     ]);
     assert!(check_boundaries(&allowed).is_ok());
 
+    // Pin the required destinations independently of the rule's denylist.
     for kind in [DependencyKind::Normal, DependencyKind::Build] {
-        for target in [FLEET_WAKES]
-            .into_iter()
-            .chain(TIMER_FORBIDDEN_SERVICES.iter().copied())
-        {
+        for target in [
+            "fleet-wakes",
+            "fleet-mail",
+            "collaboration-central-core",
+            "collaboration-central-tokio",
+            "collaboration-central-cloudflare",
+            "codex-router-host",
+            "codex-router-debug-hosts",
+            "codex-router-tailnet-verification-host",
+        ] {
             let indirect = graph(&[
                 (FLEET_SCHEDULES, "agent-automation", DependencyKind::Normal),
                 ("agent-automation", target, kind),
