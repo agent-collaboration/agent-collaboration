@@ -6,7 +6,7 @@ use codex_acp_adapter::{
     bounded_acp_output,
 };
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_protocol::MessageDelivery;
+use collaboration_protocol::{MessageDelivery, ProviderOperationStage};
 use collaboration_runtime::ProviderAcpSessionRoute;
 use router_clock::{ManualClock, RuntimeClock as _};
 use serde_json::{Value, json};
@@ -19,6 +19,7 @@ struct FailureRoute {
     session: BoardSessionRef,
     clock: Arc<ManualClock>,
     supervisor: Arc<ExternalProviderSupervisor>,
+    store: Arc<Mutex<ProviderOperationStore>>,
     frames: AcpOutputSender,
     replies: mpsc::Receiver<QueuedAcpFrame>,
     closed: CancellationToken,
@@ -113,7 +114,7 @@ impl FailureRoute {
             supervisor.clone(),
             delivery,
             hub.clone(),
-            store,
+            store.clone(),
             clock.clone(),
         ));
         let closed = CancellationToken::new();
@@ -143,6 +144,7 @@ impl FailureRoute {
             session,
             clock,
             supervisor,
+            store,
             frames,
             replies,
             closed,
@@ -241,6 +243,75 @@ impl FailureRoute {
             .expect("route shutdown");
         self.supervisor.shutdown().await.expect("fixture shutdown");
     }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn closing_acp_during_queue_ack_leaves_a_custodian_until_the_real_write() {
+    let mut fixture = FailureRoute::start(
+        Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        "plain-prompts",
+    )
+    .await;
+    fixture.load().await;
+    let loaded = fixture.reply(1).await;
+    assert!(loaded.get("result").is_some(), "{loaded}");
+    let host = fixture.supervisor.clone();
+    let target = protocol_session(&fixture.session).expect("provider session");
+    let acknowledgement = host
+        .runtime_for(&target.endpoint)
+        .expect("provider runtime")
+        .preparation_fixture
+        .pause_delivery_ack(false);
+    let before = host.live_operation_ids();
+    let mut commits = fixture.store.lock().await.subscribe_commits();
+
+    fixture.send_prompt(2, "_session/queue/add").await;
+    acknowledgement
+        .reached
+        .await
+        .expect("owner took the queue command");
+    let current = host.live_operation_ids();
+    let [operation] = current
+        .difference(&before)
+        .cloned()
+        .collect::<Vec<_>>()
+        .try_into()
+        .expect("exactly one new reserved operation");
+    fixture.closed.cancel();
+    fixture
+        .route
+        .await
+        .expect("route task")
+        .expect("ACP connection closed");
+    let _ = acknowledgement.release.send(());
+    let _ = acknowledgement.finished.await;
+
+    let row = loop {
+        if let Some(row) = fixture
+            .store
+            .lock()
+            .await
+            .inspect(&operation)
+            .await
+            .unwrap()
+            && row.stage == ProviderOperationStage::Terminal
+        {
+            break row;
+        }
+        commits
+            .changed()
+            .await
+            .expect("operation store remains live");
+    };
+    assert_eq!(row.effect, ProviderOperationEffect::Applied);
+    let tasks = host.tracked_operation_tasks_for_test();
+    tasks.close();
+    tasks.wait().await;
+    assert!(
+        !host.live_operation_ids().contains(&operation),
+        "ACP close stranded Host custody after the terminal write"
+    );
+    host.shutdown().await.expect("operation drain succeeds");
 }
 
 #[tokio::test]

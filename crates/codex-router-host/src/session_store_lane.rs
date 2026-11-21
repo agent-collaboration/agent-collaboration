@@ -20,6 +20,7 @@ use std::{
 };
 use tokio::sync::{Mutex as AsyncMutex, Notify, oneshot};
 use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 
 pub(crate) const STORE_WAIT: Duration = Duration::from_secs(10);
 
@@ -115,6 +116,13 @@ pub struct SessionStoreLane {
 }
 
 pub struct SessionStoreLaneTask {
+    termination: LaneTermination,
+    writer: SessionStoreLaneWriter,
+}
+
+struct LaneTermination(SessionStoreLane);
+
+struct SessionStoreLaneWriter {
     lane: SessionStoreLane,
     target: SessionRef,
     store: Arc<AsyncMutex<ProviderOperationStore>>,
@@ -233,9 +241,12 @@ impl SessionStoreLane {
             }),
         };
         let task = SessionStoreLaneTask {
-            lane: lane.clone(),
-            target,
-            store,
+            termination: LaneTermination(lane.clone()),
+            writer: SessionStoreLaneWriter {
+                lane: lane.clone(),
+                target,
+                store,
+            },
         };
         (lane, task)
     }
@@ -501,26 +512,44 @@ impl LaneState {
 }
 
 impl SessionStoreLaneTask {
+    #[cfg(test)]
     pub async fn run(self, shutdown: CancellationToken) {
+        self.run_tracked(shutdown, TaskTracker::new()).await;
+    }
+
+    pub(crate) async fn run_tracked(self, shutdown: CancellationToken, tasks: TaskTracker) {
+        let _termination = self.termination;
+        let writer = Arc::new(self.writer);
         let mut closing = false;
         loop {
             if !closing && shutdown.is_cancelled() {
-                self.lane.state().closed = true;
+                writer.lane.state().closed = true;
                 closing = true;
             }
-            if let Some(entry) = self.take_entry() {
-                self.execute(entry).await;
+            if let Some(entry) = writer.take_entry() {
+                // FIFO waits for the receipt. Stopping the runner cannot drop
+                // a write after its transaction has submitted COMMIT.
+                let writer = Arc::clone(&writer);
+                if let Err(error) = tasks
+                    .spawn(async move { writer.execute(entry).await })
+                    .await
+                {
+                    tracing::error!(%error, "session store lane write task stopped");
+                    return;
+                }
             } else if closing {
                 return;
             } else {
                 tokio::select! {
                     () = shutdown.cancelled() => {}
-                    () = self.lane.inner.ready.notified() => {}
+                    () = writer.lane.inner.ready.notified() => {}
                 }
             }
         }
     }
+}
 
+impl SessionStoreLaneWriter {
     fn take_entry(&self) -> Option<LaneEntry> {
         self.lane.state().queue.pop_front()
     }
@@ -719,11 +748,20 @@ impl SessionStoreLaneTask {
     }
 }
 
-impl Drop for SessionStoreLaneTask {
+impl Drop for LaneTermination {
     fn drop(&mut self) {
-        let mut state = self.lane.state();
-        state.closed = true;
-        state.queue.clear();
+        let queued = {
+            let mut state = self.0.state();
+            state.closed = true;
+            std::mem::take(&mut state.queue)
+        };
+        // These entries never reached the writer. Release their exact tickets
+        // outside the queue lock and let each reply channel close.
+        for entry in queued {
+            if let Some(custody) = entry.custody {
+                custody.settle(CustodyEnd::Released);
+            }
+        }
     }
 }
 

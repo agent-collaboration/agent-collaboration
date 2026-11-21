@@ -12,6 +12,7 @@ mod provider_operation_handoff;
 #[cfg(test)]
 #[path = "external_provider_supervisor/provider_operation_property_test.rs"]
 mod provider_operation_properties;
+mod provider_owner_delivery;
 mod provider_owner_operations;
 mod provider_owner_prompt;
 pub(crate) use provider_owner_prompt::{SessionQueuePlan, WarmRun};

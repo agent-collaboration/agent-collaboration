@@ -201,7 +201,8 @@ impl SessionOwnerDoor {
             self.tasks.spawn(publisher.run(self.shutdown.clone()));
         }
         if let Some(lane) = lane {
-            self.tasks.spawn(lane.run(self.shutdown.clone()));
+            self.tasks
+                .spawn(lane.run_tracked(self.shutdown.clone(), self.tasks.clone()));
         }
         let calls = Arc::new(SessionOwnerCalls::default());
         let registered_owner = registered.owner;

@@ -107,6 +107,116 @@ fn owner() -> OwnerIncarnation {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn lane_stop_releases_backlog_and_retains_a_submitted_commit() {
+    use crate::provider_operation_custody::OperationLifecycle;
+    use collaboration_protocol::{
+        ConversationBindingIdentity, ProviderOperationKind, ProviderOperationStage,
+    };
+    use provider_session_machines::operation_record_machine::OperationRecord;
+
+    let fixture = StoreFixture::new().await;
+    let target = fixture.record_session("lane-stop").await;
+    let first = OperationId::generate();
+    let queued = OperationId::generate();
+    let first_live = Arc::new(OperationLifecycle::new(
+        OperationRecord::Admitted { queued: false },
+        Arc::new(Notify::new()),
+    ));
+    let queued_live = Arc::new(OperationLifecycle::new(
+        OperationRecord::Admitted { queued: false },
+        Arc::new(Notify::new()),
+    ));
+    let binding = Arc::new(BindingUncertainty::default());
+    let lifecycles = BTreeMap::from([
+        (first.clone(), first_live.clone()),
+        (queued.clone(), queued_live.clone()),
+    ]);
+    binding.lane_custody.get_or_init(|| {
+        Arc::new(move |_, operation| lifecycles.get(operation)?.begin_lane_write(Arc::new(|| {})))
+    });
+    let mut store = fixture.store.lock().await;
+    for operation in [&first, &queued] {
+        store
+            .admit(ProviderOperationAdmission {
+                operation_id: operation.clone(),
+                operation_kind: ProviderOperationKind::ConversationPrompt,
+                binding: ConversationBindingIdentity::ExternalProvider {
+                    binding: fixture.binding.clone(),
+                },
+                admitted_at_ms: 0,
+            })
+            .await
+            .expect("write admission");
+    }
+    let mut commit = store.pause_next_admission_after_commit_for_test();
+    drop(store);
+
+    let owner = owner();
+    let (lane, runner) = SessionStoreLane::with_binding(
+        owner,
+        target,
+        fixture.store.clone(),
+        fixture.clock,
+        Arc::new(std::sync::OnceLock::from(binding)),
+    );
+    let terminal = |operation: OperationId| SessionStoreWrite::Terminal {
+        operation,
+        effect: ProviderOperationEffect::None,
+        reconciliation: ProviderReconciliationState::Confirmed,
+        stop_reason: None,
+        recovery: UnknownRecovery::Blocks,
+    };
+    let first_ticket = lane
+        .offer(owner, terminal(first))
+        .expect("accept active writer");
+    let queued_ticket = lane
+        .offer(owner, terminal(queued.clone()))
+        .expect("accept backlog");
+    assert!(!first_live.finish_host(CustodyEnd::NoWrite));
+    assert!(!queued_live.finish_host(CustodyEnd::NoWrite));
+    let task = tokio::spawn(runner.run(CancellationToken::new()));
+    commit.reached().await;
+    task.abort();
+    assert!(task.await.expect_err("stop the lane runner").is_cancelled());
+
+    assert!(
+        !queued_live.state().custody.holds_custody(),
+        "stopped lane stranded its queued ticket"
+    );
+    assert!(matches!(
+        queued_ticket.settlement().await,
+        Err(SessionStoreWaitError::Stopped)
+    ));
+    assert!(matches!(
+        lane.offer(owner, terminal(queued.clone())),
+        Err(SessionStoreOfferError::Stopped)
+    ));
+    assert!(
+        first_live.state().custody.holds_custody(),
+        "the committed write still has no receipt"
+    );
+    assert!(
+        fixture.store.try_lock().is_err(),
+        "the submitted writer still holds SQLite"
+    );
+    commit.release();
+    assert!(matches!(
+        first_ticket.settlement().await,
+        Ok(SessionStoreSettlement::Operation(_))
+    ));
+    assert!(!first_live.state().custody.holds_custody());
+    let untouched = fixture
+        .store
+        .lock()
+        .await
+        .inspect(&queued)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(untouched.stage, ProviderOperationStage::Admitted);
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn a_refused_first_queue_mark_cannot_settle_an_existing_operation() {
     use collaboration_protocol::{ConversationBindingIdentity, ProviderOperationKind};
 
