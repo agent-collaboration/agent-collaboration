@@ -1,0 +1,23 @@
+[package]
+name = "fleet-notices"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+autotests = false
+
+[lints]
+workspace = true
+
+[dependencies]
+central-engine-model.workspace = true
+central-storage.workspace = true
+fleet-contracts.workspace = true
+fleet-engine.workspace = true
+fleet-runtime.workspace = true
+fleet-runtime-ports.workspace = true
+fleet-workspace-access.workspace = true
+workspace-ids.workspace = true
+workspace-model.workspace = true
+chrono = { version = "0.4.45", default-features = false, features = ["alloc"] }
+serde_json.workspace = true

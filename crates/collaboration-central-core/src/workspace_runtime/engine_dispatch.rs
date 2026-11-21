@@ -3,7 +3,6 @@ use crate::WorkspaceRuntime;
 #[cfg(feature = "test-support")]
 use crate::engine::query_registry;
 use central_engine_model::{DueRow, EngineTime, InstanceKey, MachineKind, RetirementThreshold};
-use central_storage::{AlarmUpdate, StatementBatch};
 use fleet_contracts::{AlarmResult, EngineSubject, LegacyUnitOutcome, ObservedControl};
 use fleet_engine::{
     DueCutoff, Engine, TimedRowOutcome, TimedRows, TimedSource, WholeUnit, WholeUnitOutcome,
@@ -159,16 +158,15 @@ pub enum WholeKind {
 }
 impl WholeKind {
     pub(crate) fn description(self) -> WholeUnit {
-        let kind = match self {
-            Self::Windows => "legacy_notice_windows",
-            Self::Drains => "legacy_workspace_drains",
-        };
-        WholeUnit {
-            subject: EngineSubject {
-                kind: MachineKind(kind),
-                key: InstanceKey("all".into()),
+        match self {
+            Self::Windows => fleet_notices::window_unit(),
+            Self::Drains => WholeUnit {
+                subject: EngineSubject {
+                    kind: MachineKind("legacy_workspace_drains"),
+                    key: InstanceKey("all".into()),
+                },
+                threshold: RetirementThreshold::NOTICE_UNITS,
             },
-            threshold: RetirementThreshold::NOTICE_UNITS,
         }
     }
 }
@@ -209,14 +207,15 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
         observed: &ObservedControl,
         subject: &EngineSubject,
     ) -> Result<usize, LegacyUnitOutcome> {
-        let (mut statements, deliveries) = self.plan_due_windows(now).await?;
-        let count = deliveries.len();
-        match observed {
-            ObservedControl::Absent => {}
-            ObservedControl::Present(guard) => {
-                statements.push(fleet_engine::delete_observed_attempt(subject, guard))
-            }
-        }
+        let plan = fleet_notices::plan_due_windows_held(
+            &self.execution,
+            &crate::notice_mailbox::NoticeMailbox(&self.execution),
+            now,
+            subject,
+            observed,
+        )
+        .await?;
+        let count = plan.delivery_count();
         // The kept notice tests hold the commit that delivers windows at the
         // existing timer-commit points; an empty window unit passes them by.
         #[cfg(feature = "test-support")]
@@ -226,16 +225,7 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
                 .reached_central(fleet_runtime::PausePoint::BeforeTimerCommit)
                 .await;
         }
-        LegacyUnitOutcome::batch(
-            self.execution
-                .statement_host()
-                .run_batch(StatementBatch {
-                    statements,
-                    alarm: AlarmUpdate::Unchanged,
-                })
-                .await,
-        )?;
-        for delivery in deliveries {
+        for delivery in plan.apply_held().await? {
             (self.mail_delivery_ready)(delivery);
         }
         #[cfg(feature = "test-support")]

@@ -51,10 +51,9 @@ mod central_statement_values;
 mod central_timer_plans;
 mod central_timers;
 mod mail_delivery_authority;
-mod notification_windows;
+mod notice_mailbox;
 mod workspace_drain;
-mod workspace_notice_plans;
-pub use workspace_notice_plans::DrainResult;
+pub use workspace_drain::DrainResult;
 mod central_organization_identity;
 pub use central_organization_identity::{
     CentralOrganizationIdentity, prepare_central_alarm, read_central_organization,

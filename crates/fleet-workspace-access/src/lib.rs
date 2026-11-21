@@ -7,7 +7,7 @@ pub mod workspace_change_records;
 mod workspace_json_records;
 pub mod workspace_row_codec;
 
-pub use workspace_actor_identity::{ActorIdentityPlan, plan_notice_cadence};
+pub use workspace_actor_identity::{ActorIdentityPlan, plan_notice_cadence, read_notice_cadence};
 
 use fleet_runtime::FleetRuntime;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
