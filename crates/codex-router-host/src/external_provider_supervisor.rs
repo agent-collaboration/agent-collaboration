@@ -85,6 +85,7 @@ struct SupervisorInner {
     clock: Arc<dyn router_clock::RuntimeClock>,
     live_operations: StdMutex<LiveOperations>,
     operation_tasks: TaskTracker,
+    late_dispatch_cleanup_cancel: tokio_util::sync::CancellationToken,
     /// Each binding's unknown outcomes: the one place admission asks
     /// whether an earlier send's outcome is unknown (design note §14.1).
     uncertainty: UncertaintyCells,
@@ -400,6 +401,7 @@ impl ExternalProviderSupervisor {
                 clock,
                 live_operations: StdMutex::new(LiveOperations::default()),
                 operation_tasks: TaskTracker::new(),
+                late_dispatch_cleanup_cancel: tokio_util::sync::CancellationToken::new(),
                 uncertainty,
                 completions: tokio::sync::watch::channel(0).0,
                 queued_operations,
@@ -549,6 +551,8 @@ impl ExternalProviderSupervisor {
     }
 
     pub async fn shutdown(&self) -> Result<(), &'static str> {
+        let _cancel_late_dispatch_cleanup =
+            self.inner.late_dispatch_cleanup_cancel.clone().drop_guard();
         for binding in self.inner.bindings.values() {
             binding.runtime.retirement().cancel();
         }
@@ -564,6 +568,11 @@ impl ExternalProviderSupervisor {
                 return Err("external provider runtime owner failed to join");
             }
         }
+        let drain_deadline = self
+            .inner
+            .clock
+            .monotonic_now()
+            .after(OPERATION_DRAIN_BUDGET);
         let operations = self
             .inner
             .live_operations
@@ -573,26 +582,22 @@ impl ExternalProviderSupervisor {
             .values()
             .cloned()
             .collect::<Vec<_>>();
-        for operation in operations {
-            router_clock::timeout(self.inner.clock.as_ref(), OPERATION_DRAIN_BUDGET, async {
+        self.inner.operation_tasks.close();
+        router_clock::timeout_at(self.inner.clock.as_ref(), drain_deadline, async {
+            for operation in operations {
                 loop {
                     let changed = operation.changed.notified();
-                    if operation.result.lock().await.is_some() {
+                    if matches!(operation.record(), provider_session_machines::operation_record_machine::OperationRecord::Dropped)
+                        || operation.result.lock().await.is_some()
+                    {
                         break;
                     }
                     changed.await;
                 }
-            })
-            .await
-            .map_err(|_| "external provider operation drain timed out")?;
-        }
-        // A published result can wake a caller before its task drops the store.
-        self.inner.operation_tasks.close();
-        router_clock::timeout(
-            self.inner.clock.as_ref(),
-            OPERATION_DRAIN_BUDGET,
-            self.inner.operation_tasks.wait(),
-        )
+            }
+            // Publication can wake a caller before its task drops the store.
+            self.inner.operation_tasks.wait().await;
+        })
         .await
         .map_err(|_| "external provider operation drain timed out")
     }

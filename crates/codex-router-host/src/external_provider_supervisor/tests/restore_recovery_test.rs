@@ -3,6 +3,9 @@
 #[path = "restore_recovery/admission_budget_test.rs"]
 mod admission_budget_tests;
 
+#[path = "restore_recovery/shutdown_drain_test.rs"]
+mod shutdown_drain_tests;
+
 #[path = "restore_recovery/recovered_admission_test.rs"]
 mod recovered_admission_tests;
 

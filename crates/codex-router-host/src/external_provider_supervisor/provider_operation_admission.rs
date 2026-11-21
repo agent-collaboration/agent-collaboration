@@ -144,7 +144,12 @@ impl ExternalProviderSupervisor {
         let clock = self.inner.clock.as_ref();
         let mark = self.mark_operation_for_handoff(&operation_id, &live, deadline);
         tokio::pin!(mark);
-        let completion = match router_clock::timeout_at(clock, deadline, &mut mark).await {
+        let receipt = tokio::select! {
+            biased;
+            () = self.inner.late_dispatch_cleanup_cancel.cancelled() => Err(router_clock::WaitElapsed),
+            receipt = router_clock::timeout_at(clock, deadline, &mut mark) => receipt,
+        };
+        let completion = match receipt {
             Ok(Ok(store)) if clock.monotonic_now() < deadline => {
                 drop(store);
                 live.dispatch_marked();
@@ -164,13 +169,20 @@ impl ExternalProviderSupervisor {
                     .await;
                 // Keep custody of the SQL future, even though the caller's
                 // authorization expired. A committed mark must be settled.
-                if let Ok(mut store) = match late {
-                    Ok(receipt) => receipt,
-                    Err(_) => mark.await,
-                } {
-                    self.inner
-                        .settle_late_dispatch_mark(&mut store, &operation_id, &failure)
-                        .await;
+                let settle_late_mark = async {
+                    if let Ok(mut store) = match late {
+                        Ok(receipt) => receipt,
+                        Err(_) => mark.await,
+                    } {
+                        self.inner
+                            .settle_late_dispatch_mark(&mut store, &operation_id, &failure)
+                            .await;
+                    }
+                };
+                tokio::select! {
+                    biased;
+                    () = self.inner.late_dispatch_cleanup_cancel.cancelled() => {}
+                    () = settle_late_mark => {}
                 }
                 return;
             }
