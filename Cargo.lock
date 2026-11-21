@@ -1408,6 +1408,7 @@ dependencies = [
  "collaboration-central-core",
  "fleet-contracts",
  "fleet-identity-protocol",
+ "fleet-mail",
  "fleet-runtime",
  "fleet-runtime-ports",
  "fleet-storage-schema",
@@ -1471,6 +1472,7 @@ dependencies = [
  "fleet-contracts",
  "fleet-engine",
  "fleet-identity-protocol",
+ "fleet-mail",
  "fleet-runtime",
  "fleet-runtime-ports",
  "fleet-schedules",
@@ -1516,6 +1518,7 @@ dependencies = [
  "collaboration-central-tokio",
  "fleet-contracts",
  "fleet-identity-protocol",
+ "fleet-mail",
  "fleet-runtime",
  "fleet-runtime-ports",
  "fleet-storage-schema",
@@ -2432,6 +2435,25 @@ dependencies = [
  "schemars 1.2.2",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "fleet-mail"
+version = "0.1.156"
+dependencies = [
+ "central-engine-model",
+ "central-engine-test-support",
+ "central-storage",
+ "chrono",
+ "fleet-contracts",
+ "fleet-engine",
+ "fleet-runtime-ports",
+ "fleet-workspace-access",
+ "hegeltest",
+ "serde",
+ "serde_json",
+ "workspace-ids",
+ "workspace-model",
 ]
 
 [[package]]

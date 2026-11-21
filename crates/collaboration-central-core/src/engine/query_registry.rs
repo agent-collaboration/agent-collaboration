@@ -1,34 +1,10 @@
 //! The closed registry owns SQL literals. Time and caps are bound values; no
 //! statement is generated or leaked to acquire a static lifetime.
 
-use fleet_engine::{controlled_legacy, controlled_machine, machine_rows};
+use fleet_engine::controlled_legacy;
+#[cfg(feature = "test-support")]
+use fleet_engine::{controlled_machine, machine_rows};
 
-macro_rules! direct_message_rows {
-    () => {
-        machine_rows!(
-            "mail_messages",
-            "message_id",
-            "s.cancel_due_at",
-            "direct_message",
-            "'queued'",
-            "'delivered','cancelled','failed'",
-            "s.state='queued' AND s.cancel_due_at IS NOT NULL"
-        )
-    };
-}
-macro_rules! system_message_expiry_rows {
-    () => {
-        machine_rows!(
-            "mail_messages",
-            "message_id",
-            "s.delivery_window_ends_at",
-            "system_message_expiry",
-            "'queued'",
-            "'delivered','cancelled','failed'",
-            "s.state='queued' AND s.message_kind IN ('notice','deliveryOutcome') AND s.delivery_window_ends_at IS NOT NULL"
-        )
-    };
-}
 macro_rules! grid_inputs {
     () => {
         concat!(
@@ -39,9 +15,9 @@ macro_rules! grid_inputs {
             fleet_schedules::schedule_alarm_input!(),
             ",9223372036855)",
             ",COALESCE(",
-            controlled_machine!("direct_message", direct_message_rows!()),
+            fleet_mail::direct_message_alarm_input!(),
             ",9223372036855),COALESCE(",
-            controlled_machine!("system_message_expiry", system_message_expiry_rows!()),
+            fleet_mail::system_message_expiry_alarm_input!(),
             ",9223372036855)"
         )
     };
@@ -95,19 +71,6 @@ macro_rules! all_grid_inputs {
         grid_inputs!()
     };
 }
-/// Direct messages still queued at their cancel mark (design 2026-11-17).
-pub(crate) const DIRECT_MESSAGE_LIST: &str = concat!(
-    "SELECT subject_key,occurrence_ms,effective_due_ms FROM (",
-    direct_message_rows!(),
-    ") WHERE effective_due_ms<=?1 ORDER BY effective_due_ms,subject_key LIMIT ?2"
-);
-
-pub(crate) const SYSTEM_MESSAGE_EXPIRY_LIST: &str = concat!(
-    "SELECT subject_key,occurrence_ms,effective_due_ms FROM (",
-    system_message_expiry_rows!(),
-    ") WHERE effective_due_ms<=?1 ORDER BY effective_due_ms,subject_key LIMIT ?2"
-);
-
 pub(crate) const ALARM_INPUTS: &str = concat!(
     "SELECT CASE WHEN (SELECT COUNT(*) FROM signin_organization_identity)=1 THEN NULLIF(min(",
     all_grid_inputs!(),

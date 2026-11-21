@@ -1,13 +1,14 @@
-//! The direct message reducer's row codec over `messages`. The version is the
-//! message's own columns; the sender's session is read from actor_identities,
-//! which owns the actor-to-session mapping, and is not part of the version.
+//! Load direct message reducer state from `mail_messages`, guard settlement
+//! against that row's version, and plan sender outcome inserts. The adapter
+//! reads the sender's session from `access_actor_identities` separately.
 use super::direct_message::{self as direct, DirectMessage, DirectMessageSubject};
 use crate::{
-    central_mail_rows::{insert_message, timestamp},
     direct_message_rows::{
         DIRECT_MESSAGE_COLUMNS, DirectMessageStatus, decode_direct_message, decode_sender_session,
         failure_text,
     },
+    message_insert::insert_message,
+    message_values::timestamp,
 };
 use central_engine_model::{InstanceKey, StateTag};
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
@@ -21,9 +22,15 @@ use fleet_runtime_ports::{
     workspace_decode_error::corrupt,
 };
 
-pub(crate) struct DirectMessageStore<'a, R: EngineHost>(pub &'a R);
+pub struct DirectMessageStore<'a, R: EngineHost>(&'a R);
 
-pub(crate) const DIRECT_MESSAGE_FAILURE: &str = guarded_attempt_sql!(
+impl<'a, R: EngineHost> DirectMessageStore<'a, R> {
+    pub fn new(runtime: &'a R) -> Self {
+        Self(runtime)
+    }
+}
+
+const DIRECT_MESSAGE_FAILURE: &str = guarded_attempt_sql!(
     "EXISTS(SELECT 1 FROM mail_messages WHERE message_id IS ?20 AND sender IS ?21 AND message_kind IS ?22 AND state IS ?23 AND failure_reason IS ?24 AND cancel_due_at IS ?25 AND sender_request_id IS ?26 AND created_at IS ?27 AND updated_at IS ?28 AND state NOT IN ('delivered','failed'))"
 );
 

@@ -24,6 +24,7 @@ pub(super) const FLEET_PURE_CRATES: [(&str, &[&str]); 2] = [
 ];
 const FLEET_ACCESS: &str = "fleet-workspace-access";
 const FLEET_ENGINE: &str = "fleet-engine";
+const FLEET_MAIL: &str = "fleet-mail";
 const FLEET_WAKES: &str = "fleet-wakes";
 const FLEET_SCHEDULES: &str = "fleet-schedules";
 const FLEET_TIMER_POLICY: &str = "fleet-timer-policy";
@@ -57,6 +58,19 @@ pub(super) const TIMER_CRATES: [(&str, &[&str]); 3] = [
     ),
     (FLEET_TIMER_POLICY, &["central-engine-model"]),
 ];
+pub(super) const MAIL_LAYER: (&str, &[&str]) = (
+    FLEET_MAIL,
+    &[
+        "central-engine-model",
+        "central-storage",
+        "fleet-contracts",
+        "fleet-engine",
+        "fleet-runtime-ports",
+        "fleet-workspace-access",
+        "workspace-ids",
+        "workspace-model",
+    ],
+);
 pub(super) const ENGINE_EDGES: &[&str] = &[
     "central-engine-model",
     "central-storage",
@@ -189,8 +203,19 @@ pub(super) fn check_boundaries(
     for (name, allowed) in TIMER_CRATES {
         check_closed_workspace_edges(graph, name, allowed)?;
     }
-    check_timer_job_reachability(graph, FLEET_WAKES, FLEET_SCHEDULES)?;
-    check_timer_job_reachability(graph, FLEET_SCHEDULES, FLEET_WAKES)?;
+    check_closed_workspace_edges(graph, MAIL_LAYER.0, MAIL_LAYER.1)?;
+    check_job_reachability(graph, FLEET_WAKES, &[FLEET_SCHEDULES, FLEET_MAIL])?;
+    check_job_reachability(graph, FLEET_SCHEDULES, &[FLEET_WAKES, FLEET_MAIL])?;
+    check_job_reachability(
+        graph,
+        FLEET_MAIL,
+        &[
+            FLEET_WAKES,
+            FLEET_SCHEDULES,
+            FLEET_TIMER_POLICY,
+            "fleet-notices",
+        ],
+    )?;
     for name in PROXY_CRATES {
         let Some(source) = graph.workspace_id(name) else {
             continue;
@@ -210,8 +235,8 @@ pub(super) fn check_boundaries(
     Ok(())
 }
 
-const TIMER_FORBIDDEN_SERVICES: &[&str] = &[
-    "fleet-mail",
+const JOB_FORBIDDEN_SERVICES: &[&str] = &[
+    "fleet-application",
     "collaboration-central-core",
     "collaboration-central-tokio",
     "collaboration-central-cloudflare",
@@ -220,10 +245,10 @@ const TIMER_FORBIDDEN_SERVICES: &[&str] = &[
     "codex-router-tailnet-verification-host",
 ];
 
-fn check_timer_job_reachability(
+fn check_job_reachability(
     graph: &NonDevDependencyGraph,
     job: &str,
-    sibling: &str,
+    siblings: &[&str],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let Some(source) = graph.workspace_id(job) else {
         return Ok(());
@@ -236,7 +261,8 @@ fn check_timer_job_reachability(
             .names
             .get(destination)
             .ok_or("dependency name absent")?;
-        if target == sibling || TIMER_FORBIDDEN_SERVICES.contains(&target.as_str()) {
+        if siblings.contains(&target.as_str()) || JOB_FORBIDDEN_SERVICES.contains(&target.as_str())
+        {
             return Err(format!("BD1: forbidden reachable dependency {job} -> {target}").into());
         }
     }
@@ -281,6 +307,92 @@ fn timer_job_reachability_rejects_forbidden_edges_through_an_allowed_leaf() {
     }
 }
 
+#[test]
+fn mail_rejects_sibling_and_host_dependencies_even_through_an_allowed_crate() {
+    for kind in [DependencyKind::Normal, DependencyKind::Build] {
+        let pure = graph(&[
+            ("fleet-mail", "workspace-model", DependencyKind::Normal),
+            ("workspace-model", "collaboration-mail-protocol", kind),
+        ]);
+        assert!(check_boundaries(&pure).is_ok());
+
+        for target in [
+            "fleet-wakes",
+            "fleet-schedules",
+            "fleet-notices",
+            "fleet-application",
+            "collaboration-central-core",
+            "collaboration-central-tokio",
+            "collaboration-central-cloudflare",
+            "codex-router-host",
+            "codex-router-debug-hosts",
+            "codex-router-tailnet-verification-host",
+        ] {
+            let direct = graph(&[("fleet-mail", target, kind)]);
+            let failure =
+                check_boundaries(&direct).expect_err("Mail has a closed direct allowlist");
+            assert_eq!(
+                failure.to_string(),
+                format!("BD1: forbidden {kind:?} dependency fleet-mail -> {target}")
+            );
+
+            let indirect = graph(&[
+                (
+                    "fleet-mail",
+                    "fleet-workspace-access",
+                    DependencyKind::Normal,
+                ),
+                ("fleet-workspace-access", target, kind),
+            ]);
+            let failure = check_boundaries(&indirect)
+                .expect_err("Mail cannot reach a job or host indirectly");
+            assert_eq!(
+                failure.to_string(),
+                format!("BD1: forbidden reachable dependency fleet-mail -> {target}")
+            );
+        }
+    }
+}
+
+#[test]
+fn mail_rejects_timer_policy_through_workspace_model_and_automation() {
+    let outcomes = [DependencyKind::Normal, DependencyKind::Build].map(|kind| {
+        let indirect = graph(&[
+            ("fleet-mail", "workspace-model", DependencyKind::Normal),
+            (
+                "workspace-model",
+                "agent-automation",
+                DependencyKind::Normal,
+            ),
+            ("agent-automation", "fleet-timer-policy", kind),
+        ]);
+        check_boundaries(&indirect).map_err(|failure| failure.to_string())
+    });
+    let forbidden = "BD1: forbidden reachable dependency fleet-mail -> fleet-timer-policy";
+    assert_eq!(
+        outcomes,
+        [Err(forbidden.to_owned()), Err(forbidden.to_owned())]
+    );
+}
+
+#[test]
+fn each_timer_rejects_a_path_through_an_allowed_crate_into_mail() {
+    for timer in ["fleet-wakes", "fleet-schedules"] {
+        for kind in [DependencyKind::Normal, DependencyKind::Build] {
+            let indirect = graph(&[
+                (timer, "fleet-engine", DependencyKind::Normal),
+                ("fleet-engine", "fleet-runtime", DependencyKind::Normal),
+                ("fleet-runtime", "fleet-mail", kind),
+            ]);
+            let failure = check_boundaries(&indirect).expect_err("a timer must not reach Mail");
+            assert_eq!(
+                failure.to_string(),
+                format!("BD1: forbidden reachable dependency {timer} -> fleet-mail")
+            );
+        }
+    }
+}
+
 fn check_closed_workspace_edges(
     graph: &NonDevDependencyGraph,
     package: &str,
@@ -319,6 +431,7 @@ fn engine_rejects_core_job_and_host_edges() {
         for target in [
             "collaboration-central-core",
             "fleet-wakes",
+            "fleet-mail",
             "collaboration-central-cloudflare",
         ] {
             let error = check_closed_workspace_edges(
@@ -407,7 +520,7 @@ pub(super) fn check_pure_dependency_tree(root: &Path) -> Result<(), Box<dyn std:
         .into_iter()
         .chain(FLEET_PURE_CRATES)
         .map(|(package, _)| package)
-        .chain([FLEET_ACCESS, FLEET_ENGINE])
+        .chain([FLEET_ACCESS, FLEET_ENGINE, FLEET_MAIL])
         .chain(TIMER_CRATES.into_iter().map(|(package, _)| package))
     {
         check_package_targets(root, package)?;
@@ -419,7 +532,12 @@ fn check_package_targets(root: &Path, package: &str) -> Result<(), Box<dyn std::
     check_package_tree(root, package, None)?;
     if matches!(
         package,
-        FLEET_ACCESS | FLEET_ENGINE | FLEET_WAKES | FLEET_SCHEDULES | FLEET_TIMER_POLICY
+        FLEET_ACCESS
+            | FLEET_ENGINE
+            | FLEET_MAIL
+            | FLEET_WAKES
+            | FLEET_SCHEDULES
+            | FLEET_TIMER_POLICY
     ) || FLEET_PURE_CRATES.iter().any(|(name, _)| *name == package)
     {
         check_package_tree(root, package, Some(FLEET_WASM_TARGET)).map_err(|error| {
@@ -459,7 +577,10 @@ fn check_package_tree(
         )
         .into());
     }
-    let allowed_support = if matches!(package, FLEET_ENGINE | FLEET_WAKES | FLEET_SCHEDULES) {
+    let allowed_support = if matches!(
+        package,
+        FLEET_ENGINE | FLEET_MAIL | FLEET_WAKES | FLEET_SCHEDULES
+    ) {
         FLEET_ENGINE_FUTURES
     } else if target == Some(FLEET_WASM_TARGET) {
         FLEET_WASM_SUPPORT_PACKAGES
@@ -483,7 +604,7 @@ fn check_tree_output(
         }
         if matches!(
             package,
-            FLEET_ACCESS | FLEET_ENGINE | FLEET_WAKES | FLEET_SCHEDULES
+            FLEET_ACCESS | FLEET_ENGINE | FLEET_MAIL | FLEET_WAKES | FLEET_SCHEDULES
         ) && name == "tokio"
         {
             let features = features.strip_suffix(" (*)").unwrap_or(features).trim();

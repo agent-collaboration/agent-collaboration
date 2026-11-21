@@ -2,7 +2,7 @@
 //! over the probe tables (P10). Rows carry machine_kind='owed_reply'; the
 //! production table and link wiring belong to deliverable 4.
 use super::machines::owed_reply::{Effect, Finish, OwedReply, State};
-use crate::central_mail_rows::timestamp;
+use crate::central_statement_values::timestamp;
 use central_engine_model::{EngineTime, InstanceKey};
 use central_storage::{GuardedStatement, ReadOutcome, SqlValue, Statement, StoreFailure};
 use fleet_engine::{

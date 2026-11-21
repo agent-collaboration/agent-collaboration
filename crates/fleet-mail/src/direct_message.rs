@@ -13,21 +13,21 @@ use workspace_ids::SessionRef;
 use workspace_ids::{MessageId, RequestId};
 use workspace_model::central_mail as mail;
 
-pub(crate) struct DirectMessage;
+pub struct DirectMessage;
 
 /// What the reducer needs to cancel a message and tell its sender.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct DirectMessageSubject {
-    pub id: MessageId,
+pub struct DirectMessageSubject {
+    pub(crate) id: MessageId,
     /// None when the sender is a person: there is no session to tell, and the
     /// sender's Router reads the state instead.
-    pub sender_session: Option<SessionRef>,
-    pub sender_request_id: RequestId,
-    pub cancel_due_at: EngineTime,
+    pub(crate) sender_session: Option<SessionRef>,
+    pub(crate) sender_request_id: RequestId,
+    pub(crate) cancel_due_at: EngineTime,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum State {
+pub enum State {
     Queued(DirectMessageSubject),
     /// Not final: an Ack that was stuck can still arrive and deliver it.
     Cancelled(DirectMessageSubject),
@@ -53,7 +53,7 @@ impl StateTag for State {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum Event {
+pub enum Event {
     /// The due batch reached the cancel mark.
     Due { occurrence: EngineTime },
     /// The recipient's Router answered a delivery.
@@ -71,13 +71,13 @@ impl EventTag for Event {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) enum Effect {
+pub enum Effect {
     /// A DeliveryOutcome message from central to the sender's session.
     TellSender(mail::MessageRecord),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-pub(crate) enum DirectMessageRefusal {
+pub enum DirectMessageRefusal {
     /// A repeated Ack, or a refusal of a message already cancelled: nothing
     /// changes and the Ack needs no further work.
     AlreadySettled,

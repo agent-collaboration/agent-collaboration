@@ -1,36 +1,13 @@
-//! Central-owned statement construction and validated mail rows.
+//! Central recipient lookup for admitted Send/Set and notice requests.
 use crate::WorkspaceRuntime;
-pub(crate) use crate::central_mail_rows::{applied, encode, insert_message, timestamp};
-use central_storage::{AlarmUpdate, Statement, StoreFailure};
-use fleet_runtime_ports::guarded_statements::text;
-use fleet_runtime_ports::workspace_decode_error::corrupt;
-use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use central_storage::{Statement, StoreFailure};
+use fleet_runtime_ports::{
+    CentralStore, WorkspaceStores, guarded_statements::text, workspace_decode_error::corrupt,
+};
 use workspace_ids::SessionRef;
-use workspace_model::central_mail as mail;
-use workspace_model::{ActorIdentityId, Timestamp};
-pub(crate) fn alarm_update() -> AlarmUpdate {
-    crate::engine::query_registry::alarm_update()
-}
+use workspace_model::ActorIdentityId;
+
 impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
-    pub(crate) fn prepare_message_record(
-        &self,
-        sender: mail::MessageSender,
-        target: SessionRef,
-        body: mail::MessageBody,
-        source: Option<mail::NoticeSource>,
-        now: Timestamp,
-    ) -> Result<mail::MessageRecord, StoreFailure> {
-        Ok(mail::MessageRecord {
-            message_id: self.execution.mint()?,
-            sender,
-            target,
-            body,
-            state: mail::MessageState::Queued,
-            source,
-            created_at: now,
-            updated_at: now,
-        })
-    }
     pub(crate) async fn known_session(&self, target: &SessionRef) -> Result<bool, StoreFailure> {
         let identity =
             serde_json_canonicalizer::to_string(&workspace_model::Identity::AgentSession {

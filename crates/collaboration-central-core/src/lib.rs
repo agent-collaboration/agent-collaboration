@@ -2,7 +2,6 @@
 #![forbid(unsafe_code)]
 
 mod engine;
-pub mod message_deadline;
 /// Test support: the engine's alarm-input aggregate, one row of
 /// `(on_grid_due, legacy_due)` in UTC milliseconds or NULL.
 #[cfg(feature = "test-support")]
@@ -46,26 +45,16 @@ mod workspace_request_status;
 mod workspace_rule_dispatch;
 mod workspace_rule_inputs;
 
-mod central_mail_ack;
-pub use central_mail_ack::{MailAckIgnored, MailAckSettlement};
-mod central_mail_delivery_read;
-pub use central_mail_delivery_read::{
-    ResolvedMailDelivery, WELCOME_PAGE_SIZE, WelcomeDeliveryCursor, WelcomeDeliveryPage,
-    WindowedDelivery, WindowedDeliveryDecision,
-};
 mod central_mail_requests;
-mod central_mail_rows;
-mod central_mail_sender;
-mod central_mail_status;
-mod central_mail_store;
+mod central_request_targets;
+mod central_statement_values;
 mod central_timer_plans;
 mod central_timers;
-mod direct_message_rows;
+mod mail_delivery_authority;
 mod notification_windows;
 mod workspace_drain;
 mod workspace_notice_plans;
 pub use workspace_notice_plans::DrainResult;
-mod central_mail_records;
 mod central_organization_identity;
 pub use central_organization_identity::{
     CentralOrganizationIdentity, prepare_central_alarm, read_central_organization,

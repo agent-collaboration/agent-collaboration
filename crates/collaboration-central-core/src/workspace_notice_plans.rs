@@ -28,13 +28,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         rows: &WorkspaceRows,
         now: m::Timestamp,
     ) -> Result<(Vec<GuardedStatement>, DrainResult), StoreFailure> {
-        crate::central_mail_records::decode_messages(
-            &self
-                .execution
-                .statement_host()
-                .read(crate::central_mail_records::notice_messages())
-                .await?,
-        )?;
+        fleet_mail::validate_queued_notices_held(self.execution.statement_host()).await?;
         let mut windows = self.notification_windows().await?;
         let mut statements = Vec::new();
         let mut result = DrainResult {
@@ -54,8 +48,14 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 if member.is_some() || matches!(event, m::ChangeEvent::Resolved) {
                     statements.push(any("DELETE FROM mail_notification_window_items WHERE workspace_id=? AND thread_id=? AND (? IS NULL OR window_id IN (SELECT window_id FROM mail_notification_windows WHERE recipient_actor=?))",vec![text(workspace),text(thread),member.map_or(central_storage::SqlValue::Null,text),member.map_or(central_storage::SqlValue::Null,text)]));
                     statements.extend(
-                        self.cancel_queued_notices(workspace, thread, member, now)
-                            .await?,
+                        fleet_mail::plan_cancel_queued_notices_held(
+                            self.execution.statement_host(),
+                            workspace,
+                            thread,
+                            member,
+                            now,
+                        )
+                        .await?,
                     );
                     continue;
                 }

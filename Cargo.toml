@@ -11,6 +11,7 @@ members = [
     "crates/fleet-runtime-ports",
     "crates/fleet-runtime",
     "crates/fleet-engine",
+    "crates/fleet-mail",
     "crates/fleet-wakes",
     "crates/fleet-schedules",
     "crates/fleet-timer-policy",
@@ -87,6 +88,7 @@ fleet-runtime-ports = { path = "crates/fleet-runtime-ports", version = "0.1.156"
 fleet-contracts = { path = "crates/fleet-contracts", version = "0.1.156" }
 fleet-runtime = { path = "crates/fleet-runtime", version = "0.1.156" }
 fleet-engine = { path = "crates/fleet-engine", version = "0.1.156" }
+fleet-mail = { path = "crates/fleet-mail", version = "0.1.156" }
 fleet-wakes = { path = "crates/fleet-wakes", version = "0.1.156" }
 fleet-schedules = { path = "crates/fleet-schedules", version = "0.1.156" }
 fleet-timer-policy = { path = "crates/fleet-timer-policy", version = "0.1.156" }

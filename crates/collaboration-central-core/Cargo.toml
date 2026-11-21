@@ -20,6 +20,7 @@ central-link-protocol.workspace = true
 central-engine-model.workspace = true
 fleet-contracts.workspace = true
 fleet-engine.workspace = true
+fleet-mail.workspace = true
 fleet-wakes.workspace = true
 fleet-schedules.workspace = true
 fleet-timer-policy.workspace = true
