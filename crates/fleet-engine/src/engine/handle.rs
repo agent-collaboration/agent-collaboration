@@ -1,7 +1,6 @@
 use super::port::{Engine, EngineHost};
 use super::{
     effects::{ApplyFailure, EffectHandler, ObjectHostEffects},
-    failures::FailureOutcome,
     source::{EventSource, SourcePolicy},
     store_adapter::{LoadFailure, StoreAdapter, Versioned},
 };
@@ -9,33 +8,16 @@ use central_engine_model::{
     Context, InstanceKey, ItemFailureClass, Machine, RefusalTag, TransitionError,
 };
 use central_storage::StoreFailure;
+use fleet_contracts::FailureOutcome;
 
-pub(crate) enum HandleOutcome<State, Error> {
+pub enum HandleOutcome<State, Error> {
     Done(State),
     Refused(TransitionError<Error>),
     NotFound,
-    Failed(
-        #[cfg_attr(
-            not(feature = "test-support"),
-            expect(
-                dead_code,
-                reason = "only the test machine's requests use the engine request entry in deliverable 1 (P7); wakes move onto it in deliverable 2"
-            )
-        )]
-        ItemFailureClass,
-    ),
+    Failed(ItemFailureClass),
     /// A request whose subject or batch is broken gets a typed answer; only due
     /// units charge an attempt record (P2, R3).
-    RequestFailed(
-        #[cfg_attr(
-            not(feature = "test-support"),
-            expect(
-                dead_code,
-                reason = "only the test machine's requests use the engine request entry in deliverable 1 (P7); wakes move onto it in deliverable 2"
-            )
-        )]
-        ItemFailureClass,
-    ),
+    RequestFailed(ItemFailureClass),
     Superseded,
     Uncertain,
     StoreDown(StoreFailure),
@@ -57,7 +39,33 @@ impl central_engine_model::IdSource for ReducerIds<'_> {
     }
 }
 
+struct AckSource;
+impl<M: Machine> EventSource<M> for AckSource {
+    fn policy(&self) -> SourcePolicy {
+        SourcePolicy::Request
+    }
+}
+
 impl<R: EngineHost> Engine<'_, R> {
+    /// Acknowledgements use request policy and carry no receipt statements.
+    pub async fn handle_ack<M, A>(
+        &self,
+        adapter: &A,
+        key: InstanceKey,
+        event: M::Event,
+    ) -> HandleOutcome<M::State, M::Error>
+    where
+        M: Machine,
+        M::State: Send + Sync,
+        M::Event: Send + Sync,
+        M::Effect: Send + Sync,
+        M::Error: Send + Sync,
+        A: StoreAdapter<M>,
+    {
+        self.handle::<M, A, _>(adapter, key, event, &AckSource)
+            .await
+    }
+
     /// Handles one event for one instance. The event's entry (after_event for due
     /// units, the request entry for requests) has already checked the organization
     /// once for this event (P3), so handle does not read the stamp again.
@@ -79,6 +87,7 @@ impl<R: EngineHost> Engine<'_, R> {
     {
         let handler = ObjectHostEffects {
             host: self.host(),
+            alarm_inputs: self.0.alarm_inputs(),
             #[cfg(feature = "test-support")]
             pauses: self.pauses(),
         };

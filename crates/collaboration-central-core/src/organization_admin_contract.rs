@@ -1,5 +1,6 @@
 //! Closed answers from a verified organization admin operation.
 use crate::{organization_authority::OrganizationChangeRecord, person_request::AdmissionRefusal};
+use fleet_engine::EngineFailureClass;
 use message_board::{Description, ResourceName, WorkspaceId, WorkspaceState};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -27,17 +28,6 @@ pub enum EngineKindName {
     LegacyNoticeWindows,
     LegacyWorkspaceDrains,
     EngineSource,
-}
-
-/// The closed failure classes of engine_work_attempts.last_failure.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum EngineFailureClass {
-    CorruptRow,
-    ConstraintViolated,
-    StatementRejected,
-    Refused,
-    OtherStoreUnavailable,
 }
 
 /// One registered engine kind in EngineHealth; zero counts are listed too.

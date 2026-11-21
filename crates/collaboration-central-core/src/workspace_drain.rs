@@ -1,5 +1,4 @@
 //! Workspace turn precedes central commit; durable deadlines precede workspace writes.
-use crate::engine::legacy_units::LegacyUnitOutcome;
 use crate::{
     WorkspaceRuntime,
     central_mail_store::{alarm_update, applied, timestamp},
@@ -7,6 +6,7 @@ use crate::{
     workspace_notice_plans::DrainResult,
 };
 use central_storage::{SqlValue, Statement, StatementBatch, StoreFailure};
+use fleet_contracts::LegacyUnitOutcome;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_runtime_ports::{
     guarded_statements::{exact, text},
@@ -49,23 +49,21 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         &self,
         workspace: &WorkspaceId,
     ) -> Result<(), StoreFailure> {
-        use crate::engine::{
-            attempt_records::EngineSubject, attempt_statements::CONTROL_WRITE,
-            control_gate::ControlGate, failures::FailureOutcome, store_adapter::SubjectVersion,
-        };
         use central_engine_model::{InstanceKey, MachineKind, RetirementThreshold};
+        use fleet_contracts::{ControlGate, EngineSubject, FailureOutcome, SubjectVersion};
+        use fleet_engine::{CONTROL_WRITE, Engine};
         let subject = EngineSubject {
             kind: MachineKind("legacy_workspace_drains"),
             key: InstanceKey("all".into()),
         };
-        match crate::engine::port::Engine::new(self)
+        match Engine::new(self)
             .control_gate(&subject, RetirementThreshold::NOTICE_UNITS)
             .await
         {
             ControlGate::Run(_) => {}
             ControlGate::Skip | ControlGate::Uncertain => return Ok(()),
             ControlGate::CentralDown(failure) => {
-                crate::engine::port::Engine::new(self).observe_engine_store_down(&subject, failure);
+                Engine::new(self).observe_engine_store_down(&subject, failure);
                 return Ok(());
             }
         }
@@ -75,26 +73,24 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         match self.drain_workspace_held(workspace).await {
             Ok(_) => Ok(()),
             Err(LegacyUnitOutcome::CentralDown(failure)) => {
-                crate::engine::port::Engine::new(self).observe_engine_store_down(&subject, failure);
+                Engine::new(self).observe_engine_store_down(&subject, failure);
                 Ok(())
             }
             Err(outcome) => {
                 let outcome = outcome.in_workspace(workspace);
                 if let Some(class) = outcome.failure_class()
-                    && let FailureOutcome::StoreDown(failure) =
-                        crate::engine::port::Engine::new(self)
-                            .record_failure_naming(
-                                &subject,
-                                CONTROL_WRITE,
-                                &SubjectVersion(vec![]),
-                                class,
-                                RetirementThreshold::NOTICE_UNITS,
-                                outcome.affected_workspaces(),
-                            )
-                            .await
+                    && let FailureOutcome::StoreDown(failure) = Engine::new(self)
+                        .record_failure_naming(
+                            &subject,
+                            CONTROL_WRITE,
+                            &SubjectVersion(vec![]),
+                            class,
+                            RetirementThreshold::NOTICE_UNITS,
+                            outcome.affected_workspaces(),
+                        )
+                        .await
                 {
-                    crate::engine::port::Engine::new(self)
-                        .observe_engine_store_down(&subject, failure);
+                    Engine::new(self).observe_engine_store_down(&subject, failure);
                 }
                 Ok(())
             }

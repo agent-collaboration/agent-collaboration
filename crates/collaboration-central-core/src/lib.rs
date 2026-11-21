@@ -56,8 +56,6 @@ pub use central_mail_delivery_read::{
 mod central_mail_requests;
 mod central_mail_rows;
 mod central_mail_sender;
-mod mail_delivery_ready;
-pub use mail_delivery_ready::MailDeliveryReady;
 mod central_mail_status;
 mod central_mail_store;
 mod central_timer_plans;

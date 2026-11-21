@@ -1,24 +1,9 @@
 use super::{
-    attempt_records::EngineSubject,
     attempt_statements::CONTROL_WRITE,
-    control_gate::{ControlGate, ObservedControl},
     effects::ApplyFailure,
-    failures::FailureOutcome,
     handle::HandleOutcome,
-    legacy_units::LegacyUnitOutcome,
-    query_registry,
-    store_adapter::{SubjectVersion, corrupt_class},
-};
-use super::{
-    machines::{
-        automation_timer,
-        direct_message::DirectMessage,
-        direct_message_store::DirectMessageStore,
-        system_message_expiry::{ExpireAt, SystemMessageExpiry, SystemMessageExpiryStore},
-        timer_store::{AutomationStore, WakeStore},
-        wake_timer,
-    },
     port::{Engine, EngineHost},
+    store_adapter::corrupt_class,
 };
 use central_engine_model::{
     DueBatchPolicy, DueRow, EngineTime, InstanceKey, MachineKind, RetirementThreshold,
@@ -26,61 +11,74 @@ use central_engine_model::{
 use central_storage::{
     AlarmPublication, AlarmUpdate, BatchOutcome, SqlValue, Statement, StatementBatch, StoreFailure,
 };
-use fleet_contracts::{AlarmNotPublished, AlarmResult, EventCompletion};
+use fleet_contracts::{
+    AlarmNotPublished, AlarmResult, ControlGate, EngineSubject, EventCompletion, FailureOutcome,
+    LegacyUnitOutcome, SubjectVersion,
+};
 use fleet_runtime_ports::CentralStore as _;
 use fleet_runtime_ports::{
     stored_values::{column, string},
     workspace_decode_error::corrupt,
 };
 use futures_util::{StreamExt, stream};
+use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-#[derive(Clone, Copy)]
-enum DueKind {
-    Wake,
-    Automation,
-    DirectMessage,
-    SystemMessageExpiry,
-    #[cfg(feature = "test-support")]
-    Probe,
+pub enum DueCutoff {
+    BatchStart,
+    LookAhead,
 }
-impl DueKind {
-    fn kind(self) -> MachineKind {
-        match self {
-            Self::Wake => MachineKind("wake_timer"),
-            Self::Automation => MachineKind("automation_timer"),
-            Self::DirectMessage => MachineKind("direct_message"),
-            Self::SystemMessageExpiry => {
-                <SystemMessageExpiry as central_engine_model::Machine>::KIND
-            }
-            #[cfg(feature = "test-support")]
-            Self::Probe => MachineKind("engine_probe"),
-        }
-    }
-    fn sql(self) -> &'static str {
-        match self {
-            Self::Wake => query_registry::WAKE_LIST,
-            Self::Automation => query_registry::AUTOMATION_LIST,
-            Self::DirectMessage => query_registry::DIRECT_MESSAGE_LIST,
-            Self::SystemMessageExpiry => query_registry::SYSTEM_MESSAGE_EXPIRY_LIST,
-            #[cfg(feature = "test-support")]
-            Self::Probe => query_registry::PROBE_LIST,
-        }
-    }
+pub struct TimedSource {
+    pub machine_kind: MachineKind,
+    pub list_sql: &'static str,
+    pub cutoff: DueCutoff,
 }
-enum Unit {
-    Machine(DueKind, DueRow),
-    Windows,
-    Drains,
+pub enum TimedRowOutcome {
+    Finished(AlarmResult),
+    CentralDown,
+}
+pub trait TimedRows<R: EngineHost>: Send + Sync {
+    type Kind: Copy + Send + Sync + 'static;
+    fn ordered_kinds(&self) -> &'static [Self::Kind];
+    fn source(&self, kind: Self::Kind) -> TimedSource;
+    fn run_row(
+        &self,
+        engine: &Engine<'_, R>,
+        runtime: &R,
+        kind: Self::Kind,
+        row: DueRow,
+    ) -> impl Future<Output = TimedRowOutcome> + Send;
+}
+pub struct WholeUnit {
+    pub subject: EngineSubject,
+    pub threshold: RetirementThreshold,
+}
+pub enum WholeUnitOutcome {
+    Skipped,
+    Completed(AlarmResult),
+}
+
+enum Unit<TimedKind, WholeKind> {
+    Machine(
+        TimedKind,
+        #[cfg_attr(
+            not(feature = "test-support"),
+            expect(
+                dead_code,
+                reason = "the source kind labels only the test-support visit receipt"
+            )
+        )]
+        MachineKind,
+        DueRow,
+    ),
+    Whole(WholeKind, WholeUnit),
 }
 #[cfg(feature = "test-support")]
-impl Unit {
-    /// The visit-order receipt names a unit by its subject (R2/R3).
+impl<TimedKind, WholeKind> Unit<TimedKind, WholeKind> {
     fn start_receipt(&self, now: EngineTime) -> fleet_runtime::DueUnitStart {
         let (kind, key) = match self {
-            Self::Machine(kind, row) => (kind.kind().0, row.key.0.clone()),
-            Self::Windows => ("legacy_notice_windows", "all".to_owned()),
-            Self::Drains => ("legacy_workspace_drains", "all".to_owned()),
+            Self::Machine(_, kind, row) => (kind.0, row.key.0.clone()),
+            Self::Whole(_, unit) => (unit.subject.kind.0, unit.subject.key.0.clone()),
         };
         fleet_runtime::DueUnitStart {
             batch_start_unix_millis: now.timestamp_millis(),
@@ -94,12 +92,6 @@ fn source(kind: MachineKind) -> EngineSubject {
     EngineSubject {
         kind: MachineKind("engine_source"),
         key: InstanceKey(kind.0.into()),
-    }
-}
-fn legacy(kind: &'static str) -> EngineSubject {
-    EngineSubject {
-        kind: MachineKind(kind),
-        key: InstanceKey("all".into()),
     }
 }
 fn decode_due(rows: central_storage::ReadOutcome) -> Result<Vec<DueRow>, StoreFailure> {
@@ -169,14 +161,12 @@ impl<R: EngineHost> Engine<'_, R> {
             work = self.run_due_batch(now).await;
         }
         let publication = self
-            .publish_engine_query(central_engine_model::next_due_sql(
-                query_registry::ALARM_INPUTS,
-            ))
+            .publish_engine_query(central_engine_model::next_due_sql(self.0.alarm_inputs()))
             .await?;
         Ok(EventCompletion { work, publication })
     }
 
-    pub(crate) async fn publish_engine_query(
+    pub async fn publish_engine_query(
         &self,
         query: Statement,
     ) -> Result<AlarmPublication, AlarmNotPublished> {
@@ -219,15 +209,10 @@ impl<R: EngineHost> Engine<'_, R> {
         let mut units = Vec::new();
         let mut leftovers = false;
         let mut central_down = false;
-        for kind in [
-            DueKind::Wake,
-            DueKind::Automation,
-            DueKind::DirectMessage,
-            DueKind::SystemMessageExpiry,
-            #[cfg(feature = "test-support")]
-            DueKind::Probe,
-        ] {
-            let subject = source(kind.kind());
+        let timed = self.0.timed_rows();
+        for &kind in timed.ordered_kinds() {
+            let description = timed.source(kind);
+            let subject = source(description.machine_kind);
             let observed = match self
                 .control_gate(&subject, RetirementThreshold::DEFAULT)
                 .await
@@ -240,14 +225,12 @@ impl<R: EngineHost> Engine<'_, R> {
                     break;
                 }
             };
-            // Expiry must wait for the same boundary that closes its delivery window.
-            let cutoff = if matches!(kind, DueKind::SystemMessageExpiry) {
-                now
-            } else {
-                horizon
+            let cutoff = match description.cutoff {
+                DueCutoff::BatchStart => now,
+                DueCutoff::LookAhead => horizon,
             };
             let query = match central_engine_model::due_list_sql(
-                kind.sql(),
+                description.list_sql,
                 cutoff,
                 policy.per_kind_cap + 1,
             ) {
@@ -261,7 +244,10 @@ impl<R: EngineHost> Engine<'_, R> {
                 Ok(mut rows) => {
                     leftovers |= rows.len() > policy.per_kind_cap;
                     rows.truncate(policy.per_kind_cap);
-                    units.extend(rows.into_iter().map(|row| Unit::Machine(kind, row)));
+                    units.extend(
+                        rows.into_iter()
+                            .map(|row| Unit::Machine(kind, description.machine_kind, row)),
+                    );
                     match self.clear_control(&subject, &observed).await {
                         Ok(()) | Err(ApplyFailure::Superseded | ApplyFailure::Uncertain) => {}
                         Err(ApplyFailure::StoreDown(_) | ApplyFailure::Rejected(_)) => {
@@ -298,7 +284,12 @@ impl<R: EngineHost> Engine<'_, R> {
         }
         let mut work = AlarmResult::default();
         if !central_down {
-            units.extend([Unit::Windows, Unit::Drains]);
+            units.extend(
+                self.0
+                    .ordered_whole_units()
+                    .iter()
+                    .map(|&kind| Unit::Whole(kind, self.0.whole_unit(kind))),
+            );
             let stop = AtomicBool::new(false);
             let mut completed = stream::iter(units)
                 .map(|unit| {
@@ -319,169 +310,89 @@ impl<R: EngineHost> Engine<'_, R> {
                 })
                 .buffer_unordered(8);
             while let Some(done) = completed.next().await {
-                work.wakes_fired += done.wakes_fired;
-                work.automations_fired += done.automations_fired;
-                work.windows_fired += done.windows_fired;
-                work.workspaces_drained += done.workspaces_drained;
+                work += done;
             }
         }
         self.due_batches().finish(now.timestamp_millis(), leftovers);
         work
     }
 
-    async fn run_engine_unit(&self, unit: Unit, now: EngineTime) -> (AlarmResult, bool) {
-        let mut work = AlarmResult::default();
+    async fn run_engine_unit(
+        &self,
+        unit: Unit<<R::Timed as TimedRows<R>>::Kind, R::WholeKind>,
+        now: EngineTime,
+    ) -> (AlarmResult, bool) {
         match unit {
-            Unit::Machine(kind, row) => {
-                let (done, down) = match kind {
-                    #[cfg(feature = "test-support")]
-                    DueKind::Probe => {
-                        self.run_machine_unit::<crate::engine_probe::EngineProbe, _>(
-                            &super::probe_store::ProbeStore(self.0),
-                            row,
-                            "engine_probe_items.due_at",
-                            |occurrence| crate::engine_probe::ProbeEvent::Due { occurrence },
-                        )
-                        .await
-                    }
-                    DueKind::Wake => {
-                        self.run_machine_unit::<wake_timer::WakeTimer, _>(
-                            &WakeStore(self.0),
-                            row,
-                            "automation_wakes.due_at",
-                            |occurrence| wake_timer::Event::Due { occurrence },
-                        )
-                        .await
-                    }
-                    DueKind::Automation => {
-                        self.run_machine_unit::<automation_timer::AutomationTimer, _>(
-                            &AutomationStore(self.0),
-                            row,
-                            "automation_schedules.next_due_at",
-                            |occurrence| automation_timer::Event::Due { occurrence },
-                        )
-                        .await
-                    }
-                    DueKind::DirectMessage => {
-                        self.run_machine_unit::<DirectMessage, _>(
-                            &DirectMessageStore(self.0),
-                            row,
-                            "mail_messages.cancel_due_at",
-                            |occurrence| super::machines::direct_message::Event::Due { occurrence },
-                        )
-                        .await
-                    }
-                    DueKind::SystemMessageExpiry => {
-                        self.run_machine_unit::<SystemMessageExpiry, _>(
-                            &SystemMessageExpiryStore(self.0),
-                            row,
-                            "mail_messages.delivery_window_ends_at",
-                            ExpireAt,
-                        )
-                        .await
-                    }
-                };
-                match kind {
-                    DueKind::Wake => work.wakes_fired = usize::from(done),
-                    DueKind::Automation => work.automations_fired = usize::from(done),
-                    // Cancels are observed through the messages they change.
-                    DueKind::DirectMessage | DueKind::SystemMessageExpiry => {}
-                    #[cfg(feature = "test-support")]
-                    DueKind::Probe => {}
+            Unit::Machine(kind, _, row) => {
+                match self.0.timed_rows().run_row(self, self.0, kind, row).await {
+                    TimedRowOutcome::Finished(work) => (work, false),
+                    TimedRowOutcome::CentralDown => (AlarmResult::default(), true),
                 }
-                (work, down)
             }
-            Unit::Windows | Unit::Drains => {
-                let is_windows = matches!(unit, Unit::Windows);
-                let subject = legacy(if is_windows {
-                    "legacy_notice_windows"
-                } else {
-                    "legacy_workspace_drains"
-                });
-                let observed = match self
-                    .control_gate(&subject, RetirementThreshold::NOTICE_UNITS)
-                    .await
-                {
-                    ControlGate::Run(observed) => observed,
-                    ControlGate::Skip | ControlGate::Uncertain => return (work, false),
-                    ControlGate::CentralDown(failure) => {
-                        self.observe_engine_store_down(&subject, failure);
-                        return (work, true);
-                    }
-                };
-                // P5 change 7: the window unit never waits on a busy central turn.
-                // Busy -> skipped for this batch: no failure, no record, the windows
-                // stay due and the alarm keeps them pending.
-                let window_turn = match is_windows.then(|| self.0.try_central_turn()) {
-                    Some(None) => return (work, false),
-                    Some(Some(turn)) => Some(turn),
-                    None => None,
-                };
+            Unit::Whole(kind, unit) => self.run_whole_unit(kind, unit, now).await,
+        }
+    }
+
+    async fn run_whole_unit(
+        &self,
+        kind: R::WholeKind,
+        unit: WholeUnit,
+        now: EngineTime,
+    ) -> (AlarmResult, bool) {
+        let WholeUnit { subject, threshold } = unit;
+        let empty = AlarmResult::default();
+        let observed = match self.control_gate(&subject, threshold).await {
+            ControlGate::Run(observed) => observed,
+            ControlGate::Skip | ControlGate::Uncertain => return (empty, false),
+            ControlGate::CentralDown(failure) => {
+                self.observe_engine_store_down(&subject, failure);
+                return (empty, true);
+            }
+        };
+        match self.0.run_whole_unit(kind, now, &subject, &observed).await {
+            Ok(WholeUnitOutcome::Skipped) => (empty, false),
+            Ok(WholeUnitOutcome::Completed(work)) => {
                 #[cfg(feature = "test-support")]
-                self.0.count_legacy_invocation(&|count| {
-                    if is_windows {
-                        count.windows += 1;
-                    } else {
-                        count.drains += 1;
-                    }
-                });
-                let result = if is_windows {
-                    self.run_window_unit(now, &observed, &subject).await
-                } else {
-                    self.0.drain_due_workspaces(now).await
-                };
-                drop(window_turn);
-                match result {
-                    Ok(count) => {
-                        #[cfg(feature = "test-support")]
-                        self.pauses()
-                            .reached_engine(
-                                fleet_runtime::PausePoint::BeforeControlClear,
-                                subject.kind.0,
-                            )
-                            .await;
-                        match self.clear_control(&subject, &observed).await {
-                            Err(ApplyFailure::StoreDown(_) | ApplyFailure::Rejected(_)) => {
-                                return (work, true);
-                            }
-                            Ok(()) | Err(ApplyFailure::Superseded | ApplyFailure::Uncertain) => {}
-                        }
-                        if is_windows {
-                            work.windows_fired = count;
-                        } else {
-                            work.workspaces_drained = count;
-                        }
+                self.pauses()
+                    .reached_engine(
+                        fleet_runtime::PausePoint::BeforeControlClear,
+                        subject.kind.0,
+                    )
+                    .await;
+                match self.clear_control(&subject, &observed).await {
+                    Err(ApplyFailure::StoreDown(_) | ApplyFailure::Rejected(_)) => (empty, true),
+                    Ok(()) | Err(ApplyFailure::Superseded | ApplyFailure::Uncertain) => {
                         (work, false)
                     }
-                    Err(LegacyUnitOutcome::CentralDown(failure)) => {
-                        self.observe_engine_store_down(&subject, failure);
-                        (work, true)
-                    }
-                    Err(outcome) => match outcome.failure_class() {
-                        Some(class) => (
-                            work,
-                            matches!(
-                                self.record_failure_naming(
-                                    &subject,
-                                    CONTROL_WRITE,
-                                    &SubjectVersion(vec![]),
-                                    class,
-                                    RetirementThreshold::NOTICE_UNITS,
-                                    outcome.affected_workspaces(),
-                                )
-                                .await,
-                                FailureOutcome::StoreDown(_)
-                            ),
-                        ),
-                        None => (work, false),
-                    },
                 }
             }
+            Err(LegacyUnitOutcome::CentralDown(failure)) => {
+                self.observe_engine_store_down(&subject, failure);
+                (empty, true)
+            }
+            Err(outcome) => match outcome.failure_class() {
+                Some(class) => (
+                    empty,
+                    matches!(
+                        self.record_failure_naming(
+                            &subject,
+                            CONTROL_WRITE,
+                            &SubjectVersion(vec![]),
+                            class,
+                            threshold,
+                            outcome.affected_workspaces(),
+                        )
+                        .await,
+                        FailureOutcome::StoreDown(_)
+                    ),
+                ),
+                None => (empty, false),
+            },
         }
     }
 
     /// One due machine instance as its own unit: `(done, central_down)`.
-    async fn run_machine_unit<M, Adapter>(
+    pub async fn run_machine_unit<M, Adapter>(
         &self,
         adapter: &Adapter,
         row: DueRow,
@@ -560,48 +471,5 @@ impl<R: EngineHost> Engine<'_, R> {
         )
         .await
         .into()
-    }
-
-    /// Runs under the central turn its caller took without waiting (change 7).
-    async fn run_window_unit(
-        &self,
-        now: EngineTime,
-        observed: &ObservedControl,
-        subject: &EngineSubject,
-    ) -> Result<usize, LegacyUnitOutcome> {
-        let (mut statements, deliveries) = self.0.plan_due_windows(now).await?;
-        let count = deliveries.len();
-        match observed {
-            ObservedControl::Absent => {}
-            ObservedControl::Present(guard) => statements.push(
-                super::attempt_statements::delete_observed_attempt(subject, guard),
-            ),
-        }
-        // The kept notice tests hold the commit that delivers windows at the
-        // existing timer-commit points; an empty window unit passes them by.
-        #[cfg(feature = "test-support")]
-        if count > 0 {
-            self.pauses()
-                .reached_central(fleet_runtime::PausePoint::BeforeTimerCommit)
-                .await;
-        }
-        LegacyUnitOutcome::batch(
-            self.host()
-                .run_batch(StatementBatch {
-                    statements,
-                    alarm: AlarmUpdate::Unchanged,
-                })
-                .await,
-        )?;
-        for delivery in deliveries {
-            self.0.offer_mail(delivery);
-        }
-        #[cfg(feature = "test-support")]
-        if count > 0 {
-            self.pauses()
-                .reached_central(fleet_runtime::PausePoint::AfterTimerCommit)
-                .await;
-        }
-        Ok(count)
     }
 }

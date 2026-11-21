@@ -1,5 +1,8 @@
 //! Organization feature composition over one Fleet runtime.
-use crate::MailDeliveryReady;
+pub(crate) mod engine_admin_dispatch;
+pub(crate) mod engine_dispatch;
+
+use fleet_contracts::MailDeliveryReady;
 use fleet_runtime::FleetRuntime;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_workspace_access::WorkspaceAccess;

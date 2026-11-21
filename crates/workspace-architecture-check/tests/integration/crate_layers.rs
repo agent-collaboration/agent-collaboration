@@ -12,7 +12,7 @@ mod test_support_policy;
 #[path = "workspace_boundaries.rs"]
 mod workspace_boundaries;
 
-const LAYER_POLICY: [(&str, &[&str]); 35] = [
+const LAYER_POLICY: [(&str, &[&str]); 36] = [
     ("workspace-ids", &[]),
     (
         "workspace-model",
@@ -41,6 +41,7 @@ const LAYER_POLICY: [(&str, &[&str]); 35] = [
     (
         "collaboration-central-core",
         &[
+            "fleet-engine",
             "agent-automation",
             "central-engine-model",
             "central-link-protocol",
@@ -114,6 +115,7 @@ const LAYER_POLICY: [(&str, &[&str]); 35] = [
             "workspace-model",
         ],
     ),
+    ("fleet-engine", workspace_boundaries::ENGINE_EDGES),
     ("fleet-storage-schema", &[]),
     (
         "fleet-store-sqlx",

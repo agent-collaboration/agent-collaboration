@@ -184,7 +184,7 @@ pub struct CentralObject {
     runtime: Mutex<Option<Arc<OrgRuntime>>>,
     clock: WorkspaceClock,
     due_batches: Arc<fleet_runtime::DueBatchState>,
-    mail_pushes: Arc<std::sync::Mutex<Vec<collaboration_central_core::MailDeliveryReady>>>,
+    mail_pushes: Arc<std::sync::Mutex<Vec<fleet_contracts::MailDeliveryReady>>>,
     #[cfg(feature = "test-support")]
     controls: workspace_cases::Controls,
     #[cfg(feature = "test-support")]

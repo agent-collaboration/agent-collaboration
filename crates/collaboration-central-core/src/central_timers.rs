@@ -27,7 +27,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 args: vec![],
             }
         };
-        crate::engine::port::Engine::new(self)
+        fleet_engine::Engine::new(self)
             .publish_engine_query(query)
             .await
             .map(|_| ())

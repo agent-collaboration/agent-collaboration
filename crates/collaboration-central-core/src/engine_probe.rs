@@ -3,12 +3,9 @@
 pub use crate::engine::probe_machine::{
     EngineProbe, ProbeEffect, ProbeEvent, ProbeRefusal, ProbeState,
 };
-pub use crate::engine::{
-    receipts::{EngineReceipt, EngineRefusal},
-    requests::EngineRequestOutcome,
-};
 use central_engine_model::EngineTime;
 pub use central_engine_model::{InstanceKey, ItemFailureClass};
+pub use fleet_engine::{EngineReceipt, EngineRefusal, EngineRequestOutcome};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -95,7 +92,7 @@ impl<Host: fleet_runtime_ports::CentralStore, Stores: fleet_runtime_ports::Works
             }
         };
         let actor = self.access().resolve_identity(&identity).await?;
-        crate::engine::port::Engine::new(self)
+        fleet_engine::Engine::new(self)
             .request_engine::<EngineProbe, _>(
                 &crate::engine::probe_store::ProbeStore(self),
                 actor,

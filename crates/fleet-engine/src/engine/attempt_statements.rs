@@ -1,7 +1,8 @@
-use super::attempt_records::{AttemptGuard, EngineSubject, failure_detail};
-use crate::central_mail_rows::timestamp;
+use super::attempt_records::failure_detail;
+use super::timestamp;
 use central_engine_model::{AttemptState, FailureRecord};
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
+use fleet_contracts::{AttemptGuard, EngineSubject};
 use fleet_runtime_ports::{
     guarded_statements::{any, exact, text},
     workspace_decode_error::corrupt,
@@ -11,6 +12,7 @@ const READ_ATTEMPT: &str = "SELECT attempt_id,machine_kind,subject_key,state,fai
 
 /// The literal predicate belongs to the adapter that owns the subject. No UPDATE
 /// of the subject is used as a guard: that would retrigger its failed statement.
+#[macro_export]
 macro_rules! guarded_attempt_sql {
     ($subject_predicate:literal) => {
         concat!(
@@ -23,9 +25,8 @@ macro_rules! guarded_attempt_sql {
         )
     };
 }
-pub(crate) use guarded_attempt_sql;
 
-pub(crate) const CONTROL_WRITE: &str = guarded_attempt_sql!("1");
+pub const CONTROL_WRITE: &str = guarded_attempt_sql!("1");
 
 pub(crate) fn read_attempt(subject: &EngineSubject) -> Statement {
     Statement {
@@ -34,7 +35,7 @@ pub(crate) fn read_attempt(subject: &EngineSubject) -> Statement {
     }
 }
 
-pub(crate) fn delete_attempt(subject: &EngineSubject) -> GuardedStatement {
+pub fn delete_attempt(subject: &EngineSubject) -> GuardedStatement {
     any(
         "DELETE FROM engine_work_attempts WHERE machine_kind=? AND subject_key=?",
         vec![text(subject.kind.0), text(&subject.key.0)],
@@ -44,7 +45,7 @@ pub(crate) fn delete_attempt(subject: &EngineSubject) -> GuardedStatement {
 /// Deletes the control record only while it is still the one a run observed
 /// (the write guard's columns, compared with IS). A record written or replaced
 /// after the observation matches nothing and survives.
-pub(crate) fn delete_observed_attempt(
+pub fn delete_observed_attempt(
     subject: &EngineSubject,
     observed: &AttemptGuard,
 ) -> GuardedStatement {

@@ -8,17 +8,13 @@ use crate::{
         DIRECT_MESSAGE_COLUMNS, DirectMessageStatus, decode_direct_message, decode_sender_session,
         failure_text,
     },
-    engine::{
-        attempt_statements::guarded_attempt_sql,
-        port::EngineHost,
-        store_adapter::{
-            LoadFailure, StoreAdapter, Versioned, decode_load_failure, load_store_failure,
-            raw_version,
-        },
-    },
 };
 use central_engine_model::{InstanceKey, StateTag};
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
+use fleet_engine::{
+    EngineHost, LoadFailure, StoreAdapter, Versioned, decode_load_failure, guarded_attempt_sql,
+    load_store_failure, raw_version,
+};
 use fleet_runtime_ports::CentralStore as _;
 use fleet_runtime_ports::{
     guarded_statements::{exact, text},
@@ -120,7 +116,7 @@ impl<R: EngineHost> StoreAdapter<DirectMessage> for DirectMessageStore<'_, R> {
         DIRECT_MESSAGE_FAILURE
     }
 
-    fn mail_ready(&self, effect: &direct::Effect) -> Option<crate::MailDeliveryReady> {
+    fn mail_ready(&self, effect: &direct::Effect) -> Option<fleet_contracts::MailDeliveryReady> {
         match effect {
             direct::Effect::TellSender(notice) => Some(notice.into()),
         }

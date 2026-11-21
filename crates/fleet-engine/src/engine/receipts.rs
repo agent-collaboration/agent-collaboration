@@ -1,4 +1,4 @@
-use crate::central_mail_rows::timestamp;
+use super::timestamp;
 use central_engine_model::{EngineTime, TransitionError};
 use central_storage::{GuardedStatement, ReadOutcome, Statement, StoreFailure};
 use fleet_runtime_ports::{

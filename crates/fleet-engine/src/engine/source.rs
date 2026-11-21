@@ -1,6 +1,8 @@
+#[cfg(feature = "test-support")]
 use super::receipts::{EngineReceipt, EngineRefusal, ReceiptClaim};
 use central_engine_model::{Machine, TransitionError};
 use central_storage::{GuardedStatement, StoreFailure};
+#[cfg(feature = "test-support")]
 use serde::Serialize;
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -16,7 +18,7 @@ pub(crate) enum ReceiptStatements {
         not(feature = "test-support"),
         expect(
             dead_code,
-            reason = "only the test machine's requests use the engine request entry in deliverable 1 (P7); wakes move onto it in deliverable 2"
+            reason = "only explicit machine requests carry these receipts"
         )
     )]
     Request(Vec<GuardedStatement>),
@@ -56,14 +58,9 @@ impl<M: Machine> EventSource<M> for DueSource {
     }
 }
 
-#[cfg_attr(
-    not(feature = "test-support"),
-    expect(
-        dead_code,
-        reason = "only the test machine's requests use the engine request entry in deliverable 1 (P7); wakes move onto it in deliverable 2"
-    )
-)]
+#[cfg(feature = "test-support")]
 pub(crate) struct RequestSource(pub ReceiptClaim);
+#[cfg(feature = "test-support")]
 impl<M: Machine> EventSource<M> for RequestSource
 where
     M::State: Serialize,
