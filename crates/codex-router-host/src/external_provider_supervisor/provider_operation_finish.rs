@@ -72,7 +72,7 @@ impl SupervisorInner {
         collaboration_runtime::ProviderOperationRecord,
         collaboration_runtime::ProviderOperationStoreError,
     > {
-        store
+        let row = store
             .record_terminal(
                 operation,
                 failure.effect,
@@ -80,7 +80,9 @@ impl SupervisorInner {
                 None,
                 self.now_ms(),
             )
-            .await
+            .await?;
+        self.refresh_durable_operation(&row);
+        Ok(row)
     }
 
     pub(super) async fn finish(
@@ -159,7 +161,7 @@ impl SupervisorInner {
                     _ => None,
                 };
                 let mut store = self.store.lock().await;
-                if crate::provider_operation_settlement::persist_provider_success(
+                match crate::provider_operation_settlement::persist_provider_success(
                     &mut store,
                     &operation_id,
                     target.as_ref(),
@@ -167,15 +169,20 @@ impl SupervisorInner {
                     terminal_stop_reason,
                 )
                 .await
-                .is_err()
                 {
-                    let durable = durable_stage(&mut store, &operation_id).await;
-                    (
-                        Err(applied_unsaved(operation_id.clone(), target, durable)),
-                        Retention::PersistenceFailed,
-                    )
-                } else {
-                    (Ok(settlement), Retention::Settled)
+                    Ok(row) => {
+                        if let Some(row) = row {
+                            self.refresh_durable_operation(&row);
+                        }
+                        (Ok(settlement), Retention::Settled)
+                    }
+                    Err(_) => {
+                        let durable = durable_stage(&mut store, &operation_id).await;
+                        (
+                            Err(applied_unsaved(operation_id.clone(), target, durable)),
+                            Retention::PersistenceFailed,
+                        )
+                    }
                 }
             }
             ProviderOperationCompletion::Failure(operation_failure)

@@ -14,7 +14,7 @@ use super::{
     },
     provider_operation_finish::Retention,
 };
-use crate::binding_dispatch_permit::{BindingOutcomes, BindingUncertainty};
+use crate::binding_dispatch_permit::BindingUncertainty;
 use crate::operation_machines::operation_record_machine::{
     AttemptEnding, DispatchAttempt, OperationRecord, OperationRecordEvent, OperationRecordMachine,
 };
@@ -476,23 +476,6 @@ impl UncertaintyCells {
             .entry(binding.clone())
             .or_default()
             .clone()
-    }
-
-    /// The binding's cell, seeded on first use with `seed`'s rows.
-    pub(super) async fn cell<F, Fut, E>(
-        &self,
-        binding: &EndpointRef,
-        seed: F,
-    ) -> Result<Arc<BindingUncertainty>, E>
-    where
-        F: FnOnce() -> Fut,
-        Fut: std::future::Future<Output = Result<BindingOutcomes, E>>,
-    {
-        let cell = self.slot(binding);
-        cell.outcomes
-            .get_or_try_init(|| async { seed().await.map(StdMutex::new) })
-            .await?;
-        Ok(cell)
     }
 }
 

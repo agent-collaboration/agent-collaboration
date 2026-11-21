@@ -9,6 +9,9 @@ mod admission_race_tests;
 #[path = "restore_recovery/dispatch_eligibility_test.rs"]
 mod dispatch_eligibility_tests;
 
+#[path = "restore_recovery/terminal_blocker_test.rs"]
+mod terminal_blocker_tests;
+
 #[path = "restore_recovery/prompt_custody_test.rs"]
 mod prompt_custody_tests;
 

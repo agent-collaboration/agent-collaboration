@@ -6,7 +6,7 @@ use crate::operation_machines::uncertainty_cell_machine::{
 use crate::provider_operation_custody::{LaneCustodyLookup, LatePromptRepairLookup};
 use collaboration_protocol::{
     ConversationBindingIdentity, OperationId, ProviderBindingIdentity, ProviderOperationEffect,
-    ProviderOperationKind, ProviderReconciliationState, SessionRef,
+    ProviderOperationKind, ProviderOperationStage, ProviderReconciliationState, SessionRef,
 };
 use collaboration_runtime::{ProviderOperationRecord, ProviderOperationStoreError};
 use state_machine_core::{StateMachine, TransitionError};
@@ -55,31 +55,43 @@ impl BindingUncertainty {
             .send_modify(|revision| *revision = revision.wrapping_add(1));
     }
 
+    /// Refresh while holding the store guard that established this row.
+    pub(crate) fn refresh_durable_row(
+        &self,
+        row: &ProviderOperationRecord,
+        recovery: Option<UnknownRecovery>,
+    ) {
+        let ConversationBindingIdentity::ExternalProvider { binding } = &row.binding else {
+            return;
+        };
+        if self.identity.get().is_some_and(|identity| {
+            binding.endpoint != identity.endpoint
+                || binding.generation != identity.generation
+                || binding.runtime.provider != identity.runtime.provider
+        }) {
+            return;
+        }
+        if let Some(outcomes) = self.outcomes.get() {
+            lock(outcomes).refresh_durable_row(row, recovery);
+            self.eligibility_changed();
+        }
+    }
+
     pub(crate) fn preserve_residual(
         &self,
         operation: &OperationId,
         target: Option<SessionRef>,
         observed: Result<Option<ProviderOperationRecord>, ProviderOperationStoreError>,
     ) {
-        let target = match observed {
-            Ok(Some(row))
-                if row.effect == ProviderOperationEffect::Unknown
-                    && self.identity.get().is_none_or(|identity| matches!(&row.binding,
-                        ConversationBindingIdentity::ExternalProvider { binding }
-                            if binding.endpoint == identity.endpoint && binding.generation == identity.generation
-                                && binding.runtime.provider == identity.runtime.provider))
-                    && !(row.operation_kind == ProviderOperationKind::ConversationPrompt
-                        && row.reconciliation_state
-                            == ProviderReconciliationState::NotReconcilable) =>
-            {
-                row.target
+        match observed {
+            Ok(Some(row)) => self.refresh_durable_row(&row, None),
+            Ok(None) => {}
+            Err(_) => {
+                if let Some(record) = self.outcomes.get() {
+                    lock(record).record_unknown(operation.clone(), target, UnknownRecovery::Blocks);
+                    self.eligibility_changed();
+                }
             }
-            Ok(_) => return,
-            Err(_) => target,
-        };
-        if let Some(record) = self.outcomes.get() {
-            lock(record).record_unknown(operation.clone(), target, UnknownRecovery::Blocks);
-            self.eligibility_changed();
         }
     }
 }
@@ -161,9 +173,37 @@ impl BindingOutcomes {
         })
     }
 
-    pub(crate) fn record_reconciled(&mut self, operation: OperationId) {
+    fn record_reconciled(&mut self, operation: OperationId) {
         self.recoverable.remove(&operation);
         self.apply(UncertaintyEvent::Reconciled { operation });
+    }
+
+    fn refresh_durable_row(
+        &mut self,
+        row: &ProviderOperationRecord,
+        recovery: Option<UnknownRecovery>,
+    ) {
+        if row.effect != ProviderOperationEffect::Unknown
+            || (row.operation_kind == ProviderOperationKind::ConversationPrompt
+                && row.stage == ProviderOperationStage::Terminal
+                && row.reconciliation_state == ProviderReconciliationState::NotReconcilable)
+        {
+            self.record_reconciled(row.operation_id.clone());
+            return;
+        }
+        let recovery = recovery
+            .or_else(|| {
+                self.recoverable
+                    .get(&row.operation_id)
+                    .map(|(_, recovery)| *recovery)
+            })
+            .or_else(|| {
+                (row.operation_kind.is_restore() && row.stage == ProviderOperationStage::Terminal)
+                    .then_some(UnknownRecovery::RetiredRestore)
+            })
+            .unwrap_or(UnknownRecovery::Blocks);
+        self.record_reconciled(row.operation_id.clone());
+        self.record_unknown(row.operation_id.clone(), row.target.clone(), recovery);
     }
 
     pub(crate) fn record_unknown(

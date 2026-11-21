@@ -7,8 +7,8 @@ use collaboration_protocol::{
     ProviderRequestedPolicy, ProviderSettingName, ProviderSettingsMappingStatus,
     ProviderWorkingDirectory, SessionRef,
 };
-use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderOperationStoreError;
+use collaboration_runtime::{ProviderOperationRecord, ProviderOperationStore};
 use collaboration_runtime::{ProviderSessionRecord, ProviderSessionResumeInputs};
 
 pub(crate) enum ProviderOperationCompletion {
@@ -41,11 +41,12 @@ pub(crate) async fn persist_provider_success(
     target: Option<&SessionRef>,
     session_record: Option<&ProviderSessionRecord>,
     terminal_stop_reason: Option<ProviderPromptStopReason>,
-) -> Result<(), ProviderOperationStoreError> {
+) -> Result<Option<ProviderOperationRecord>, ProviderOperationStoreError> {
     if let Some(session_record) = session_record {
         return store
             .settle_session_operation(operation_id, session_record)
-            .await;
+            .await
+            .map(|()| None);
     }
     if let Some(target) = target {
         store
@@ -60,8 +61,8 @@ pub(crate) async fn persist_provider_success(
             terminal_stop_reason,
             chrono::Utc::now().timestamp_millis(),
         )
-        .await?;
-    Ok(())
+        .await
+        .map(Some)
 }
 
 pub(crate) fn effective_settings(
