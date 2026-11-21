@@ -175,13 +175,15 @@ fn status_wire_rejects_nonretained_results_and_unknown_fields() {
 }
 
 #[test]
-fn workspace_status_reply_accepts_only_unit_service_failures() {
+fn workspace_status_reply_accepts_only_the_two_failure_strings() {
     let reply = |failure| json!({"kind": "readRequestStatus", "reply": {"Err": failure}});
     for failure in [
-        json!({"kind": "answerLost"}),
+        json!({"kind": "corrupt"}),
+        json!({"kind": "unavailable"}),
         json!({"kind": "corrupt", "reason": {"kind": "unknownKind", "column": "answer"}}),
-        json!({"kind": "corrupt", "reason": null}),
-        json!({"kind": "unavailable", "extra": true}),
+        json!("answerLost"),
+        json!("alarmUnpublishable"),
+        json!("unknownFailure"),
     ] {
         let wire = reply(failure);
         let decoded = serde_json::from_value::<WorkspaceResponse>(wire.clone());
@@ -190,8 +192,8 @@ fn workspace_status_reply_accepts_only_unit_service_failures() {
             "unexpected service failure for {wire}: {decoded:?}"
         );
     }
-    for kind in ["unavailable", "corrupt"] {
-        let wire = reply(json!({"kind": kind}));
+    for failure in ["unavailable", "corrupt"] {
+        let wire = reply(json!(failure));
         let decoded = serde_json::from_value::<WorkspaceResponse>(wire.clone()).unwrap();
         assert_eq!(serde_json::to_value(decoded).unwrap(), wire);
     }

@@ -1,7 +1,7 @@
 //! Shared requests and replies for Central's calls to an owning workspace.
 use fleet_rpc::{CallError, CallFailure, Rpc, RpcClient, Transport};
-use serde::{Deserialize, Deserializer, Serialize, de};
-use std::{collections::BTreeMap, future::Future};
+use serde::{Deserialize, Serialize};
+use std::future::Future;
 use workspace_model::{
     ActorIdentityId, ChangePosition, ItemRef, ReadScope, RefusalReason, RequestId, Timestamp,
     WorkspaceId,
@@ -92,24 +92,12 @@ pub enum RetainedWriteAnswer {
 
 /// Failure reported by the workspace that owns the retained receipt.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, thiserror::Error)]
-#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub enum WorkspaceStatusFailure {
     #[error("the store is unavailable")]
-    #[serde(deserialize_with = "deny_failure_fields")]
     Unavailable,
     #[error("the store holds corrupt data")]
-    #[serde(deserialize_with = "deny_failure_fields")]
     Corrupt,
-}
-
-// Serde's internally tagged unit visitor consumes extra fields. Require the
-// map left after reading the tag to be empty.
-fn deny_failure_fields<'de, D: Deserializer<'de>>(deserializer: D) -> Result<(), D::Error> {
-    let fields = BTreeMap::<String, de::IgnoredAny>::deserialize(deserializer)?;
-    if let Some(field) = fields.keys().next() {
-        return Err(de::Error::unknown_field(field, &[]));
-    }
-    Ok(())
 }
 
 #[derive(Debug, Serialize, Deserialize)]

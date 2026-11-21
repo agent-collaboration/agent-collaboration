@@ -408,7 +408,7 @@ async fn check_corruption(
         envelope.body,
         json!({
             "kind": "readRequestStatus",
-            "reply": {"Err": {"kind": "corrupt"}}
+            "reply": {"Err": "corrupt"}
         })
     );
 
