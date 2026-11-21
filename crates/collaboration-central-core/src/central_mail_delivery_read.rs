@@ -4,14 +4,12 @@ use crate::{
     central_mail_records::decode_messages,
     central_mail_rows::{encode, timestamp},
     direct_message_rows::failure_text,
-    engine::{
-        attempt_records::EngineSubject, attempt_statements::delete_attempt,
-        machines::direct_message::DirectMessage,
-    },
+    engine::machines::direct_message::DirectMessage,
 };
 use central_engine_model::{InstanceKey, Machine};
 use central_storage::{BatchOutcome, SqlValue, Statement, StatementBatch, StoreFailure};
-use fleet_contracts::MachineConnectionAttachment;
+use fleet_contracts::{EngineSubject, MachineConnectionAttachment};
+use fleet_engine::delete_attempt;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_runtime_ports::{
     guarded_statements::{exact, text},

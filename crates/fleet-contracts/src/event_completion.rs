@@ -12,6 +12,15 @@ pub struct AlarmResult {
     pub workspaces_drained: usize,
 }
 
+impl std::ops::AddAssign for AlarmResult {
+    fn add_assign(&mut self, other: Self) {
+        self.wakes_fired += other.wakes_fired;
+        self.automations_fired += other.automations_fired;
+        self.windows_fired += other.windows_fired;
+        self.workspaces_drained += other.workspaces_drained;
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EventCompletion {
     pub work: AlarmResult,

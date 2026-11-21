@@ -1,17 +1,24 @@
 //! The engine's only view of the runtime that hosts it (P3, module direction):
 //! engine/ names this port and never WorkspaceRuntime, so the module graph has
 //! one direction. `crate::engine_wiring` implements it for WorkspaceRuntime.
-use super::legacy_units::LegacyUnitOutcome;
-use crate::MailDeliveryReady;
+use super::admin::{DiscardOutcome, KindRegistry, RegisteredDiscard};
+use super::alarm_source::{TimedRows, WholeUnit, WholeUnitOutcome};
 use central_engine_model::EngineTime;
-use central_storage::{GuardedStatement, StoreFailure};
+use central_storage::StoreFailure;
 use fleet_contracts::CentralObservation;
+use fleet_contracts::{
+    AlarmNotPublished, EngineSubject, EventCompletion, EventCompletionHook, LegacyUnitOutcome,
+    MailDeliveryReady, ObservedControl,
+};
 use fleet_runtime::DueBatchState;
 use fleet_runtime_ports::CentralStore;
 use std::future::Future;
 
-pub(crate) trait EngineHost: Send + Sync {
+pub trait EngineHost: Send + Sync + Sized {
+    type Timed: TimedRows<Self>;
+    type WholeKind: Copy + Send + Sync + 'static;
     type Host: CentralStore;
+    type AdminKind: Copy + Eq + Send + Sync + 'static;
     fn host(&self) -> &Self::Host;
     /// The one injected clock.
     fn now(&self) -> Result<EngineTime, StoreFailure>;
@@ -23,35 +30,35 @@ pub(crate) trait EngineHost: Send + Sync {
     fn organization_is_provisioned(
         &self,
     ) -> impl Future<Output = Result<bool, StoreFailure>> + Send;
-    /// The notice-window unit's own planning, unchanged notice code (P5).
-    fn plan_due_windows(
+    fn timed_rows(&self) -> &Self::Timed;
+    fn alarm_inputs(&self) -> &'static str;
+    fn admin_kinds(&self) -> &'static KindRegistry<'static, Self::AdminKind>;
+    /// Selects the finisher and event for an attempt the engine resolved on this host.
+    fn finish_registered_discard(
         &self,
-        now: EngineTime,
-    ) -> impl Future<
-        Output = Result<(Vec<GuardedStatement>, Vec<MailDeliveryReady>), LegacyUnitOutcome>,
-    > + Send;
-    /// The workspace-drain unit, unchanged notice code (P5).
-    fn drain_due_workspaces(
+        discard: RegisteredDiscard<'_, Self>,
+    ) -> impl Future<Output = Result<DiscardOutcome, StoreFailure>> + Send;
+    fn ordered_whole_units(&self) -> &'static [Self::WholeKind];
+    fn whole_unit(&self, kind: Self::WholeKind) -> WholeUnit;
+    fn run_whole_unit(
         &self,
+        kind: Self::WholeKind,
         now: EngineTime,
-    ) -> impl Future<Output = Result<usize, LegacyUnitOutcome>> + Send;
-    /// The central turn the notice-window unit commits under, taken without
-    /// waiting (P5 change 7): `None` when another event holds it.
-    fn try_central_turn(&self) -> Option<fleet_runtime::TurnGuard<'_>>;
+        subject: &EngineSubject,
+        observed: &ObservedControl,
+    ) -> impl Future<Output = Result<WholeUnitOutcome, LegacyUnitOutcome>> + Send;
     #[cfg(feature = "test-support")]
     fn pauses(&self) -> &fleet_runtime::PausePoints;
     #[cfg(feature = "test-support")]
     fn record_engine_completion_entry(&self);
-    #[cfg(feature = "test-support")]
-    fn count_legacy_invocation(&self, count: &dyn Fn(&mut fleet_runtime::LegacyUnitInvocations));
 }
 
 /// The engine bound to one host. Every engine operation is a method here, so
 /// none is attributed to WorkspaceRuntime.
-pub(crate) struct Engine<'a, R: EngineHost>(pub(crate) &'a R);
+pub struct Engine<'a, R: EngineHost>(pub(crate) &'a R);
 
 impl<'a, R: EngineHost> Engine<'a, R> {
-    pub(crate) fn new(host: &'a R) -> Self {
+    pub fn new(host: &'a R) -> Self {
         Self(host)
     }
     pub(crate) fn host(&self) -> &'a R::Host {
@@ -72,5 +79,11 @@ impl<'a, R: EngineHost> Engine<'a, R> {
     #[cfg(feature = "test-support")]
     pub(crate) fn pauses(&self) -> &'a fleet_runtime::PausePoints {
         self.0.pauses()
+    }
+}
+
+impl<R: EngineHost> EventCompletionHook for Engine<'_, R> {
+    async fn complete_event(&self) -> Result<EventCompletion, AlarmNotPublished> {
+        self.after_event().await
     }
 }

@@ -77,6 +77,7 @@ pub(crate) trait EffectHandler {
 
 pub(crate) struct ObjectHostEffects<'a, Host: CentralStore> {
     pub host: &'a Host,
+    pub alarm_inputs: &'static str,
     #[cfg(feature = "test-support")]
     pub pauses: &'a fleet_runtime::PausePoints,
 }
@@ -104,7 +105,9 @@ impl<Host: CentralStore> EffectHandler for ObjectHostEffects<'_, Host> {
         let alarm = match &receipt {
             ReceiptStatements::None => AlarmUpdate::Unchanged,
             ReceiptStatements::Request(_) | ReceiptStatements::Admin(_) => {
-                super::query_registry::alarm_update()
+                AlarmUpdate::SetEngineFromQuery {
+                    query: central_engine_model::next_due_sql(self.alarm_inputs),
+                }
             }
         };
         let mut receipt = receipt.into_statements();

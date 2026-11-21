@@ -1,10 +1,10 @@
 //! Recipient windows collate source-owned activity across workspace boundaries.
-use crate::engine::legacy_units::LegacyUnitOutcome;
 use crate::{
     WorkspaceRuntime,
     central_mail_store::{self, timestamp},
 };
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
+use fleet_contracts::LegacyUnitOutcome;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_runtime_ports::{
     guarded_statements::{any, exact, text},
@@ -164,7 +164,13 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
     pub(crate) async fn plan_due_windows(
         &self,
         now: Timestamp,
-    ) -> Result<(Vec<GuardedStatement>, Vec<crate::MailDeliveryReady>), LegacyUnitOutcome> {
+    ) -> Result<
+        (
+            Vec<GuardedStatement>,
+            Vec<fleet_contracts::MailDeliveryReady>,
+        ),
+        LegacyUnitOutcome,
+    > {
         let mut statements = Vec::new();
         let mut deliveries = Vec::new();
         for window in self

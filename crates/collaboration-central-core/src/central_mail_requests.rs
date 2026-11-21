@@ -166,7 +166,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                     None,
                     now,
                 )?;
-                delivery_ready = Some(crate::MailDeliveryReady::from(&message));
+                delivery_ready = Some(fleet_contracts::MailDeliveryReady::from(&message));
                 Ok((
                     vec![crate::central_mail_rows::insert_message_due(
                         &message,

@@ -23,6 +23,21 @@ pub(super) const FLEET_PURE_CRATES: [(&str, &[&str]); 2] = [
     ),
 ];
 const FLEET_ACCESS: &str = "fleet-workspace-access";
+const FLEET_ENGINE: &str = "fleet-engine";
+pub(super) const ENGINE_EDGES: &[&str] = &[
+    "central-engine-model",
+    "central-storage",
+    "fleet-contracts",
+    "fleet-runtime",
+    "fleet-runtime-ports",
+    "workspace-model",
+];
+const FLEET_ENGINE_FUTURES: &[&str] = &[
+    "futures-core",
+    "futures-sink",
+    "futures-task",
+    "futures-util",
+];
 const FLEET_WASM_TARGET: &str = "wasm32-unknown-unknown";
 // Chrono's wasm support reaches these runtime-independent helpers via js-sys.
 const FLEET_WASM_SUPPORT_PACKAGES: &[&str] = &["futures-core", "futures-task", "futures-util"];
@@ -141,6 +156,7 @@ pub(super) fn check_boundaries(
         }
         check_workspace_driver_edges(graph, source)?;
     }
+    check_engine_workspace_edges(graph)?;
     for name in PROXY_CRATES {
         let Some(source) = graph.workspace_id(name) else {
             continue;
@@ -158,6 +174,50 @@ pub(super) fn check_boundaries(
         }
     }
     Ok(())
+}
+
+fn check_engine_workspace_edges(
+    graph: &NonDevDependencyGraph,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let Some(source) = graph.workspace_id(FLEET_ENGINE) else {
+        return Ok(());
+    };
+    for (destination, kind) in graph.edges.get(source).into_iter().flatten() {
+        if graph.workspace_members.contains(destination) {
+            let target = graph
+                .names
+                .get(destination)
+                .ok_or("dependency name absent")?;
+            if !ENGINE_EDGES.contains(&target.as_str()) {
+                return Err(format!(
+                    "BD1: forbidden {kind:?} dependency {FLEET_ENGINE} -> {target}"
+                )
+                .into());
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn engine_rejects_core_job_and_host_edges() {
+    for kind in [DependencyKind::Normal, DependencyKind::Build] {
+        assert!(
+            check_engine_workspace_edges(&graph(&[(FLEET_ENGINE, "fleet-runtime", kind)])).is_ok()
+        );
+        for target in [
+            "collaboration-central-core",
+            "fleet-wakes",
+            "collaboration-central-cloudflare",
+        ] {
+            let error = check_engine_workspace_edges(&graph(&[(FLEET_ENGINE, target, kind)]))
+                .expect_err("engine dependencies must point down");
+            assert_eq!(
+                error.to_string(),
+                format!("BD1: forbidden {kind:?} dependency {FLEET_ENGINE} -> {target}")
+            );
+        }
+    }
 }
 
 // Workspace-wide metadata merges unrelated features into external packages.
@@ -195,7 +255,7 @@ pub(super) fn check_pure_dependency_tree(root: &Path) -> Result<(), Box<dyn std:
         .into_iter()
         .chain(FLEET_PURE_CRATES)
         .map(|(package, _)| package)
-        .chain([FLEET_ACCESS])
+        .chain([FLEET_ACCESS, FLEET_ENGINE])
     {
         check_package_targets(root, package)?;
     }
@@ -204,7 +264,9 @@ pub(super) fn check_pure_dependency_tree(root: &Path) -> Result<(), Box<dyn std:
 
 fn check_package_targets(root: &Path, package: &str) -> Result<(), Box<dyn std::error::Error>> {
     check_package_tree(root, package, None)?;
-    if package == FLEET_ACCESS || FLEET_PURE_CRATES.iter().any(|(name, _)| *name == package) {
+    if matches!(package, FLEET_ACCESS | FLEET_ENGINE)
+        || FLEET_PURE_CRATES.iter().any(|(name, _)| *name == package)
+    {
         check_package_tree(root, package, Some(FLEET_WASM_TARGET)).map_err(|error| {
             format!("{package} dependency tree for {FLEET_WASM_TARGET}: {error}")
         })?;
@@ -242,7 +304,9 @@ fn check_package_tree(
         )
         .into());
     }
-    let allowed_support = if target == Some(FLEET_WASM_TARGET) {
+    let allowed_support = if package == FLEET_ENGINE {
+        FLEET_ENGINE_FUTURES
+    } else if target == Some(FLEET_WASM_TARGET) {
         FLEET_WASM_SUPPORT_PACKAGES
     } else {
         &[]
@@ -262,7 +326,7 @@ fn check_tree_output(
         if !is_effectful(name) || allowed_support.contains(&name) {
             continue;
         }
-        if package == FLEET_ACCESS && name == "tokio" {
+        if matches!(package, FLEET_ACCESS | FLEET_ENGINE) && name == "tokio" {
             let features = features.strip_suffix(" (*)").unwrap_or(features).trim();
             if matches!(features, "" | "sync") {
                 continue;

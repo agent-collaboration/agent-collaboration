@@ -4,10 +4,7 @@ pub use crate::engine::machines::owed_reply::{
     Event as OwedEvent, Finish as OwedFinish, OwedReply, OwedReplyRefusal,
     RouterAnswer as OwedAnswer, State as OwedState,
 };
-pub use crate::engine::{
-    receipts::{EngineReceipt, EngineRefusal},
-    requests::EngineRequestOutcome,
-};
+pub use fleet_engine::{EngineReceipt, EngineRefusal, EngineRequestOutcome};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -87,7 +84,7 @@ impl<Host: fleet_runtime_ports::CentralStore, Stores: fleet_runtime_ports::Works
             }
         };
         let actor = self.access().resolve_identity(&identity).await?;
-        crate::engine::port::Engine::new(self)
+        fleet_engine::Engine::new(self)
             .request_engine::<OwedReply, _>(
                 &crate::engine::owed_reply_store::OwedReplyStore(self),
                 actor,

@@ -1,20 +1,15 @@
-use super::attempt_records::EngineSubject;
 use central_engine_model::{InstanceKey, ItemFailureClass, Machine};
-use central_storage::{CorruptReason, GuardedStatement, ReadOutcome, SqlValue, StoreFailure};
+use central_storage::{CorruptReason, GuardedStatement, ReadOutcome, StoreFailure};
+use fleet_contracts::{EngineSubject, MailDeliveryReady, SubjectVersion};
 use fleet_runtime_ports::workspace_decode_error::corrupt;
 use std::future::Future;
 
-/// Raw comparison values survive a decode failure, so recording it still checks
-/// the exact subject that was read. The adapter owns their SQL interpretation.
-#[derive(Clone, Debug)]
-pub(crate) struct SubjectVersion(pub Vec<SqlValue>);
-
-pub(crate) struct Versioned<State> {
+pub struct Versioned<State> {
     pub state: State,
     pub version: SubjectVersion,
 }
 
-pub(crate) enum LoadFailure {
+pub enum LoadFailure {
     Corrupt {
         class: ItemFailureClass,
         version: SubjectVersion,
@@ -24,7 +19,7 @@ pub(crate) enum LoadFailure {
 }
 
 /// One machine's row codec and static statements. Reducers never see SQL.
-pub(crate) trait StoreAdapter<M: Machine>: Sync {
+pub trait StoreAdapter<M: Machine>: Sync {
     fn load(
         &self,
         key: &InstanceKey,
@@ -40,7 +35,7 @@ pub(crate) trait StoreAdapter<M: Machine>: Sync {
         key: &InstanceKey,
         effect: &M::Effect,
     ) -> Result<Vec<GuardedStatement>, StoreFailure>;
-    fn mail_ready(&self, _effect: &M::Effect) -> Option<crate::MailDeliveryReady> {
+    fn mail_ready(&self, _effect: &M::Effect) -> Option<MailDeliveryReady> {
         None
     }
     fn failure_sql(&self) -> &'static str;
@@ -62,7 +57,7 @@ pub(crate) fn corrupt_class(reason: CorruptReason) -> ItemFailureClass {
     }
 }
 
-pub(crate) fn load_store_failure(failure: StoreFailure) -> LoadFailure {
+pub fn load_store_failure(failure: StoreFailure) -> LoadFailure {
     match failure {
         StoreFailure::AnswerLost => LoadFailure::Uncertain,
         failure @ (StoreFailure::Unavailable
@@ -70,7 +65,7 @@ pub(crate) fn load_store_failure(failure: StoreFailure) -> LoadFailure {
         | StoreFailure::AlarmUnpublishable { .. }) => LoadFailure::StoreDown(failure),
     }
 }
-pub(crate) fn decode_load_failure(failure: StoreFailure, version: SubjectVersion) -> LoadFailure {
+pub fn decode_load_failure(failure: StoreFailure, version: SubjectVersion) -> LoadFailure {
     match failure {
         StoreFailure::Corrupt { reason } => LoadFailure::Corrupt {
             class: corrupt_class(reason),
@@ -81,7 +76,7 @@ pub(crate) fn decode_load_failure(failure: StoreFailure, version: SubjectVersion
         | StoreFailure::AlarmUnpublishable { .. }) => load_store_failure(failure),
     }
 }
-pub(crate) fn raw_version(rows: &ReadOutcome) -> Result<Option<SubjectVersion>, LoadFailure> {
+pub fn raw_version(rows: &ReadOutcome) -> Result<Option<SubjectVersion>, LoadFailure> {
     match rows.rows.as_slice() {
         [] => Ok(None),
         [row] => Ok(Some(SubjectVersion(row.clone()))),

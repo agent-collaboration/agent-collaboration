@@ -1,8 +1,9 @@
 use super::{
-    attempt_records::{EngineSubject, StoredAttempt, decode_attempt},
+    attempt_records::{StoredAttempt, decode_attempt},
     attempt_statements::read_attempt,
 };
 use central_storage::StoreFailure;
+use fleet_contracts::EngineSubject;
 use fleet_runtime_ports::CentralStore;
 
 /// Keep storage refusal separate from a readable but corrupt control record.
