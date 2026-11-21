@@ -1,8 +1,0 @@
-[
-{"machine":{"enrollmentId":"019a3dce-2000-7000-8000-000000000002","organizationId":"019a3dce-2000-7000-8000-000000000001","tokenExpiresAt":1793448600},"result":"admitted"},
-{"reason":{"kind":"unknownMachine"},"result":"refused"},
-{"reason":{"kind":"enrollmentNotActive"},"result":"refused"},
-{"reason":{"kind":"superseded"},"result":"refused"},
-{"reason":{"kind":"machineInAnotherOrganization"},"result":"refused"},
-{"reason":{"kind":"wrongClient"},"result":"refused"}
-]

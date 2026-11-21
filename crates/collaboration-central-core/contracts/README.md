@@ -16,11 +16,8 @@ UPDATE_FLEET_IDENTITY_CONTRACTS=1 cargo test -p collaboration-central-core
 cargo test -p collaboration-central-core
 ```
 
-Permanent tests cover issuer decisions, observable enrollments, presence,
-organization commands and all four admin lookups with their closed results.
-Unknown or foreign lookup subjects carry no result payload. Lookups never
-answer `secondFactorRequired`; their approval and start times use Unix
-milliseconds.
+Permanent tests cover issuer decisions, observable enrollments and
+organization admin contracts.
 
 Bodies refuse unknown fields. Machine token extension claims accept the
 issuer's registered JWT claims alongside them. Writers omit absent optional
