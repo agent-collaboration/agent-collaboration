@@ -1,7 +1,7 @@
 //! ACP route for Router-owned provider Sessions on the shared connection shell.
 use crate::provider_acp_content_translation::parse_prompt_content;
 use crate::provider_acp_event_projection::{
-    ObservedEventPosition, ProviderSessionObservers, stream_prompt,
+    ObservedEventPosition, PromptEventStream, ProviderSessionObservers, stream_prompt,
 };
 use codex_acp_adapter::{
     AcpConnectionContext, AcpRouteFuture, AcpRouterChannels, AcpSchemaCatalog, AcpSessionRoute,
@@ -27,6 +27,7 @@ use std::{
     io,
     path::PathBuf,
     sync::Arc,
+    time::Duration,
 };
 use tokio::task::JoinSet;
 
@@ -36,6 +37,8 @@ use restore::{
     AcpRestoreMethod, AwaitingRestore, RESTORE_IN_PROGRESS, RestoreCompletion, RestoreRequest,
     STORE_ELAPSED, WaitingSessionFrame, reject_duplicate_load,
 };
+
+pub(crate) const STORE_BUDGET: Duration = Duration::from_secs(10);
 
 pub struct ProviderAcpSessionRoute {
     endpoint: SessionEndpointRef,
@@ -112,6 +115,7 @@ pub(crate) fn command_failure(id: Value, error: CommandFailure) -> Value {
 struct PlacedPrompt {
     commands: Arc<dyn SessionCommandPort>,
     events: Arc<dyn SessionEventHub>,
+    clock: Arc<dyn RuntimeClock>,
     output: codex_acp_adapter::AcpOutputSender,
     id: Value,
     session: SessionRef,
@@ -127,6 +131,7 @@ async fn answer_by_placement(prompt: PlacedPrompt) {
     let PlacedPrompt {
         commands,
         events,
+        clock,
         output,
         id,
         session,
@@ -145,15 +150,16 @@ async fn answer_by_placement(prompt: PlacedPrompt) {
     .await;
     let frame = match placement {
         BusyPromptPlacement::InTurn { turn_id } => {
-            stream_prompt(
+            stream_prompt(PromptEventStream {
                 output,
                 id,
                 turn_id,
-                events.as_ref(),
+                events: events.as_ref(),
+                clock: clock.as_ref(),
                 session,
                 attachment,
                 observed,
-            )
+            })
             .await;
             return;
         }
@@ -595,6 +601,7 @@ async fn serve_provider_requests(
                             prompts.spawn(answer_by_placement(PlacedPrompt {
                                 commands: Arc::clone(&route.commands),
                                 events: Arc::clone(&route.events),
+                                clock: Arc::clone(&route.clock),
                                 output: router.output.clone(),
                                 id,
                                 session,
@@ -647,6 +654,7 @@ async fn serve_provider_requests(
                                         prompts.spawn(answer_by_placement(PlacedPrompt {
                                             commands: Arc::clone(&route.commands),
                                             events: Arc::clone(&route.events),
+                                            clock: Arc::clone(&route.clock),
                                             output: router.output.clone(),
                                             id,
                                             session,
@@ -661,16 +669,18 @@ async fn serve_provider_requests(
                                     Ok(turn) => {
                                         let output = router.output.clone();
                                         let events = Arc::clone(&route.events);
+                                        let clock = Arc::clone(&route.clock);
                                         prompts.spawn(async move {
-                                            stream_prompt(
+                                            stream_prompt(PromptEventStream {
                                                 output,
                                                 id,
-                                                turn.turn_id,
-                                                events.as_ref(),
+                                                turn_id: turn.turn_id,
+                                                events: events.as_ref(),
+                                                clock: clock.as_ref(),
                                                 session,
                                                 attachment,
                                                 observed,
-                                            )
+                                            })
                                             .await;
                                         });
                                         continue;

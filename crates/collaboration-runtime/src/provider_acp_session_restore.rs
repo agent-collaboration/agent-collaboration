@@ -6,12 +6,11 @@ use message_board::{Identity, SessionRef};
 use router_clock::{ClockInstant, RuntimeClock};
 use serde_json::Value;
 use session_event_model::SessionState;
-use std::{collections::VecDeque, future::Future, time::Duration};
+use std::{collections::VecDeque, future::Future};
 
-use super::{command_failure, failure, response, session_result};
+use super::{STORE_BUDGET, command_failure, failure, response, session_result};
 use crate::provider_acp_event_projection::PreparedProviderObservation;
 
-const STORE_BUDGET: Duration = Duration::from_secs(10);
 pub(super) const STORE_ELAPSED: (i32, &str) = (-32000, "the store didn't respond in time");
 
 #[derive(Clone, Copy, PartialEq, Eq)]

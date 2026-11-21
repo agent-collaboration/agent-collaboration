@@ -5,7 +5,8 @@ use crate::owner_inbox::{
 };
 use crate::{ProviderOperationStore, ProviderSessionEventHub};
 use codex_acp_adapter::bounded_acp_output;
-use std::num::NonZeroUsize;
+use router_clock::ManualClock;
+use std::{num::NonZeroUsize, time::Duration};
 use uuid::Uuid;
 
 const TURN: &str = "held-turn";
@@ -66,6 +67,20 @@ async fn busy_prompt_rebase_reply(
     retained: Option<StopReason>,
     later: &[SessionEvent],
 ) -> Value {
+    busy_prompt_rebase_reply_with_history(state, retained, later, ReattachHistory::Available).await
+}
+
+enum ReattachHistory {
+    Available,
+    HeldThroughDeadline,
+}
+
+async fn busy_prompt_rebase_reply_with_history(
+    state: SessionState,
+    retained: Option<StopReason>,
+    later: &[SessionEvent],
+    history: ReattachHistory,
+) -> Value {
     let root = tempfile::tempdir().expect("private root");
     let store = ProviderOperationStore::open(&root.path().join("operations.sqlite"))
         .await
@@ -117,15 +132,17 @@ async fn busy_prompt_rebase_reply(
         .get(&session)
         .expect("connection observer")
         .clone();
-    let mut waiter = std::pin::pin!(stream_prompt(
+    let clock = ManualClock::new(chrono::DateTime::UNIX_EPOCH);
+    let mut waiter = std::pin::pin!(stream_prompt(PromptEventStream {
         output,
-        json!(4),
-        TURN.to_owned(),
-        hub.as_ref(),
-        session.clone(),
+        id: json!(4),
+        turn_id: TURN.to_owned(),
+        events: hub.as_ref(),
+        clock: &clock,
+        session: session.clone(),
         attachment,
-        observed
-    ));
+        observed,
+    }));
     assert!(
         futures_util::poll!(&mut waiter).is_pending(),
         "busy prompt waits on its turn"
@@ -164,7 +181,22 @@ async fn busy_prompt_rebase_reply(
         }
     }
 
-    waiter.await;
+    match history {
+        ReattachHistory::Available => waiter.await,
+        ReattachHistory::HeldThroughDeadline => {
+            let held = hub.hold_history_for_test(session.clone()).await;
+            assert!(
+                futures_util::poll!(&mut waiter).is_pending(),
+                "the lagged prompt waits for the held history"
+            );
+            clock.advance(Duration::from_secs(10)).expect("reach L");
+            assert!(
+                futures_util::poll!(&mut waiter).is_ready(),
+                "lagged prompt must answer at L even with history held"
+            );
+            drop(held);
+        }
+    }
     let reply = replies.recv().await.expect("ACP response");
     assert_eq!(reply.get("id"), Some(&json!(4)));
     assert!(replies.try_recv().is_err(), "prompt answered exactly once");
@@ -186,6 +218,21 @@ async fn busy_prompt_recovers_retained_terminal_after_full_inbox_rebase() {
             "{reply}"
         );
     }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn lagged_prompt_answers_stream_unavailable_at_l_with_history_held() {
+    let reply = busy_prompt_rebase_reply_with_history(
+        SessionState::Running,
+        Some(StopReason::MaxTokens),
+        &[],
+        ReattachHistory::HeldThroughDeadline,
+    )
+    .await;
+    assert_eq!(
+        reply,
+        json!({"jsonrpc":"2.0","id":4,"error":{"code":-32000,"message":"Session event stream unavailable"}})
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]

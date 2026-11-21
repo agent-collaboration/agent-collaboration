@@ -1,6 +1,5 @@
 //! Projects shared provider Session events onto one ACP client connection.
-use crate::provider_acp_session_route::failure;
-use crate::provider_acp_session_route::response;
+use crate::provider_acp_session_route::{STORE_BUDGET, failure, response};
 use collaboration_contracts::{HubEvent, SessionEventAttachment, SessionEventHub};
 use message_board::SessionRef;
 use serde_json::{Value, json};
@@ -23,6 +22,7 @@ pub(crate) struct ObservedEventPosition {
 }
 
 const TURN_OUTCOME_UNREADABLE: &str = "the turn's outcome couldn't be read from the event stream; check the session before sending again";
+const SESSION_EVENT_STREAM_UNAVAILABLE: &str = "Session event stream unavailable";
 
 fn capabilities_from_snapshot(
     snapshot: &[collaboration_contracts::HubEvent],
@@ -412,17 +412,30 @@ fn snapshot_turn(snapshot: &[HubEvent]) -> SnapshotTurn<'_> {
         })
 }
 
-pub(crate) async fn stream_prompt(
-    output: codex_acp_adapter::AcpOutputSender,
-    id: Value,
-    turn_id: String,
-    events: &dyn SessionEventHub,
-    session: SessionRef,
-    mut attachment: SessionEventAttachment,
-    mut observed: watch::Receiver<Option<ObservedEventPosition>>,
-) {
+pub(crate) struct PromptEventStream<'a> {
+    pub(crate) output: codex_acp_adapter::AcpOutputSender,
+    pub(crate) id: Value,
+    pub(crate) turn_id: String,
+    pub(crate) events: &'a dyn SessionEventHub,
+    pub(crate) clock: &'a dyn router_clock::RuntimeClock,
+    pub(crate) session: SessionRef,
+    pub(crate) attachment: SessionEventAttachment,
+    pub(crate) observed: watch::Receiver<Option<ObservedEventPosition>>,
+}
+
+pub(crate) async fn stream_prompt(stream: PromptEventStream<'_>) {
     use tokio::sync::broadcast::error::RecvError;
 
+    let PromptEventStream {
+        output,
+        id,
+        turn_id,
+        events,
+        clock,
+        session,
+        mut attachment,
+        mut observed,
+    } = stream;
     let mut replay = std::mem::take(&mut attachment.snapshot).into_iter();
     let mut identity_unknown = false;
     loop {
@@ -436,11 +449,23 @@ pub(crate) async fn stream_prompt(
                 ..
             })
             | Err(RecvError::Lagged(_)) => {
-                let Ok(mut replacement) = events.attach(session.clone()).await else {
-                    let _sent = output
-                        .send(failure(id, -32000, TURN_OUTCOME_UNREADABLE))
-                        .await;
-                    return;
+                let mut replacement = match router_clock::timeout(
+                    clock,
+                    STORE_BUDGET,
+                    events.attach(session.clone()),
+                )
+                .await
+                {
+                    Ok(Ok(replacement)) => replacement,
+                    result => {
+                        let message = if result.is_err() {
+                            SESSION_EVENT_STREAM_UNAVAILABLE
+                        } else {
+                            TURN_OUTCOME_UNREADABLE
+                        };
+                        let _sent = output.send(failure(id, -32000, message)).await;
+                        return;
+                    }
                 };
                 let retains_end = replacement.snapshot.iter().any(|event| matches!(
                         &event.event, SessionEvent::TurnEnded { turn_id: ended, .. } if ended == &turn_id
@@ -469,7 +494,7 @@ pub(crate) async fn stream_prompt(
             Ok(event) => event,
             Err(RecvError::Closed) => {
                 let _sent = output
-                    .send(failure(id, -32000, "Session event stream unavailable"))
+                    .send(failure(id, -32000, SESSION_EVENT_STREAM_UNAVAILABLE))
                     .await;
                 return;
             }
