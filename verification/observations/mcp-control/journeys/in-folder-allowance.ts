@@ -40,6 +40,7 @@ import {
 
 const NAME = "inFolderAllowance";
 const knownRefusal = "approvals are not available on this build";
+const deleteSeed = Buffer.from("OK\n", "utf8");
 const restartRecord = z.strictObject({
   sourceHead: z.string(),
   serviceDirectory: z.string(),
@@ -68,12 +69,41 @@ const allowSelection = z.looseObject({
 const cancelSelection = z.looseObject({
   outcome: z.looseObject({ outcome: z.literal("cancelled") }),
 });
+const cancelledPrompt = z.looseObject({ stopReason: z.literal("cancelled") });
 const pending = z.looseObject({ output: z.looseObject({ kind: z.literal("pending") }) });
 
 type Verdict = "pass" | "failed" | "inconclusive";
 type AllowanceAction = "write" | "delete" | "touch";
 type ProbeResult = { verdict: Verdict; detail: string; asked?: boolean };
 type Prompt = Awaited<ReturnType<typeof preparePrompt>>;
+
+interface MarkerEvidence {
+  readonly exists: boolean;
+  readonly empty: boolean;
+  readonly exact: boolean;
+  readonly seedIntact: boolean;
+}
+
+interface PermissionExchange {
+  readonly requests: readonly WireEntry[];
+  readonly request: WireEntry | undefined;
+  readonly reply: WireEntry | undefined;
+  readonly cancel: WireEntry | undefined;
+  readonly terminal: WireEntry | undefined;
+}
+
+interface VerifyEditDecisionProps {
+  readonly inputs: CaseInputs;
+  readonly target: SessionRef;
+  readonly label: string;
+  readonly prompt: Prompt;
+  readonly path: string;
+  readonly expectedAllow: boolean;
+  readonly outcome: Awaited<ReturnType<typeof waitOperation>>;
+  readonly exchange: PermissionExchange;
+  readonly marker: MarkerEvidence;
+  readonly action: AllowanceAction;
+}
 
 function within(path: string, root: string): boolean {
   const rel = relative(root, path);
@@ -119,16 +149,17 @@ function markerPath(
   return path;
 }
 
-function markerEvidence(path: string) {
+export function markerEvidence(path: string): MarkerEvidence {
   const info = lstatSync(path, { throwIfNoEntry: false });
+  const bytes =
+    info?.isFile() === true && info.size >= 2 && info.size <= deleteSeed.length
+      ? readFileSync(path)
+      : undefined;
   return {
     exists: info !== undefined,
     empty: info?.isFile() === true && info.size === 0,
-    exact:
-      info?.isFile() === true &&
-      info.size >= 2 &&
-      info.size <= 3 &&
-      readFileSync(path, "utf8").trim() === "OK",
+    exact: bytes?.toString("utf8").trim() === "OK",
+    seedIntact: bytes?.equals(deleteSeed) === true,
   };
 }
 
@@ -194,15 +225,19 @@ function probeInstruction(action: AllowanceAction, path: string): string {
 
 function observedFileEffect(
   action: AllowanceAction,
-  file: ReturnType<typeof markerEvidence>,
+  file: MarkerEvidence,
   allowed: boolean,
 ): boolean {
-  if (action === "delete") return allowed ? !file.exists : file.exact;
+  if (action === "delete") return allowed ? !file.exists : file.seedIntact;
   if (!allowed) return !file.exists;
   return action === "write" ? file.exact : file.empty;
 }
 
-function matchingEntries(inputs: CaseInputs, target: SessionRef, prompt: Prompt) {
+function matchingEntries(
+  inputs: CaseInputs,
+  target: SessionRef,
+  prompt: Prompt,
+): PermissionExchange {
   const wire = wireEntries(inputs);
   const dispatch = wire.filter(promptFrame(target, prompt.token));
   const first = dispatch[0];
@@ -241,6 +276,23 @@ function matchingEntries(inputs: CaseInputs, target: SessionRef, prompt: Prompt)
   return { requests, request, reply, cancel, terminal };
 }
 
+interface RefusalWitnessProps {
+  readonly action: AllowanceAction;
+  readonly marker: MarkerEvidence;
+  readonly exchange: Pick<PermissionExchange, "reply" | "cancel" | "terminal">;
+}
+
+export function confirmsRefusedEdit({ action, marker, exchange }: RefusalWitnessProps): boolean {
+  const { reply, cancel, terminal } = exchange;
+  return (
+    observedFileEffect(action, marker, false) &&
+    cancel !== undefined &&
+    cancelSelection.safeParse(reply?.frame?.result).success &&
+    terminal?.disposition === "forwarded" &&
+    cancelledPrompt.safeParse(terminal.frame?.result).success
+  );
+}
+
 async function observeEdit(
   inputs: CaseInputs,
   target: SessionRef,
@@ -253,7 +305,7 @@ async function observeEdit(
   const path = markerPath(inputs, target, "allowance-" + prompt.token + ".txt", outside, action);
   if (markerEvidence(path).exists) throw new Error("the probe marker already exists");
   const input = { ...prompt, text: probeInstruction(action, path) };
-  if (action === "delete") writeFileSync(path, "OK\n", { flag: "wx", mode: 0o600 });
+  if (action === "delete") writeFileSync(path, deleteSeed, { flag: "wx", mode: 0o600 });
   const capture = join(control(inputs).gateDirectory, "permission-probe.json");
   writeFileSync(capture, JSON.stringify({ sessionId: target.sessionId, marker: basename(path) }), {
     flag: "wx",
@@ -265,8 +317,9 @@ async function observeEdit(
     const outcome = await waitOperation(inputs, label + "-wait", prompt.operationId);
     if (outcome.kind === "answered" && pending.safeParse(outcome.value).success)
       throw new Error("the edit prompt is still active after the observer bound");
-    const { requests, request, reply, cancel, terminal } = matchingEntries(inputs, target, input);
-    const beforeCleanup = markerEvidence(path);
+    const exchange = matchingEntries(inputs, target, input);
+    const { requests, request, reply, cancel, terminal } = exchange;
+    const marker = markerEvidence(path);
     record(inputs.context, {
       step: "allowance-edit-witness",
       label,
@@ -281,20 +334,20 @@ async function observeEdit(
       reply,
       cancel,
       terminal,
-      file: beforeCleanup,
+      file: marker,
     });
-    const result = await verifyEditDecision(
+    const result = await verifyEditDecision({
       inputs,
       target,
       label,
-      input,
+      prompt: input,
       path,
       expectedAllow,
       outcome,
-      { requests, request, reply, cancel, terminal },
-      beforeCleanup,
+      exchange,
+      marker,
       action,
-    );
+    });
     return {
       ...result,
       asked:
@@ -306,19 +359,10 @@ async function observeEdit(
   }
 }
 
-async function verifyEditDecision(
-  inputs: CaseInputs,
-  target: SessionRef,
-  label: string,
-  input: Prompt,
-  path: string,
-  expectedAllow: boolean,
-  outcome: Awaited<ReturnType<typeof waitOperation>>,
-  { requests, request, reply, cancel }: ReturnType<typeof matchingEntries>,
-  beforeCleanup: ReturnType<typeof markerEvidence>,
-  action: AllowanceAction,
-): Promise<ProbeResult> {
-  const prompt = input;
+async function verifyEditDecision(props: VerifyEditDecisionProps): Promise<ProbeResult> {
+  const { inputs, target, label, prompt, path, expectedAllow, outcome, exchange, marker, action } =
+    props;
+  const { requests, request, reply } = exchange;
   if (request === undefined || reply === undefined) {
     const completed =
       outcome.kind === "answered" &&
@@ -333,7 +377,7 @@ async function verifyEditDecision(
     const result = {
       verdict: "inconclusive" as const,
       detail:
-        !requests.length && observedFileEffect(action, beforeCleanup, true) && completed
+        !requests.length && observedFileEffect(action, marker, true) && completed
           ? "the harness completed the file action without an ACP permission request"
           : "no uniquely correlated permission exchange for the marker action",
     };
@@ -350,23 +394,19 @@ async function verifyEditDecision(
     if (
       !selected.success ||
       selected.data.outcome.optionId !== option ||
-      !observedFileEffect(action, beforeCleanup, true)
+      !observedFileEffect(action, marker, true)
     )
       return {
         verdict: "failed",
         detail: "the Router did not select allow-once for the exact successful edit",
       };
-    await verifyCompletedPrompt(inputs, label, target, input, outcome);
+    await verifyCompletedPrompt(inputs, label, target, prompt, outcome);
     return { verdict: "pass", detail: "genuine ACP allow-once, exact file and completed turn" };
   }
-  if (
-    !observedFileEffect(action, beforeCleanup, false) ||
-    cancel === undefined ||
-    !cancelSelection.safeParse(reply.frame?.result).success
-  )
+  if (!confirmsRefusedEdit({ action, marker, exchange }))
     return {
       verdict: "failed",
-      detail: "the managed refusal did not cancel the request and preserve the prior file state",
+      detail: "the refusal requires a cancelled permission reply and prompt, and intact file state",
     };
   const refusal = requireFailure(
     outcome,
