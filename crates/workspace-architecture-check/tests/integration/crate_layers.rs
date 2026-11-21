@@ -280,18 +280,7 @@ struct CargoPackage {
     id: String,
     name: String,
     #[serde(default)]
-    manifest_path: std::path::PathBuf,
-    #[serde(default)]
-    targets: Vec<ManifestTarget>,
-    #[serde(default)]
     dependencies: Vec<ManifestDependency>,
-}
-
-#[derive(Deserialize)]
-struct ManifestTarget {
-    name: String,
-    kind: Vec<String>,
-    src_path: std::path::PathBuf,
 }
 
 #[derive(Deserialize)]
@@ -429,7 +418,7 @@ fn collaboration_crate_layers_point_downward() -> Result<(), Box<dyn std::error:
         .into());
     }
     let metadata: CargoMetadata = serde_json::from_slice(&output.stdout)?;
-    test_support_policy::check_workspace(&root, &metadata.packages, &metadata.workspace_members)?;
+    test_support_policy::check_workspace(&metadata.packages, &metadata.workspace_members)?;
     let graph = NonDevDependencyGraph::from_metadata(metadata);
     for (source, destinations) in &graph.dev_edges {
         if !graph.workspace_members.contains(source) {
@@ -484,8 +473,6 @@ fn fixture_graph(
     .map(|(id, name)| CargoPackage {
         id: id.to_owned(),
         name: name.to_owned(),
-        manifest_path: std::path::PathBuf::new(),
-        targets: Vec::new(),
         dependencies: Vec::new(),
     })
     .collect();

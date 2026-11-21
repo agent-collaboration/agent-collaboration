@@ -1,9 +1,8 @@
-//! Central-owned organization, issuer-decision and lookup contracts.
+//! Central-owned organization and issuer-decision contracts.
 mod authorization_revisions;
 mod device_login_values;
 mod enrollment_records;
 mod identity_decisions;
-mod identity_lookups;
 mod machine_ids;
 mod organization_commands;
 mod organization_provisioning;
@@ -12,7 +11,6 @@ pub use authorization_revisions::*;
 pub use device_login_values::*;
 pub use enrollment_records::*;
 pub use identity_decisions::*;
-pub use identity_lookups::*;
 pub use machine_ids::*;
 pub use organization_commands::*;
 pub use organization_provisioning::*;

@@ -7,8 +7,7 @@ cargo nextest run --locked --profile ci -p workspace-architecture-check
 ```
 
 `integration/main.rs` gathers 2 former external test roots.
-Cases enforce normal/build crate layers, test-support dependency ownership,
-explicit test target layout and the two exact foreign-source exceptions, plus
+Cases enforce normal/build crate layers, test-support dependency ownership, and
 the module-cycle ratchet; the tool-dependent cycle scan retains its existing ignored status. Library unit tests remain colocated with their implementations.
 
 Each aggregate declares shared helper implementations once. Existing fixture

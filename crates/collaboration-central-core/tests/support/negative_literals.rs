@@ -90,30 +90,6 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
                 invalid.push(wrong_params);
             }
         }
-        "AdmitMachineConnection" | "AdmittedMachine" | "MachineConnectionAdmission" => {
-            if let Some(first) = literals.first() {
-                let legacy_fields: &[&str] = if name == "AdmitMachineConnection" {
-                    &["installation"]
-                } else {
-                    &["installation", "peer"]
-                };
-                for field in legacy_fields {
-                    let mut value = first.clone();
-                    let target = if name == "MachineConnectionAdmission" {
-                        &mut value["machine"]
-                    } else {
-                        &mut value
-                    };
-                    target[*field] = json!("019a3dce-2000-7000-8000-000000000001");
-                    invalid.push(value);
-                }
-                if name == "AdmittedMachine" {
-                    for peer in ["00000000-0000-4000-8000-000000000001", "019A3DCE-2000-7000-8000-000000000001"] {
-                        let mut value = first.clone(); value["peer"] = json!(peer); invalid.push(value);
-                    }
-                }
-            }
-        }
         "DecideDeviceLogin" | "PresentedMachine" => {
             if let Some(first) = literals.first() {
                 for peer in ["00000000-0000-4000-8000-000000000001", "019A3DCE-2000-7000-8000-000000000001"] {
@@ -121,9 +97,6 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
                 }
             }
         }
-        "OwnerRefusal" => invalid.push(json!({"kind":"secondFactorRequired","withinSeconds":900})),
-        "IdentityLookupResult" | "WorkspaceLookupResult" | "MachineLookupResult" | "CommandStatusResult" | "WhoIsLoggedInResult" => invalid.push(json!({"result":"refused","reason":{"kind":"secondFactorRequired","withinSeconds":900}})),
-        "IdentityLookup" => invalid.push(json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","subject":{"kind":"person","personId":"019a3dce-2000-7000-8000-000000000001"}})),
         "AbsolutePath" => invalid.extend([
             json!("relative"), json!("C:\\x"), json!(""), json!("/nul\0"),
             json!(format!("/{}", "a".repeat(4096))),
@@ -152,16 +125,15 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
         "SequenceNumber" => invalid.extend([json!(9007199254740992_u64), json!(-1), json!(1.5)]),
         "IsolationKind" => invalid.extend([json!("Host"),json!("process-sandbox"),json!("unknown")]),
         "MachineEnvironment" => invalid.extend([json!("Physical"),json!("cloud-vm"),json!("unknown")]),
-        "Activity" | "SessionEndCause" | "HarnessKind" | "RemoteLaunchAccess" | "StandingRole" | "SessionStateView" | "AllowanceState" => {
+        "Activity" | "SessionEndCause" | "HarnessKind" | "RemoteLaunchAccess" | "AllowanceState" => {
             invalid.push(json!("unrecognizedVariant"));
             for literal in literals { if let Some(value) = literal.as_str() { invalid.push(json!(value.to_uppercase())); } }
         }
         "Heartbeat" => invalid.push(json!({"capabilities":["RemoteStart"]})),
-        "ReportSessionActivity" | "MachinePresenceAnswer" => {
+        "ReportSessionActivity" => {
             if let Some(first) = literals.first() {
                 let mut value = first.clone();
-                let field = if name == "ReportSessionActivity" { "sequence" } else { "attachSequence" };
-                value[field] = json!(9007199254740992_u64);
+                value["sequence"] = json!(9007199254740992_u64);
                 invalid.push(value);
             }
         }
@@ -297,16 +269,7 @@ fn description_byte_overflows(name: &str, literals: &[Value]) -> Vec<Value> {
 // bound. Each owning contract must reject them through its registered keyword.
 fn composed_byte_overflows(name: &str, literals: &[Value]) -> Vec<Value> {
     let fields: &[(&str, usize)] = match name {
-        "DecideDeviceLogin" | "AllowedMachineRow" | "MachineLookupResult" => &[("/label", 256)],
-        "CreateWorkspace" | "ProjectRef" | "WorkspaceRef" => &[("/name", 256)],
-        "IdentityLookup" | "RemoveSession" | "SessionRow" => &[("/session/sessionId", 4096)],
-        "MachineRow" => &[("/label", 256), ("/sessions/0/session/sessionId", 4096)],
-        "WhoIsLoggedInResult" => &[
-            ("/machines/0/label", 256),
-            ("/machines/0/sessions/0/session/sessionId", 4096),
-        ],
-        "IdentityLookupResult" => &[("/launchContext/workingDirectory", 4096)],
-        "WorkspaceLookupResult" => &[("/workspace/name", 256), ("/allowedMachines/0/label", 256)],
+        "DecideDeviceLogin" => &[("/label", 256)],
         _ => &[],
     };
     fields
@@ -317,11 +280,7 @@ fn composed_byte_overflows(name: &str, literals: &[Value]) -> Vec<Value> {
                 .find(|literal| literal.pointer(pointer).is_some())
                 .unwrap_or_else(|| panic!("{name} has no literal with {pointer}"))
                 .clone();
-            let overflow = if *pointer == "/launchContext/workingDirectory" {
-                format!("/{}", "é".repeat(maximum_bytes / 2))
-            } else {
-                format!("{}a", "é".repeat(maximum_bytes / 2))
-            };
+            let overflow = format!("{}a", "é".repeat(maximum_bytes / 2));
             assert_eq!(overflow.len(), maximum_bytes + 1);
             *invalid.pointer_mut(pointer).unwrap() = json!(overflow);
             invalid

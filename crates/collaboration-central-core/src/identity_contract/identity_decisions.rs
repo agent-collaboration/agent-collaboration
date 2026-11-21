@@ -1,6 +1,6 @@
 //! Sign-in service decisions and machine-token extension claims.
 use super::{AllowedWorkspaces, DeviceLoginRequestId, EnrollPermission, PersonId};
-use fleet_contracts::{ClientId, MachineConnectionRefusal};
+use fleet_contracts::ClientId;
 use fleet_identity_protocol::{EnrollmentId, OrganizationId, UnixSeconds};
 use message_board::MachineLabel;
 use schemars::JsonSchema;
@@ -126,70 +126,6 @@ pub enum MachineTokenRefusal {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PresentedMachine {
     pub machine_id: MachineId,
-}
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct AdmitMachineConnection {
-    pub organization_id: OrganizationId,
-    pub enrollment_id: EnrollmentId,
-    pub presented: PresentedMachine,
-    pub token_expires_at: UnixSeconds,
-    pub client_id: ClientId,
-}
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct AdmittedMachine {
-    pub organization_id: OrganizationId,
-    pub enrollment_id: EnrollmentId,
-    pub token_expires_at: UnixSeconds,
-}
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(
-    tag = "result",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum MachineConnectionAdmission {
-    Admitted { machine: AdmittedMachine },
-    Refused { reason: MachineConnectionRefusal },
-}
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(
-    tag = "operation",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum PersonAdmissionRequest {
-    AdmitSignIn {
-        organization_id: OrganizationId,
-        person_id: PersonId,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        verified_email: Option<String>,
-    },
-    Standing {
-        organization_id: OrganizationId,
-        person_id: PersonId,
-    },
-}
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(
-    tag = "result",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum OrganizationStanding {
-    Admitted { role: StandingRole },
-    AwaitingOwner {},
-    NotAdmitted {},
-}
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub enum StandingRole {
-    Member,
-    Owner,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

@@ -331,16 +331,6 @@ pub struct NoticeItem {
     pub event: ChangeEvent,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub enum MessageKind {
-    Direct,
-    Notice,
-    Wake,
-    Automation,
-    DeliveryOutcome,
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum MessageState {

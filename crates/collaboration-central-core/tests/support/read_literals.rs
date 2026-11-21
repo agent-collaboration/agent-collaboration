@@ -5,9 +5,6 @@ pub fn accepted_reads(name: &str, literals: &[Value]) -> Vec<Value> {
     for literal in literals {
         let fields: &[&str] = match name {
             "LaunchContext" => &["repository", "commit", "model"],
-            "PersonAdmissionRequest" if literal["operation"] == "admitSignIn" => &["verifiedEmail"],
-            "MachinePresenceAnswer" if literal["state"] == "notConnected" => &["closedAgoMs"],
-            "ConnectionView" if literal["state"] == "notConnected" => &["lastSeenAt"],
             "MachineEnrollment" => &["endsAt"],
             _ => &[],
         };

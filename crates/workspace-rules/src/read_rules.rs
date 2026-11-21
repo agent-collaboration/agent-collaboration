@@ -3,7 +3,7 @@ use central_storage::{AlarmUpdate, SafeInteger, SqlValue, StatementBatch};
 use workspace_model::{
     ActorIdentityId, Change, ChangePosition, InboxEntry, ItemRef, ItemView, MembershipState,
     NotificationSetting, ReadMark, ReadMarkId, ReadScope, RefusalReason, RuleAnswer, Thread,
-    ThreadMember, ThreadReaderView, WorkLogEntry,
+    ThreadMember, ThreadReaderView,
 };
 
 /// Mark advancement ports the existing maximum rule, without writer leases/epochs.
@@ -127,24 +127,6 @@ pub fn ordered_page<T: Clone>(
         })
         .collect()
 }
-#[must_use]
-pub fn work_log_page(
-    rows: &[PositionedItem<WorkLogEntry>],
-    project: &workspace_model::ProjectId,
-    after: ChangePosition,
-    limit: u32,
-) -> Vec<PositionedItem<WorkLogEntry>> {
-    let selected: Vec<_> = rows
-        .iter()
-        .filter(|row| row.item.project_id == *project)
-        .map(|row| PositionedItem {
-            position: row.position,
-            item: row.item.clone(),
-        })
-        .collect();
-    ordered_page(&selected, after, limit)
-}
-
 pub struct InboxReads<'a> {
     pub threads: &'a [Thread],
     pub memberships: &'a [ThreadMember],
