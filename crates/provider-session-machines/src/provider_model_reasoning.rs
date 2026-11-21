@@ -15,13 +15,6 @@ pub enum ModelReasoningUnknown {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ModelMetadataSource {
-    SessionMetadata,
-    ConnectionRequest { method: &'static str },
-    Unavailable,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ModelReasoning {
     Unknown(ModelReasoningUnknown),
     Select(ModelReasoningSelect),

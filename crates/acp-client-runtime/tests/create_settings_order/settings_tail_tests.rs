@@ -169,7 +169,7 @@ impl ProviderBehavior for NonReusableTestBehavior {
     fn decode_model_metadata(
         &self,
         value: &serde_json::Value,
-    ) -> acp_client_runtime::ModelReasoningMetadata {
+    ) -> provider_session_machines::ModelReasoningMetadata {
         crate::test_behavior::TestProviderBehavior.decode_model_metadata(value)
     }
     fn auto_permission_mode(&self) -> acp_client_runtime::AutoPermissionMode {

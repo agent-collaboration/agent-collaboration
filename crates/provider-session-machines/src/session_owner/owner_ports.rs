@@ -4,13 +4,14 @@ use super::{
     SessionPublication, SessionStoreRequest, SessionStoreResult, SessionTurn, SessionWireRequest,
     SessionWireResult, TurnId,
 };
-use crate::ProviderSettingKind;
 use crate::session_lifecycle_machine::{CloseAttempt, LoadAttempt};
 use crate::session_setting_machine::{SettingApplication, SettingValueId};
+use crate::{ProviderSettingKind, ProviderSettingsCatalog};
 use session_event_model::{
     CapabilityReport, SessionEvent, SessionItem, SessionSettings, SessionState, SkillView,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::sync::Arc;
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -375,6 +376,7 @@ pub enum RestorePreparation {
         run: RunAttempt<LoadAttempt>,
         setting: OwnerSetting,
         observation: SettingEvidence,
+        catalogue: Option<Arc<ProviderSettingsCatalog>>,
     },
     Failed {
         run: RunAttempt<LoadAttempt>,
@@ -652,6 +654,7 @@ pub enum PublicationFact {
         run: SessionGeneration,
         settings: SessionSettings,
         observed: BTreeMap<ProviderSettingKind, SettingEvidence>,
+        catalogue: Option<Arc<ProviderSettingsCatalog>>,
     },
     Live(SessionPublication),
     Stream {
@@ -724,7 +727,10 @@ pub enum OwnerEffect {
     },
     CallbackMembership(TurnMembership),
     Store(SessionStoreRequest),
-    PrepareHost(RunAttempt<LoadAttempt>),
+    PrepareHost {
+        run: RunAttempt<LoadAttempt>,
+        catalogue: Arc<ProviderSettingsCatalog>,
+    },
     PrepareRoute(RunAttempt<LoadAttempt>),
     Publish(PublicationBatch),
     Reply(SessionOwnerReply),
@@ -810,6 +816,7 @@ pub(in crate::session_owner) struct PendingPorts {
     pub last_restore: Option<RestoreResult>,
     pub replay: Vec<SessionEvent>,
     pub observed: BTreeMap<ProviderSettingKind, SettingEvidence>,
+    pub settings_catalogue: Option<Arc<ProviderSettingsCatalog>>,
     pub mode_reason: Option<PermissionModeReason>,
     pub last_live_turn: Option<LastLiveTurn>,
     pub projection: super::owner_reducer::OwnerProjection,
@@ -854,6 +861,7 @@ impl PendingPorts {
             last_restore: None,
             replay: Vec::new(),
             observed: BTreeMap::new(),
+            settings_catalogue: None,
             mode_reason: None,
             last_live_turn: None,
             projection: super::owner_reducer::OwnerProjection::default(),

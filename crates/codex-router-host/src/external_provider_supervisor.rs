@@ -92,7 +92,8 @@ struct SupervisorInner {
     /// `<router root>/scratch`: each Claude or Cursor session created here gets
     /// its own `session-<uuidv7>` folder in it (R4). `None` grants no folder.
     scratch_root: Option<PathBuf>,
-    settings_catalogs: Arc<Mutex<HashMap<SessionRef, acp_client_runtime::ProviderSettingsCatalog>>>,
+    settings_catalogs:
+        Arc<Mutex<HashMap<SessionRef, provider_session_machines::ProviderSettingsCatalog>>>,
     started_at_ms: i64,
     #[cfg(test)]
     admission_test_pause: StdMutex<Option<AdmissionTestPause>>,
@@ -215,7 +216,7 @@ impl ExternalProviderSupervisor {
     pub(crate) fn owner_session_catalog(
         &self,
         target: &SessionRef,
-    ) -> Option<acp_client_runtime::ProviderSettingsCatalog> {
+    ) -> Option<provider_session_machines::ProviderSettingsCatalog> {
         self.inner
             .bindings
             .get(&target.endpoint)?
@@ -581,7 +582,7 @@ impl SupervisorInner {
     async fn record_settings_catalog(
         &self,
         target: SessionRef,
-        catalog: acp_client_runtime::ProviderSettingsCatalog,
+        catalog: provider_session_machines::ProviderSettingsCatalog,
     ) {
         self.settings_catalogs.lock().await.insert(target, catalog);
     }

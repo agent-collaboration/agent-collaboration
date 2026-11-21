@@ -494,10 +494,13 @@ fn t5_late_restore_mode_correlation_releases_only_its_own_fence() {
         &mut state,
         OwnerEvent::Wire(SessionWireResult::Restore {
             run: first,
-            fast_on: None,
-            outcome: WireOutcome::Confirmed(RestoredMode::Reapply {
-                application,
-                value: SettingValueId("auto".into()),
+            outcome: WireOutcome::Confirmed(RestoreLoadReadback {
+                catalogue: Arc::default(),
+                mode: RestoredMode::Reapply {
+                    application,
+                    value: SettingValueId("auto".into()),
+                },
+                fast_on: None,
             }),
         }),
     );
@@ -515,6 +518,11 @@ fn t5_late_restore_mode_correlation_releases_only_its_own_fence() {
     let next = restore_live(&mut state, 4);
 
     let current = state.snapshot();
+    let current_catalogue = state.ports.settings_catalogue.clone();
+    let late_catalogue = Arc::new(ProviderSettingsCatalog {
+        current_mode: Some("auto".into()),
+        ..ProviderSettingsCatalog::default()
+    });
     let wrong_run = RunAttempt {
         generation: next.generation,
         ..first
@@ -525,6 +533,7 @@ fn t5_late_restore_mode_correlation_releases_only_its_own_fence() {
             run: wrong_run,
             setting,
             outcome: RestoreModeOutcome::Confirmed(SettingValueId("auto".into())),
+            catalogue: Some(late_catalogue.clone()),
         }),
     );
     assert_eq!(
@@ -540,16 +549,142 @@ fn t5_late_restore_mode_correlation_releases_only_its_own_fence() {
             run: first,
             setting,
             outcome: RestoreModeOutcome::Confirmed(SettingValueId("auto".into())),
+            catalogue: Some(late_catalogue),
         }),
     );
     assert!(released.is_empty());
     assert_eq!(state.snapshot(), current);
+    assert_eq!(state.ports.settings_catalogue, current_catalogue);
     assert!(
         !state
             .ports
             .restore_setting_fences
             .contains_key(&ProviderSettingKind::Mode)
     );
+}
+
+#[test]
+fn t5_late_restore_fast_confirmation_updates_value_and_keeps_the_existing_hold() {
+    let mut state = fresh();
+    let (run, setting) = time_out_restore_fast_off(&mut state);
+
+    let published = apply(&mut state, late_fast_off(run, setting));
+    assert!(state.snapshot().settings_block_input);
+    assert_eq!(
+        state.snapshot().settings.get(&ProviderSettingKind::Fast),
+        Some(&SettingEvidence {
+            value: ObservedSetting::LastConfirmed(SettingValueId("off".into())),
+            cause: None,
+        })
+    );
+    assert!(published.iter().any(|effect| matches!(
+        effect,
+        OwnerEffect::Publish(PublicationBatch::Commit { facts, .. })
+            if facts.iter().any(|fact| matches!(fact,
+                PublicationFact::Settings { run: generation, catalogue: Some(catalogue), .. }
+                    if *generation == run.generation && catalogue.fast_observed() == crate::FastObserved::Off))
+    )));
+    assert!(matches!(
+        decide(
+            &state,
+            OwnerEvent::Command(SessionOwnerCommand::AcceptSettings {
+                generation: run.generation,
+            }),
+        ),
+        Err(SessionOwnerRejection::Refused(_))
+    ));
+    let retry = OwnerSetting {
+        change: RunAttempt {
+            generation: run.generation,
+            attempt: SettingApplication(uuid(3)),
+        },
+        kind: ProviderSettingKind::Fast,
+    };
+    let authorization = setting_authorized(&mut state, retry, 30);
+    apply(
+        &mut state,
+        OwnerEvent::Dispatch(DispatchResult::SettingFinished {
+            authorization,
+            observation: SettingObservation::Applied(SettingValueId("off".into())),
+        }),
+    );
+    assert!(!state.snapshot().settings_block_input);
+}
+
+#[test]
+fn t5_late_restore_fast_confirmation_cannot_change_a_replacement_run() {
+    let mut state = fresh();
+    let (first, setting) = time_out_restore_fast_off(&mut state);
+    let close = start_close(&mut state, first.generation, 3);
+    apply(&mut state, close_reply(close, WireOutcome::Confirmed(())));
+    restore_live(&mut state, 4);
+
+    let current = state.snapshot();
+    let current_catalogue = state.ports.settings_catalogue.clone();
+    let released = apply(&mut state, late_fast_off(first, setting));
+    assert!(released.is_empty());
+    assert_eq!(state.snapshot(), current);
+    assert_eq!(state.ports.settings_catalogue, current_catalogue);
+    assert!(
+        !state
+            .ports
+            .restore_setting_fences
+            .contains_key(&ProviderSettingKind::Fast)
+    );
+}
+
+fn time_out_restore_fast_off(
+    state: &mut SessionOwnerState,
+) -> (RunAttempt<LoadAttempt>, OwnerSetting) {
+    state.cell.keep_fast_off = true;
+    let run = open_wire(state, 1);
+    let effects = apply(
+        state,
+        OwnerEvent::Wire(SessionWireResult::Restore {
+            run,
+            outcome: WireOutcome::Confirmed(RestoreLoadReadback {
+                catalogue: fast_catalogue(true),
+                mode: RestoredMode::Observed,
+                fast_on: Some(SettingApplication(uuid(2))),
+            }),
+        }),
+    );
+    let setting = effects
+        .into_iter()
+        .find_map(|effect| match effect {
+            OwnerEffect::Wire(SessionWireRequest::RestoreFastOff { setting, .. }) => Some(setting),
+            _ => None,
+        })
+        .expect("restore Fast write");
+    deadline(state, OwnerDeadline::RestoreFastOff(run));
+    finish_preparation(state, run);
+    assert!(state.snapshot().settings_block_input);
+    (run, setting)
+}
+
+fn late_fast_off(run: RunAttempt<LoadAttempt>, setting: OwnerSetting) -> OwnerEvent {
+    OwnerEvent::Prepare(RestorePreparation::FastOff {
+        run,
+        setting,
+        observation: SettingEvidence {
+            value: ObservedSetting::Confirmed(SettingValueId("off".into())),
+            cause: None,
+        },
+        catalogue: Some(fast_catalogue(false)),
+    })
+}
+
+fn fast_catalogue(fast: bool) -> Arc<ProviderSettingsCatalog> {
+    Arc::new(ProviderSettingsCatalog {
+        config_options: vec![crate::ProviderConfigOption {
+            id: "fast".into(),
+            name: "Fast".into(),
+            category: Some(ProviderSettingKind::Fast),
+            current_value: crate::ProviderConfigValue::Boolean(fast),
+            choices: Vec::new(),
+        }],
+        ..ProviderSettingsCatalog::default()
+    })
 }
 
 #[test]

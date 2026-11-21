@@ -10,9 +10,10 @@ use crate::session_lifecycle_machine::{CloseAttempt, LoadAttempt, RestoreVia, Se
 use crate::session_setting_machine::{SettingApplication, SettingValueId};
 use crate::session_turn_machine::{SessionTurn, TurnId};
 use crate::tool_ownership::{ToolObservation, ToolOwnership};
-use crate::{ProviderSettingKind, SessionGeneration};
+use crate::{ProviderSettingKind, ProviderSettingsCatalog, SessionGeneration};
 use session_event_model::{InputId, LocalCause, StopReason, TurnOutcome};
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RunAttempt<Attempt> {
@@ -168,6 +169,13 @@ pub enum RestoredMode {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RestoreLoadReadback {
+    pub catalogue: Arc<ProviderSettingsCatalog>,
+    pub mode: RestoredMode,
+    pub fast_on: Option<SettingApplication>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RestoreModeOutcome {
     Confirmed(SettingValueId),
     Refused { current: Option<SettingValueId> },
@@ -188,8 +196,7 @@ pub enum SettingObservation {
 pub enum SessionWireResult {
     Restore {
         run: RunAttempt<LoadAttempt>,
-        outcome: WireOutcome<RestoredMode>,
-        fast_on: Option<SettingApplication>,
+        outcome: WireOutcome<RestoreLoadReadback>,
     },
     RestoreFailed {
         run: RunAttempt<LoadAttempt>,
@@ -199,6 +206,7 @@ pub enum SessionWireResult {
         run: RunAttempt<LoadAttempt>,
         setting: OwnerSetting,
         outcome: RestoreModeOutcome,
+        catalogue: Option<Arc<ProviderSettingsCatalog>>,
     },
     Close {
         run: RunAttempt<CloseAttempt>,
@@ -325,10 +333,12 @@ pub enum SessionWireRequest {
         run: RunAttempt<LoadAttempt>,
         setting: OwnerSetting,
         value: SettingValueId,
+        catalogue: Arc<ProviderSettingsCatalog>,
     },
     RestoreFastOff {
         run: RunAttempt<LoadAttempt>,
         setting: OwnerSetting,
+        catalogue: Arc<ProviderSettingsCatalog>,
     },
     Close(RunAttempt<CloseAttempt>),
 }
@@ -511,7 +521,10 @@ pub(in crate::session_owner) enum SessionOwnerEffect {
     Publish(SessionPublication),
     Reply(SessionOwnerReply),
     RetireRoute(SessionGeneration),
-    PrepareHost(RunAttempt<LoadAttempt>),
+    PrepareHost {
+        run: RunAttempt<LoadAttempt>,
+        catalogue: Arc<ProviderSettingsCatalog>,
+    },
     ForwardTool {
         generation: SessionGeneration,
         tool_id: String,

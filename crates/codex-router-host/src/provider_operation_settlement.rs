@@ -77,11 +77,11 @@ pub(crate) fn effective_settings(
 }
 
 /// What the agent last reported for its fast option, on the wire (D1 R11).
-pub(crate) fn provider_fast_state(observed: acp_client_runtime::FastObserved) -> FastState {
+pub(crate) fn provider_fast_state(observed: provider_session_machines::FastObserved) -> FastState {
     match observed {
-        acp_client_runtime::FastObserved::Off => FastState::Off,
-        acp_client_runtime::FastObserved::On => FastState::On,
-        acp_client_runtime::FastObserved::NoOption => FastState::None,
+        provider_session_machines::FastObserved::Off => FastState::Off,
+        provider_session_machines::FastObserved::On => FastState::On,
+        provider_session_machines::FastObserved::NoOption => FastState::None,
     }
 }
 

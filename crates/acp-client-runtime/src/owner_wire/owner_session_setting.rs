@@ -2,8 +2,8 @@
 
 use crate::owner_wire::OwnerWireRefusal;
 use crate::{
-    FastObserved, PermissionModePlan, ProviderConfigValue, ProviderSettingsCatalog,
-    RequestedPermissionMode, owner_session_open::OwnerOpenedSession, plan_permission_mode,
+    PermissionModePlan, RequestedPermissionMode, owner_session_open::OwnerOpenedSession,
+    plan_permission_mode,
 };
 use agent_client_protocol::{
     Error, JsonRpcMessage as _, UntypedMessage,
@@ -12,6 +12,7 @@ use agent_client_protocol::{
         SetSessionModeRequest,
     },
 };
+use provider_session_machines::{FastObserved, ProviderConfigValue, ProviderSettingsCatalog};
 use provider_session_machines::{
     ProviderSettingKind,
     session_lifecycle_machine::LoadAttempt,
@@ -22,7 +23,7 @@ use provider_session_machines::{
     },
     session_setting_machine::{SettingApplication, SettingValueId},
 };
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::Arc;
 use uuid::Uuid;
 
 pub struct RestoreSettingPlan {
@@ -78,20 +79,13 @@ impl OwnerOpenedSession {
         }
     }
 
-    pub fn apply_restore_setting_readback(
+    pub fn accept_restore_catalogue(
         &mut self,
-        readback: RestoreSettingReadback,
+        catalogue: &ProviderSettingsCatalog,
         requested_mode: Option<&str>,
     ) {
-        let catalog = readback
-            .0
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .take();
-        if let Some(catalog) = catalog {
-            self.catalog = catalog;
-            self.refresh_restored_allowance(requested_mode);
-        }
+        self.catalog.clone_from(catalogue);
+        self.refresh_restored_allowance(requested_mode);
     }
 
     fn refresh_restored_allowance(&mut self, requested_mode: Option<&str>) {
@@ -104,10 +98,6 @@ impl OwnerOpenedSession {
         );
     }
 }
-
-/// The full catalogue readback for one restore setter. Its owner drops this
-/// receipt when advancing past the write, so a late reply cannot update a run.
-pub struct RestoreSettingReadback(Arc<Mutex<Option<ProviderSettingsCatalog>>>);
 
 pub struct OwnerSettingWirePlan {
     pub(crate) message: UntypedMessage,
@@ -122,7 +112,6 @@ struct SettingResponseShape {
     current: Option<SettingValueId>,
     reads_value: bool,
     mode_confirmation: Option<ModeConfirmation>,
-    restore_readback: Option<RestoreSettingReadback>,
 }
 
 #[derive(Clone, Copy)]
@@ -170,7 +159,7 @@ impl OwnerSettingWirePlan {
                         .choices
                         .iter()
                         .find(|choice| {
-                            crate::provider_session_settings::is_fast_off_select_value(
+                            provider_session_machines::provider_settings_catalog::is_fast_off_select_value(
                                 &choice.value,
                             )
                         })
@@ -200,7 +189,6 @@ impl OwnerSettingWirePlan {
                 current: current_value(catalog, kind),
                 reads_value,
                 mode_confirmation: None,
-                restore_readback: None,
             },
         })
     }
@@ -208,13 +196,6 @@ impl OwnerSettingWirePlan {
     pub(crate) fn with_mode_confirmation(mut self, mode: Option<ModeConfirmation>) -> Self {
         self.response.mode_confirmation = mode;
         self
-    }
-
-    #[must_use]
-    pub fn retain_restore_readback(mut self) -> (Self, RestoreSettingReadback) {
-        let slot = Arc::new(Mutex::new(None));
-        self.response.restore_readback = Some(RestoreSettingReadback(Arc::clone(&slot)));
-        (self, RestoreSettingReadback(slot))
     }
 
     pub(crate) fn correlate(
@@ -274,7 +255,8 @@ impl CorrelatedSetting {
         let catalogue_reported = catalogue.is_some();
         let observed = if confirmed_legacy_mode {
             shape.catalog.current_mode = Some(shape.sent.clone());
-            shape.catalog.mode_observation = crate::ProviderModeObservation::FromCatalogue;
+            shape.catalog.mode_observation =
+                provider_session_machines::ProviderModeObservation::FromCatalogue;
             Some(SettingValueId(shape.sent.clone()))
         } else {
             catalogue.and_then(|response| {
@@ -288,17 +270,12 @@ impl CorrelatedSetting {
                     response.meta.as_ref(),
                 );
                 if shape.kind == ProviderSettingKind::Mode {
-                    shape.catalog.mode_observation = crate::ProviderModeObservation::FromCatalogue;
+                    shape.catalog.mode_observation =
+                        provider_session_machines::ProviderModeObservation::FromCatalogue;
                 }
                 current_value(&shape.catalog, shape.kind)
             })
         };
-        if let Some(readback) = shape.restore_readback.take()
-            && (catalogue_reported || confirmed_legacy_mode)
-        {
-            *readback.0.lock().unwrap_or_else(PoisonError::into_inner) =
-                Some(shape.catalog.clone());
-        }
         match correlation {
             SettingCorrelation::Explicit(authorization) => {
                 let fast_refusal = shape.kind == ProviderSettingKind::Fast
@@ -363,6 +340,8 @@ impl CorrelatedSetting {
                         run,
                         setting,
                         outcome,
+                        catalogue: (catalogue_reported || confirmed_legacy_mode)
+                            .then(|| Arc::new(shape.catalog)),
                     }),
                     None,
                 )
@@ -370,7 +349,7 @@ impl CorrelatedSetting {
             SettingCorrelation::RestoreFastOff { run, setting } => {
                 let cause = match &observed {
                     Some(value)
-                        if !crate::provider_session_settings::is_fast_off_select_value(
+                        if !provider_session_machines::provider_settings_catalog::is_fast_off_select_value(
                             &value.0,
                         ) =>
                     {
@@ -384,6 +363,7 @@ impl CorrelatedSetting {
                     OwnerEvent::Prepare(RestorePreparation::FastOff {
                         run,
                         setting,
+                        catalogue: catalogue_reported.then(|| Arc::new(shape.catalog)),
                         observation: SettingEvidence {
                             value: observed
                                 .map_or(ObservedSetting::Unknown, ObservedSetting::Confirmed),

@@ -7,17 +7,18 @@ use crate::session_owner::OwnerSetting;
 use crate::session_owner::{
     AuthorizationStatus, CloseRequest, EffectInProgress, ObservationCause, ObservedSetting,
     OwnerEffect, PreparationStage, PreparedSetup, RestoreDisposition, RestoreFailure,
-    RestoreModeOutcome, RestorePhase, RestorePreparation, RestoreResult, SettingEvidence,
-    TurnMembership,
+    RestoreLoadReadback, RestoreModeOutcome, RestorePhase, RestorePreparation, RestoreResult,
+    SettingEvidence, TurnMembership,
 };
 use crate::session_owner::{
     CloseOutcome, EffectOutcome, PendingRestore, RemoteEffect, RestoreFailureStage, RestoreWait,
     RestoredMode, RunAttempt, SessionDeadline, SessionOwnerEffect, SessionOwnerRefusal,
     SessionOwnerReply, SessionPublication, SessionStoreRequest, SessionWireRequest, WireOutcome,
 };
-use crate::session_setting_machine::{SessionSettingEvent, SettingApplication, SettingValueId};
+use crate::session_setting_machine::{SessionSettingEvent, SettingValueId};
 use crate::session_turn_machine::{SessionTurn, SessionTurnEffect};
-use crate::{ProviderSettingKind, SessionGeneration};
+use crate::{ProviderSettingKind, ProviderSettingsCatalog, SessionGeneration};
+use std::sync::Arc;
 
 impl PendingRestore {
     pub(super) const fn run(self) -> RunAttempt<LoadAttempt> {
@@ -73,6 +74,7 @@ impl OwnerTransition {
         }
         self.cell_move(SessionCellEvent::LoadRequested { attempt, via })?;
         self.next.ports.observed.clear();
+        self.next.ports.settings_catalogue = None;
         self.next.ports.mode_reason = None;
         self.next.ports.admitted_inputs.clear();
         self.next.ports.replay.clear();
@@ -159,8 +161,7 @@ impl OwnerTransition {
     pub(super) fn restore_on_wire(
         &mut self,
         run: RunAttempt<LoadAttempt>,
-        outcome: WireOutcome<RestoredMode>,
-        fast_on: Option<SettingApplication>,
+        outcome: WireOutcome<RestoreLoadReadback>,
     ) -> OwnerResult {
         let Some(PendingRestore::Wire { run: pending, via }) = self.next.restore else {
             return Err(OwnerRejection::IgnoredLate);
@@ -168,6 +169,20 @@ impl OwnerTransition {
         if pending != run {
             return Err(OwnerRejection::IgnoredLate);
         }
+        let RestoreLoadReadback {
+            catalogue,
+            mode,
+            fast_on,
+        } = match outcome {
+            WireOutcome::Confirmed(readback) => readback,
+            WireOutcome::Refused => {
+                return self.fail_loading(run, RestoreFailureStage::Wire, RemoteEffect::None);
+            }
+            WireOutcome::Unknown => {
+                return self.fail_loading(run, RestoreFailureStage::Wire, RemoteEffect::Unknown);
+            }
+        };
+        self.next.ports.settings_catalogue = Some(Arc::clone(&catalogue));
         self.next.ports.fast_reapply = fast_on.map(|application| OwnerSetting {
             change: RunAttempt {
                 generation: run.generation,
@@ -175,15 +190,13 @@ impl OwnerTransition {
             },
             kind: ProviderSettingKind::Fast,
         });
-        match outcome {
-            WireOutcome::Confirmed(RestoredMode::Observed) => {
-                self.after_restore_mode(run, via, true)
-            }
-            WireOutcome::Confirmed(RestoredMode::NotOffered { current }) => {
+        match mode {
+            RestoredMode::Observed => self.after_restore_mode(run, via, true),
+            RestoredMode::NotOffered { current } => {
                 self.record_restore_mode(current, Some(ObservationCause::NotOffered));
                 self.after_restore_mode(run, via, false)
             }
-            WireOutcome::Confirmed(RestoredMode::Reapply { application, value }) => {
+            RestoredMode::Reapply { application, value } => {
                 if self.setting_fenced(ProviderSettingKind::Mode) {
                     self.record_restore_mode(None, Some(ObservationCause::NoAnswer));
                     return self.after_restore_mode(run, via, false);
@@ -199,19 +212,15 @@ impl OwnerTransition {
                     .ports
                     .restore_setting_fences
                     .insert(setting.kind, (run, setting));
+                self.next.ports.latest_setting.insert(setting.kind, setting);
                 self.release(SessionOwnerEffect::Wire(SessionWireRequest::RestoreMode {
                     run,
                     setting,
                     value,
+                    catalogue,
                 }));
                 self.wait_for_restore(PendingRestore::Mode { run, via });
                 Ok(())
-            }
-            WireOutcome::Refused => {
-                self.fail_loading(run, RestoreFailureStage::Wire, RemoteEffect::None)
-            }
-            WireOutcome::Unknown => {
-                self.fail_loading(run, RestoreFailureStage::Wire, RemoteEffect::Unknown)
             }
         }
     }
@@ -221,10 +230,14 @@ impl OwnerTransition {
         run: RunAttempt<LoadAttempt>,
         setting: OwnerSetting,
         outcome: RestoreModeOutcome,
+        catalogue: Option<Arc<ProviderSettingsCatalog>>,
     ) -> OwnerResult {
         self.release_restore_fence(run, setting, ProviderSettingKind::Mode)?;
         match self.next.restore {
             Some(PendingRestore::Mode { run: pending, via }) if pending == run => {
+                if let Some(catalogue) = catalogue {
+                    self.next.ports.settings_catalogue = Some(catalogue);
+                }
                 let (current, cause) = match outcome {
                     RestoreModeOutcome::Confirmed(value) => (Some(value), None),
                     RestoreModeOutcome::Refused { current } => {
@@ -242,7 +255,14 @@ impl OwnerTransition {
                 self.record_restore_mode(current, cause);
                 self.after_restore_mode(run, via, confirmed)
             }
-            _ => Ok(()),
+            _ => match outcome {
+                RestoreModeOutcome::Confirmed(value)
+                | RestoreModeOutcome::ReportedOther(value)
+                | RestoreModeOutcome::FellBack(value) => {
+                    self.observe_late_restore_setting(run, setting, value, catalogue)
+                }
+                RestoreModeOutcome::Refused { .. } | RestoreModeOutcome::Unconfirmed => Ok(()),
+            },
         }
     }
 
@@ -282,7 +302,11 @@ impl OwnerTransition {
                 .restore_setting_fences
                 .insert(setting.kind, (run, setting));
             self.release(SessionOwnerEffect::Wire(
-                SessionWireRequest::RestoreFastOff { run, setting },
+                SessionWireRequest::RestoreFastOff {
+                    run,
+                    setting,
+                    catalogue: self.restore_catalogue()?,
+                },
             ));
             self.wait_for_restore(PendingRestore::FastOff {
                 run,
@@ -290,10 +314,18 @@ impl OwnerTransition {
                 via,
                 mode_confirmed,
             });
+            Ok(())
         } else {
-            self.begin_host_prepare(run, via, mode_confirmed);
+            self.begin_host_prepare(run, via, mode_confirmed)
         }
-        Ok(())
+    }
+
+    fn restore_catalogue(&self) -> Result<Arc<ProviderSettingsCatalog>, OwnerRejection> {
+        self.next
+            .ports
+            .settings_catalogue
+            .clone()
+            .ok_or(OwnerRejection::IgnoredLate)
     }
 
     fn record_restore_mode(
@@ -361,8 +393,7 @@ impl OwnerTransition {
             .ports
             .observed
             .insert(ProviderSettingKind::Fast, observation);
-        self.begin_host_prepare(run, via, mode_confirmed);
-        Ok(())
+        self.begin_host_prepare(run, via, mode_confirmed)
     }
 
     fn begin_host_prepare(
@@ -370,14 +401,16 @@ impl OwnerTransition {
         run: RunAttempt<LoadAttempt>,
         via: RestoreVia,
         mode_confirmed: bool,
-    ) {
+    ) -> OwnerResult {
+        let catalogue = self.restore_catalogue()?;
         self.effects.push(OwnerEffect::PrepareRoute(run));
-        self.release(SessionOwnerEffect::PrepareHost(run));
+        self.release(SessionOwnerEffect::PrepareHost { run, catalogue });
         self.wait_for_restore(PendingRestore::Preparing {
             run,
             via,
             mode_confirmed,
         });
+        Ok(())
     }
 
     pub(super) fn restore_preparation(&mut self, progress: RestorePreparation) -> OwnerResult {
@@ -390,6 +423,7 @@ impl OwnerTransition {
         if let RestorePreparation::FastOff {
             setting,
             observation,
+            catalogue,
             ..
         } = progress
         {
@@ -402,12 +436,13 @@ impl OwnerTransition {
             }) = self.next.restore
                 && pending == run
             {
+                if let Some(catalogue) = catalogue {
+                    self.next.ports.settings_catalogue = Some(catalogue);
+                }
                 return self.finish_fast_off(run, setting, via, mode_confirmed, observation);
             }
-            if self.is_live(run.generation)
-                && let ObservedSetting::Confirmed(value) = observation.value
-            {
-                self.setting_on_wire(setting, super::super::SettingObservation::Applied(value))?;
+            if let ObservedSetting::Confirmed(value) = observation.value {
+                return self.observe_late_restore_setting(run, setting, value, catalogue);
             }
             return Ok(());
         }

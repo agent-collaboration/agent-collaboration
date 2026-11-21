@@ -1,18 +1,19 @@
 //! Committed presentation facts carried into a publication rebase.
 
 use super::{OwnerRejection, OwnerResult, OwnerTransition};
-use crate::SessionGeneration;
 use crate::session_lifecycle_machine::{LoadAttempt, RestoreVia};
 use crate::session_owner::{
     PublicationFact, RunAttempt, SessionLifecycle, SessionOwnerState, SessionProjection,
     SessionPublication,
 };
 use crate::session_turn_machine::{SessionTurn, TurnId};
+use crate::{ProviderSettingsCatalog, SessionGeneration};
 use session_event_model::{
     CapabilityReport, PendingInteraction, PendingInteractions, SessionEvent, SessionSettings,
     SessionState, SkillView,
 };
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(in crate::session_owner) struct OwnerProjection {
@@ -65,6 +66,22 @@ impl SessionOwnerState {
 }
 
 impl OwnerTransition {
+    pub(super) fn publish_accepted_catalogue(
+        &mut self,
+        run: SessionGeneration,
+        catalogue: Arc<ProviderSettingsCatalog>,
+    ) {
+        let settings = catalogue.to_session_settings();
+        self.next.ports.settings_catalogue = Some(Arc::clone(&catalogue));
+        self.next.ports.projection.settings = Some(settings.clone());
+        self.offer_commit(vec![PublicationFact::Settings {
+            run,
+            settings,
+            observed: self.next.ports.observed.clone(),
+            catalogue: Some(catalogue),
+        }]);
+    }
+
     pub(super) fn resolve_previous_turn_interactions(&mut self, run: SessionGeneration) {
         let facts = std::mem::take(&mut self.next.ports.projection.pending)
             .into_keys()

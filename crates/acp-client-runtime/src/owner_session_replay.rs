@@ -16,7 +16,7 @@ pub(crate) fn replay_queued_session_updates(
     updates: &mut tokio::sync::mpsc::UnboundedReceiver<Dispatch>,
     event_sink: Arc<dyn SessionEventSink>,
     behavior: Arc<dyn crate::ProviderBehavior>,
-    settings_catalog: &mut crate::ProviderSettingsCatalog,
+    settings_catalog: &mut provider_session_machines::ProviderSettingsCatalog,
 ) -> Result<ProviderItemProjection, ExternalProviderRuntimeError> {
     let mut projection = ProviderItemProjection::new(
         session_id.clone(),

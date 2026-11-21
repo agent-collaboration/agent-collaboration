@@ -1,16 +1,17 @@
 use super::{OwnerRejection, OwnerResult, OwnerTransition};
-use crate::ProviderSettingKind;
 use crate::session_cell_machine::SessionCellEvent;
-use crate::session_lifecycle_machine::SessionLifecycle;
+use crate::session_lifecycle_machine::{LoadAttempt, SessionLifecycle};
 use crate::session_owner::{
     AuthorizationStatus, AuthorizedWork, EffectInProgress, EffectOutcome, FastReadback,
     ModelFastOutcome, ObservationCause, ObservedSetting, OwnerEffect, OwnerSetting, QueuedSetting,
-    RemoteEffect, RevokeReason, SessionDeadline, SessionOwnerEffect, SessionOwnerRefusal,
-    SessionOwnerReply, SessionPublication, SessionStoreRequest, SettingEffectInProgress,
-    SettingEvidence, SettingObservation, SettingReadback, SettingWait,
+    RemoteEffect, RevokeReason, RunAttempt, SessionDeadline, SessionOwnerEffect,
+    SessionOwnerRefusal, SessionOwnerReply, SessionPublication, SessionStoreRequest,
+    SettingEffectInProgress, SettingEvidence, SettingObservation, SettingReadback, SettingWait,
 };
 use crate::session_setting_machine::{SessionSettingEvent, SettingValueId};
+use crate::{ProviderSettingKind, ProviderSettingsCatalog};
 use session_event_model::InputId;
+use std::sync::Arc;
 
 impl OwnerTransition {
     pub(super) fn admit_setting(&mut self, request: QueuedSetting) -> OwnerResult {
@@ -189,6 +190,29 @@ impl OwnerTransition {
             setting,
         }));
         self.drive_after_setting()
+    }
+
+    pub(super) fn observe_late_restore_setting(
+        &mut self,
+        run: RunAttempt<LoadAttempt>,
+        setting: OwnerSetting,
+        value: SettingValueId,
+        catalogue: Option<Arc<ProviderSettingsCatalog>>,
+    ) -> OwnerResult {
+        if !self.is_live(run.generation)
+            || self.next.ports.latest_setting.get(&setting.kind) != Some(&setting)
+        {
+            return Ok(());
+        }
+        self.setting_on_wire(setting, SettingObservation::Applied(value))?;
+        if let (Some(readback), Some(current)) =
+            (catalogue, &mut self.next.ports.settings_catalogue)
+        {
+            Arc::make_mut(current).apply_late_setting_readback(setting.kind, &readback);
+            let catalogue = Arc::clone(current);
+            self.publish_accepted_catalogue(run.generation, catalogue);
+        }
+        Ok(())
     }
 
     pub(super) fn setting_on_wire(

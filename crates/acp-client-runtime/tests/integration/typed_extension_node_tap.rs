@@ -16,12 +16,14 @@
 mod fixture_rig;
 
 use acp_client_runtime::{
-    ExternalProviderRuntimeError, ModelReasoning, ModelReasoningEntry, ModelReasoningMetadata,
-    ModelReasoningUnknown, ProviderSessionActivity, ProviderSteeringOutcome,
+    ExternalProviderRuntimeError, ProviderSessionActivity, ProviderSteeringOutcome,
 };
 use codex_router_test_support::node_taps::{
     AcpPeer, CatalogRowExpectation, EdgeParty, MessageFamily, NodeStateSnapshot, ProtocolNode,
     RecordIntent, RecordLayer, TapCase,
+};
+use provider_session_machines::{
+    ModelReasoning, ModelReasoningEntry, ModelReasoningMetadata, ModelReasoningUnknown,
 };
 use session_event_model::{InputId, SessionEvent};
 

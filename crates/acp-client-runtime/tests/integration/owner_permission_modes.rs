@@ -10,10 +10,11 @@ use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::{
     ApprovalPortOutcome, EventSinkClosed, ExternalProviderApprovalRefusalReason,
     ExternalProviderLaunch, ExternalProviderPromptOutcome, ExternalProviderRuntimeError,
-    FastObserved, FastRequest, HistoryReplayFuture, InteractionFuture, InteractionPort,
+    FastRequest, HistoryReplayFuture, InteractionFuture, InteractionPort,
     InvalidSettingSessionDisposition, ProviderPersistenceTarget, RefusedApprovalOffer,
     RequestedProviderSettings, SessionEventSink, SessionRestoreSetup, SessionWorkRoots,
 };
+use provider_session_machines::FastObserved;
 use provider_session_machines::{
     ProviderSettingKind,
     session_lifecycle_machine::RestoreVia,

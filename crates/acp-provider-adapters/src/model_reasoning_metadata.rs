@@ -1,6 +1,6 @@
 //! Pure decoders for provider model descriptions; never discovers or selects models.
 
-use acp_client_runtime::{
+use provider_session_machines::{
     ModelReasoning, ModelReasoningEntry, ModelReasoningMetadata, ModelReasoningSelect,
     ModelReasoningUnknown, ProviderSettingChoice,
 };

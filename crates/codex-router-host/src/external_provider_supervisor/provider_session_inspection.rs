@@ -91,7 +91,7 @@ pub(super) async fn inspect(
 }
 
 fn catalog_view(
-    catalog: acp_client_runtime::ProviderSettingsCatalog,
+    catalog: provider_session_machines::ProviderSettingsCatalog,
     current_mode: Option<String>,
 ) -> ProviderSettingsCatalogView {
     ProviderSettingsCatalogView {
@@ -107,10 +107,10 @@ fn catalog_view(
                     .category
                     .map(crate::provider_operation_settlement::provider_setting_name),
                 current_value: match option.current_value {
-                    acp_client_runtime::ProviderConfigValue::Select(value) => {
+                    provider_session_machines::ProviderConfigValue::Select(value) => {
                         ProviderConfigValueView::Select { value }
                     }
-                    acp_client_runtime::ProviderConfigValue::Boolean(value) => {
+                    provider_session_machines::ProviderConfigValue::Boolean(value) => {
                         ProviderConfigValueView::Boolean { value }
                     }
                 },
@@ -120,7 +120,9 @@ fn catalog_view(
     }
 }
 
-fn choice_view(choice: acp_client_runtime::ProviderSettingChoice) -> ProviderSettingChoiceView {
+fn choice_view(
+    choice: provider_session_machines::ProviderSettingChoice,
+) -> ProviderSettingChoiceView {
     ProviderSettingChoiceView {
         value: choice.value,
         label: choice.label,

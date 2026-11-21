@@ -89,7 +89,8 @@ impl OwnerOpenedSession {
             .as_ref()
             .is_some_and(|failure| failure.kind == ProviderSettingKind::Mode && failure.unknown)
         {
-            self.catalog.mode_observation = crate::ProviderModeObservation::Unconfirmed;
+            self.catalog.mode_observation =
+                provider_session_machines::ProviderModeObservation::Unconfirmed;
         }
         let settings_failure = match failure {
             None => None,
@@ -170,7 +171,7 @@ impl OwnerOpenedSession {
 }
 
 pub fn catalogue_evidence(
-    catalog: &crate::ProviderSettingsCatalog,
+    catalog: &provider_session_machines::ProviderSettingsCatalog,
 ) -> BTreeMap<ProviderSettingKind, SettingEvidence> {
     let observed = catalog.effective_settings();
     [
@@ -180,9 +181,9 @@ pub fn catalogue_evidence(
         (
             ProviderSettingKind::Fast,
             match catalog.fast_observed() {
-                crate::FastObserved::Off => Some("off".to_owned()),
-                crate::FastObserved::On => Some("on".to_owned()),
-                crate::FastObserved::NoOption => None,
+                provider_session_machines::FastObserved::Off => Some("off".to_owned()),
+                provider_session_machines::FastObserved::On => Some("on".to_owned()),
+                provider_session_machines::FastObserved::NoOption => None,
             },
         ),
     ]
@@ -203,7 +204,7 @@ pub fn catalogue_evidence(
 
 fn untried_settings(
     requested: &crate::RequestedProviderSettings,
-    catalog: &crate::ProviderSettingsCatalog,
+    catalog: &provider_session_machines::ProviderSettingsCatalog,
     failed_kind: provider_session_machines::ProviderSettingKind,
 ) -> Vec<crate::NotAppliedProviderSetting> {
     let fast_off = FAST_OFF.to_owned();

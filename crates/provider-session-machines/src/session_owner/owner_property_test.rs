@@ -98,11 +98,14 @@ impl Mailbox {
                 restore_reply(run),
                 OwnerEvent::Wire(SessionWireResult::Restore {
                     run,
-                    outcome: WireOutcome::Confirmed(RestoredMode::Reapply {
-                        application: SettingApplication(run.attempt.0),
-                        value: SettingValueId("auto".into()),
+                    outcome: WireOutcome::Confirmed(RestoreLoadReadback {
+                        catalogue: Arc::default(),
+                        mode: RestoredMode::Reapply {
+                            application: SettingApplication(run.attempt.0),
+                            value: SettingValueId("auto".into()),
+                        },
+                        fast_on: None,
                     }),
-                    fast_on: None,
                 }),
                 OwnerEvent::Wire(SessionWireResult::RestoreFailed {
                     run,
@@ -115,24 +118,26 @@ impl Mailbox {
                     run,
                     setting,
                     outcome: RestoreModeOutcome::Confirmed(SettingValueId("auto".into())),
+                    catalogue: None,
                 })),
             OwnerEffect::Wire(SessionWireRequest::Close(run)) => self.arrivals.extend([
                 close_reply(run, WireOutcome::Confirmed(())),
                 close_reply(run, WireOutcome::Refused),
                 close_reply(run, WireOutcome::Unknown),
             ]),
-            OwnerEffect::PrepareHost(run) => self.arrivals.extend([
+            OwnerEffect::PrepareHost { run, .. } => self.arrivals.extend([
                 host_ready(run),
                 OwnerEvent::Prepare(RestorePreparation::Failed {
                     run,
                     stage: PreparationStage::HostSetup,
                 }),
             ]),
-            OwnerEffect::Wire(SessionWireRequest::RestoreFastOff { run, setting }) => {
+            OwnerEffect::Wire(SessionWireRequest::RestoreFastOff { run, setting, .. }) => {
                 self.arrivals
                     .push(OwnerEvent::Prepare(RestorePreparation::FastOff {
                         run,
                         setting,
+                        catalogue: None,
                         observation: SettingEvidence {
                             value: ObservedSetting::Confirmed(SettingValueId("off".into())),
                             cause: None,

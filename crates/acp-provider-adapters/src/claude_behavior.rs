@@ -45,7 +45,7 @@ impl ProviderBehavior for ClaudeAcpBehavior {
     fn decode_model_metadata(
         &self,
         value: &serde_json::Value,
-    ) -> acp_client_runtime::ModelReasoningMetadata {
+    ) -> provider_session_machines::ModelReasoningMetadata {
         crate::model_reasoning_metadata::decode_claude_models(value)
     }
     fn auto_permission_mode(&self) -> acp_client_runtime::AutoPermissionMode {

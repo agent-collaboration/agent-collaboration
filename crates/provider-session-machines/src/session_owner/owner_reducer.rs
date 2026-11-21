@@ -217,11 +217,7 @@ impl OwnerTransition {
 
     fn apply_wire(&mut self, result: SessionWireResult) -> OwnerResult {
         match result {
-            SessionWireResult::Restore {
-                run,
-                outcome,
-                fast_on,
-            } => self.restore_on_wire(run, outcome, fast_on),
+            SessionWireResult::Restore { run, outcome } => self.restore_on_wire(run, outcome),
             SessionWireResult::RestoreFailed { run, failure } => {
                 self.restore_failed_on_wire(run, failure)
             }
@@ -229,7 +225,8 @@ impl OwnerTransition {
                 run,
                 setting,
                 outcome,
-            } => self.restore_mode_on_wire(run, setting, outcome),
+                catalogue,
+            } => self.restore_mode_on_wire(run, setting, outcome, catalogue),
             SessionWireResult::Close { run, outcome } => self.close_on_wire(run, outcome),
             SessionWireResult::CloseNotSent(run) => self.close_not_sent(run),
         }
@@ -303,9 +300,9 @@ impl OwnerTransition {
             SessionOwnerEffect::RetireRoute(run) => {
                 self.effects.push(OwnerEffect::RetireRoute(run))
             }
-            SessionOwnerEffect::PrepareHost(run) => {
-                self.effects.push(OwnerEffect::PrepareHost(run))
-            }
+            SessionOwnerEffect::PrepareHost { run, catalogue } => self
+                .effects
+                .push(OwnerEffect::PrepareHost { run, catalogue }),
             SessionOwnerEffect::ForwardTool {
                 generation,
                 tool_id,

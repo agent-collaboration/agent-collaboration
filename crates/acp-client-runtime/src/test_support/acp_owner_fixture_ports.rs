@@ -6,7 +6,7 @@ use crate::{
     SessionEventSink,
     acp_transport::TransportRun,
     owner_session_open::{OwnerOpenedSession, OwnerSessionOpenSetup},
-    owner_session_setting::{OwnerSettingWirePlan, RestoreSettingReadback},
+    owner_session_setting::OwnerSettingWirePlan,
     owner_session_stream::{OwnerStreamTarget, ReplayedSessionFacts},
     owner_wire::OwnerAcpWire,
     session_owner_task::{OwnerCompletionPort, OwnerTaskError, SessionOwnerPorts},
@@ -16,12 +16,12 @@ use provider_session_machines::session_owner::{
     AuthorizedWork, CreateProgress, CreatedSessionFacts, DispatchAuthorization, DispatchResult,
     EffectOutcome, ObservationCause, ObservedSetting, OwnerAddress, OwnerEffect, OwnerEvent,
     OwnerInput, OwnerSetting, PreparationStage, PublicationBatch, PublicationFact,
-    PublicationResult, RestoreFailure, RestorePreparation, RunAttempt, SessionOwnerReply,
-    SessionPublication, SessionStoreRequest, SessionStoreResult, SessionWireRequest,
-    SessionWireResult, SettingEvidence, TurnMembership, WireOutcome,
+    PublicationResult, RestoreFailure, RestoreLoadReadback, RestorePreparation, RunAttempt,
+    SessionOwnerReply, SessionPublication, SessionStoreRequest, SessionStoreResult,
+    SessionWireRequest, SessionWireResult, SettingEvidence, TurnMembership, WireOutcome,
 };
 use provider_session_machines::{
-    SessionGeneration,
+    ProviderSettingsCatalog, SessionGeneration,
     session_lifecycle_machine::{LoadAttempt, RestoreVia},
     session_turn_machine::TurnId,
 };
@@ -39,16 +39,6 @@ struct OpenedRestore {
     generation: SessionGeneration,
     replay: ReplayedSessionFacts,
     fallback: Option<String>,
-    setting_readback: Option<RestoreSettingReadback>,
-}
-
-impl OpenedRestore {
-    fn apply_setting_readback(&mut self) {
-        if let Some(readback) = self.setting_readback.take() {
-            self.opened
-                .apply_restore_setting_readback(readback, self.requested_mode.as_deref());
-        }
-    }
 }
 
 pub(super) struct FixturePorts<P: InteractionPort> {
@@ -184,6 +174,7 @@ impl<P: InteractionPort> FixturePorts<P> {
                 Ok(Ok(mut opened)) => match opened.prepare_replay() {
                     Ok(replay) => {
                         let planned = opened.restore_setting_plan(setup.requested_mode.as_deref());
+                        let catalogue = Arc::new(opened.catalog().clone());
                         lock(&restores).insert(
                             run.attempt,
                             OpenedRestore {
@@ -192,13 +183,15 @@ impl<P: InteractionPort> FixturePorts<P> {
                                 generation: run.generation,
                                 replay,
                                 fallback: planned.accepted_mode_fallback,
-                                setting_readback: None,
                             },
                         );
                         SessionWireResult::Restore {
                             run,
-                            outcome: WireOutcome::Confirmed(planned.mode),
-                            fast_on: planned.fast_off,
+                            outcome: WireOutcome::Confirmed(RestoreLoadReadback {
+                                catalogue,
+                                mode: planned.mode,
+                                fast_on: planned.fast_off,
+                            }),
                         }
                     }
                     Err(_) => SessionWireResult::RestoreFailed {
@@ -317,16 +310,16 @@ impl<P: InteractionPort> FixturePorts<P> {
         run: RunAttempt<LoadAttempt>,
         setting: OwnerSetting,
         value: String,
+        catalogue: &ProviderSettingsCatalog,
         completions: &OwnerCompletionPort,
     ) -> Result<Option<OwnerEvent>, OwnerTaskError> {
-        let mut pending = lock(&self.restores);
+        let pending = lock(&self.restores);
         let opened = pending
-            .get_mut(&run.attempt)
+            .get(&run.attempt)
             .ok_or(OwnerTaskError::ExecutorStopped)?;
-        opened.apply_setting_readback();
         let plan = OwnerSettingWirePlan::from_catalog(
             self.id.clone(),
-            opened.opened.catalog(),
+            catalogue,
             setting.kind,
             value,
             opened.fallback.clone(),
@@ -334,14 +327,9 @@ impl<P: InteractionPort> FixturePorts<P> {
         let completion = completions.reserve(address)?;
         match plan {
             Ok(plan) => {
-                let (plan, readback) = plan.retain_restore_readback();
-                if self
-                    .wire
-                    .reapply_setting(address.incarnation, run, setting, plan, completion)
-                    .is_ok()
-                {
-                    opened.setting_readback = Some(readback);
-                }
+                let _sent =
+                    self.wire
+                        .reapply_setting(address.incarnation, run, setting, plan, completion);
                 Ok(None)
             }
             Err(_) => {
@@ -350,6 +338,7 @@ impl<P: InteractionPort> FixturePorts<P> {
                     OwnerEvent::Prepare(RestorePreparation::FastOff {
                         run,
                         setting,
+                        catalogue: None,
                         observation: SettingEvidence {
                             value: ObservedSetting::Unknown,
                             cause: Some(ObservationCause::NotOffered),
@@ -357,7 +346,7 @@ impl<P: InteractionPort> FixturePorts<P> {
                     })
                 } else {
                     OwnerEvent::Wire(SessionWireResult::RestoreMode {
-                        run, setting, outcome: provider_session_machines::session_owner::RestoreModeOutcome::Unconfirmed,
+                        run, setting, outcome: provider_session_machines::session_owner::RestoreModeOutcome::Unconfirmed, catalogue: None,
                     })
                 };
                 Ok(Some(event))
@@ -439,6 +428,14 @@ impl<P: InteractionPort> FixturePorts<P> {
         let mut restored_skills = None;
         for fact in &facts {
             match fact {
+                PublicationFact::Settings {
+                    run,
+                    catalogue: Some(catalogue),
+                    ..
+                } => {
+                    self.wire
+                        .update_catalog(Self::transport_run(address, *run), catalogue);
+                }
                 PublicationFact::Live(SessionPublication::Created(run)) => {
                     if let Some((opened, _)) = self.created.take() {
                         self.wire
@@ -552,9 +549,14 @@ impl<P: InteractionPort> SessionOwnerPorts for FixturePorts<P> {
                 run,
                 setting,
                 value,
-            }) => self.restore_setting(address, run, setting, value.0, completions),
-            OwnerEffect::Wire(SessionWireRequest::RestoreFastOff { run, setting }) => {
-                self.restore_setting(address, run, setting, "off".into(), completions)
+                catalogue,
+            }) => self.restore_setting(address, run, setting, value.0, &catalogue, completions),
+            OwnerEffect::Wire(SessionWireRequest::RestoreFastOff {
+                run,
+                setting,
+                catalogue,
+            }) => {
+                self.restore_setting(address, run, setting, "off".into(), &catalogue, completions)
             }
             OwnerEffect::Wire(SessionWireRequest::Close(run)) => {
                 if self
@@ -628,12 +630,14 @@ impl<P: InteractionPort> SessionOwnerPorts for FixturePorts<P> {
                 preparation.send(OwnerEvent::Prepare(RestorePreparation::RouteReady(run)));
                 Ok(Some(OwnerEvent::Replay { run, events }))
             }
-            OwnerEffect::PrepareHost(run) => {
+            OwnerEffect::PrepareHost { run, catalogue } => {
                 let mut pending = lock(&self.restores);
                 let opened = pending
                     .get_mut(&run.attempt)
                     .ok_or(OwnerTaskError::ExecutorStopped)?;
-                opened.apply_setting_readback();
+                opened
+                    .opened
+                    .accept_restore_catalogue(&catalogue, opened.requested_mode.as_deref());
                 Ok(Some(OwnerEvent::Prepare(RestorePreparation::HostReady {
                     run,
                     capabilities: opened.opened.capabilities().to_session_model(),

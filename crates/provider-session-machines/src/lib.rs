@@ -6,7 +6,10 @@
 pub mod cache_warm_machine;
 pub mod monotonic_instant;
 pub mod operation_record_machine;
+mod provider_model_reasoning;
+mod provider_setting_choice;
 pub mod provider_setting_kind;
+pub mod provider_settings_catalog;
 pub mod queue_line_machine;
 pub mod queued_entry_machine;
 mod session_cell_machine;
@@ -21,5 +24,14 @@ pub mod tool_ownership;
 pub mod uncertainty_cell_machine;
 
 pub use monotonic_instant::MonotonicInstant;
+pub use provider_model_reasoning::{
+    ModelReasoning, ModelReasoningEntry, ModelReasoningMetadata, ModelReasoningSelect,
+    ModelReasoningUnknown,
+};
+pub use provider_setting_choice::ProviderSettingChoice;
 pub use provider_setting_kind::ProviderSettingKind;
+pub use provider_settings_catalog::{
+    EffectiveProviderSettings, FastObserved, ProviderConfigOption, ProviderConfigValue,
+    ProviderModeObservation, ProviderSettingsCatalog,
+};
 pub use session_generation::SessionGeneration;

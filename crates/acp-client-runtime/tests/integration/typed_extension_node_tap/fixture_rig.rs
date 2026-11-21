@@ -15,11 +15,13 @@ use std::{
 use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::{
     ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch, HistoryReplayFuture,
-    InteractionFuture, InteractionPort, ModelMetadataSource, ModelReasoning, ModelReasoningEntry,
-    ModelReasoningMetadata, ModelReasoningUnknown, ProviderBehavior, ProviderPersistenceTarget,
-    ProviderSessionActivity, RefusedApprovalOffer, SessionEventSink,
+    InteractionFuture, InteractionPort, ModelMetadataSource, ProviderBehavior,
+    ProviderPersistenceTarget, ProviderSessionActivity, RefusedApprovalOffer, SessionEventSink,
 };
 use codex_router_test_support::node_taps::stable;
+use provider_session_machines::{
+    ModelReasoning, ModelReasoningEntry, ModelReasoningMetadata, ModelReasoningUnknown,
+};
 use session_event_model::{
     ApprovalRequest, PromptContent, ProviderSubmission, SessionEvent, SessionItemKind,
 };

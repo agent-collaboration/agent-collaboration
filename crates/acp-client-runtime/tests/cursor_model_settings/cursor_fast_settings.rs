@@ -10,9 +10,9 @@
 
 use super::acp_wire_fixture::AcpWireFixture;
 use acp_client_runtime::{
-    ExternalProviderRuntimeError, FastObserved, FastRequest, ProviderSettingRequest,
-    RequestedProviderSettings,
+    ExternalProviderRuntimeError, FastRequest, ProviderSettingRequest, RequestedProviderSettings,
 };
+use provider_session_machines::FastObserved;
 use provider_session_machines::ProviderSettingKind;
 use serde_json::{Value, json};
 use session_event_model::{InputId, ProviderSettingFailureReason};
@@ -46,7 +46,7 @@ async fn set(
     fixture: &AcpWireFixture,
     kind: ProviderSettingKind,
     value: &str,
-) -> Result<acp_client_runtime::EffectiveProviderSettings, ExternalProviderRuntimeError> {
+) -> Result<provider_session_machines::EffectiveProviderSettings, ExternalProviderRuntimeError> {
     fixture
         .client
         .set_setting(

@@ -452,9 +452,12 @@ fn t4_unoffered_saved_mode_still_commits_with_not_offered_delta() {
         &mut state,
         OwnerEvent::Wire(SessionWireResult::Restore {
             run,
-            fast_on: None,
-            outcome: WireOutcome::Confirmed(RestoredMode::NotOffered {
-                current: Some(SettingValueId("default".into())),
+            outcome: WireOutcome::Confirmed(RestoreLoadReadback {
+                catalogue: Arc::default(),
+                mode: RestoredMode::NotOffered {
+                    current: Some(SettingValueId("default".into())),
+                },
+                fast_on: None,
             }),
         }),
     );
@@ -475,10 +478,13 @@ fn report_restore_mode(
         state,
         OwnerEvent::Wire(SessionWireResult::Restore {
             run,
-            fast_on: None,
-            outcome: WireOutcome::Confirmed(RestoredMode::Reapply {
-                application,
-                value: SettingValueId("auto".into()),
+            outcome: WireOutcome::Confirmed(RestoreLoadReadback {
+                catalogue: Arc::default(),
+                mode: RestoredMode::Reapply {
+                    application,
+                    value: SettingValueId("auto".into()),
+                },
+                fast_on: None,
             }),
         }),
     );
@@ -495,6 +501,7 @@ fn report_restore_mode(
             run,
             setting,
             outcome: observation,
+            catalogue: None,
         }),
     );
     run

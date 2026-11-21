@@ -60,14 +60,12 @@ mod provider_cursor_plan_items;
 mod provider_frame_observation;
 mod provider_item_projection;
 mod provider_model_picker;
-mod provider_model_reasoning;
 mod provider_persistence_target;
 mod provider_prompt_content;
 mod provider_prompt_result_codec;
 mod provider_restore_failure;
 mod provider_session_settings;
 mod provider_setting_application;
-mod provider_setting_choice;
 mod provider_settings_catalog_codec;
 mod provider_transport_diagnostics;
 mod provider_update_kind;
@@ -109,17 +107,14 @@ pub use provider_capability_report::ProviderCapabilityReport;
 pub use provider_client_contract::ProviderPromptDispatchObservation;
 pub use provider_client_contract::{ProviderSessionActivity, ProviderSteeringOutcome};
 pub use provider_model_picker::ProviderModelPicker;
-pub use provider_model_reasoning::*;
 pub use provider_persistence_target::ProviderPersistenceTarget;
 pub use provider_prompt_content::ProviderPromptContent;
 pub use provider_restore_failure::{RestoreFailure, RestorePhase};
 pub use provider_session_settings::{
-    AppliedProviderSetting, EffectiveProviderSettings, FailedProviderSetting, FastObserved,
-    FastRequest, InvalidSettingSessionDisposition, NotAppliedProviderSetting, ProviderConfigOption,
-    ProviderConfigValue, ProviderModeObservation, ProviderSettingApplication,
-    ProviderSettingRequest, ProviderSettingsCatalog, RequestedProviderSettings,
+    AppliedProviderSetting, FailedProviderSetting, FastRequest, InvalidSettingSessionDisposition,
+    NotAppliedProviderSetting, ProviderSettingApplication, ProviderSettingRequest,
+    RequestedProviderSettings,
 };
-pub use provider_setting_choice::ProviderSettingChoice;
 pub use session_event_sink::{
     EventSinkClosed, GenerationPublication, HistoryReplayFuture, HistoryReplayUnavailable,
     SessionEventSink,

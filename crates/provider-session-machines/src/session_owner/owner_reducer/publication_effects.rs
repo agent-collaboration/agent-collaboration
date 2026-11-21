@@ -289,6 +289,7 @@ impl OwnerTransition {
                 run,
                 settings: setup.settings,
                 observed: self.next.ports.observed.clone(),
+                catalogue: self.next.ports.settings_catalogue.clone(),
             });
         }
     }

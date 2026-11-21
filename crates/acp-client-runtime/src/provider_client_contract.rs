@@ -143,7 +143,7 @@ pub(crate) fn classify_mcp_tool_outcome(
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExternalProviderCreatedSession {
     pub provider_session_id: String,
-    pub effective_settings: crate::EffectiveProviderSettings,
+    pub effective_settings: provider_session_machines::EffectiveProviderSettings,
     /// The requested and actual permission mode, read back from the agent (R3).
     pub permission_mode: crate::PermissionModeReport,
 }

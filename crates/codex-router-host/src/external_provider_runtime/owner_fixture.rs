@@ -472,7 +472,8 @@ impl ExternalProviderRuntime {
         &self,
         provider_id: String,
         request: acp_client_runtime::ProviderSettingRequest,
-    ) -> Result<acp_client_runtime::EffectiveProviderSettings, ExternalProviderRuntimeError> {
+    ) -> Result<provider_session_machines::EffectiveProviderSettings, ExternalProviderRuntimeError>
+    {
         use provider_session_machines::{
             session_owner::{OwnerSetting, RemoteEffect},
             session_setting_machine::{SettingApplication, SettingValueId},

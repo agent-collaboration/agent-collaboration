@@ -12,14 +12,15 @@
 //! `tests/support/model-reasoning-zod-verdict.ts`) and the Rust decoder, whose outcome is read
 //! through its public getters. Those verdicts come from the shared owning-check registry
 //! (`src/owned_contract_checks.rs`), the same one the live recording checker uses.
-use acp_client_runtime::{
-    ModelReasoning, ModelReasoningEntry, ModelReasoningMetadata, ModelReasoningSelect,
-    ModelReasoningUnknown, ProviderBehavior, ProviderSettingChoice,
-};
+use acp_client_runtime::ProviderBehavior;
 use acp_provider_adapters::{ClaudeAcpBehavior, ClaudeSkillSource};
 use codex_router_test_support::node_taps::{
     BodyRoot, CatalogRowExpectation, EdgeParty, MessageFamily, NodeStateSnapshot, ProtocolNode,
     RecordIntent, RecordLayer, RouterContract, TapCase,
+};
+use provider_session_machines::{
+    ModelReasoning, ModelReasoningEntry, ModelReasoningMetadata, ModelReasoningSelect,
+    ModelReasoningUnknown, ProviderSettingChoice,
 };
 use serde_json::{Value, json};
 

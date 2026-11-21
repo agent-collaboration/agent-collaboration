@@ -116,6 +116,19 @@ impl RestoreRig {
         behaviors: &[&str],
         adapter: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> ExternalProviderSupervisor {
+        let arguments = std::iter::once("plain-prompts")
+            .chain(behaviors.iter().copied())
+            .collect::<Vec<_>>();
+        self.open_host_with_fixture_arguments(&arguments, adapter)
+            .await
+            .0
+    }
+
+    async fn open_host_with_fixture_arguments(
+        &self,
+        behaviors: &[&str],
+        adapter: Arc<dyn acp_client_runtime::ProviderBehavior>,
+    ) -> (ExternalProviderSupervisor, Arc<ProviderSessionEventHub>) {
         let store = Arc::new(Mutex::new(self.store().await));
         let hub = Arc::new(ProviderSessionEventHub::new(store.clone()));
         let target: message_board::SessionRef =
@@ -129,7 +142,6 @@ impl RestoreRig {
                     "cursor".into(),
                     "no-directories".into(),
                     "advertise-restore".into(),
-                    "plain-prompts".into(),
                 ]
                 .into_iter()
                 .chain(behaviors.iter().map(|behavior| (*behavior).to_owned()))
@@ -138,7 +150,7 @@ impl RestoreRig {
             acp_client_runtime::ProviderModelPicker::Standard,
             "fixture",
             "http://127.0.0.1:1/mcp",
-            hub,
+            hub.clone(),
             target.endpoint,
             adapter,
             self.clock.clone(),
@@ -147,14 +159,17 @@ impl RestoreRig {
         .expect("fixture runtime");
         // Keep the fixture's binding generation across reseeding so it
         // exercises the same-generation persisted uncertainty rule.
-        ExternalProviderSupervisor::new(
+        let host = ExternalProviderSupervisor::new_with_hub(
             vec![ExternalProviderBinding {
                 identity: binding(),
                 runtime,
             }],
             store,
+            Some(hub.clone()),
+            None,
         )
-        .expect("supervisor")
+        .expect("supervisor");
+        (host, hub)
     }
 
     fn delivery_route(

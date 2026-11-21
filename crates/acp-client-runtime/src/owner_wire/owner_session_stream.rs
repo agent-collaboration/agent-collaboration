@@ -2,7 +2,7 @@
 
 use crate::{
     EventSinkClosed, ExternalProviderRuntimeError, HistoryReplayFuture, ProviderBehavior,
-    ProviderCapabilityReport, ProviderSettingsCatalog, SessionEventSink,
+    ProviderCapabilityReport, SessionEventSink,
 };
 use crate::{
     acp_transport::TransportRun,
@@ -19,6 +19,7 @@ use agent_client_protocol::{
     schema::v1::{ContentBlock, SessionNotification, SessionUpdate},
 };
 use futures_util::FutureExt as _;
+use provider_session_machines::ProviderSettingsCatalog;
 use provider_session_machines::session_owner::{OwnerAddress, OwnerEvent};
 use provider_session_machines::session_turn_machine::TurnId;
 use session_event_model::session_profile_codec::{ProfileState, STATE_METHOD, StateNotification};

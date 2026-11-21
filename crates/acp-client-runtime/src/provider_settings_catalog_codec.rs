@@ -6,14 +6,14 @@ use vendor_protocol::acp::settings_codec::{
     ObservedSetting, ObservedSettingValue, SettingCategory, observe_config_options,
 };
 
-use crate::{
+use provider_session_machines::{
     ProviderConfigOption, ProviderConfigValue, ProviderSettingChoice, ProviderSettingsCatalog,
 };
 
 pub(crate) fn catalog_from_session_response(
     response: &NewSessionResponse,
     behavior: &dyn crate::ProviderBehavior,
-    connection_models: &crate::ModelReasoningMetadata,
+    connection_models: &provider_session_machines::ModelReasoningMetadata,
 ) -> ProviderSettingsCatalog {
     let (current_mode, modes) = response.modes.as_ref().map_or_else(
         || (None, Vec::new()),
@@ -34,7 +34,7 @@ pub(crate) fn catalog_from_session_response(
     let mut catalog = ProviderSettingsCatalog {
         model_reasoning: connection_models.clone(),
         current_mode,
-        mode_observation: crate::ProviderModeObservation::FromCatalogue,
+        mode_observation: provider_session_machines::ProviderModeObservation::FromCatalogue,
         modes,
         config_options: catalog_config_options(response.config_options.as_deref()),
     };
@@ -51,9 +51,10 @@ pub(crate) fn apply_model_metadata(
         catalog.model_reasoning = metadata
             .and_then(|meta| meta.get("codexRouter"))
             .and_then(|meta| meta.get("modelReasoning"))
-            .map_or_else(crate::ModelReasoningMetadata::default, |value| {
-                behavior.decode_model_metadata(value)
-            });
+            .map_or_else(
+                provider_session_machines::ModelReasoningMetadata::default,
+                |value| behavior.decode_model_metadata(value),
+            );
     }
 }
 
@@ -66,7 +67,8 @@ pub(crate) fn replace_catalog_config_options(
         .config_option(ProviderSettingKind::Mode)
         .is_some_and(|option| matches!(option.current_value, ProviderConfigValue::Select(_)))
     {
-        catalog.mode_observation = crate::ProviderModeObservation::FromCatalogue;
+        catalog.mode_observation =
+            provider_session_machines::ProviderModeObservation::FromCatalogue;
     }
 }
 
@@ -81,7 +83,8 @@ pub(crate) fn apply_settings_update(
         SessionUpdate::CurrentModeUpdate(mode) => {
             let current_mode = mode.current_mode_id.0.to_string();
             catalog.current_mode = Some(current_mode.clone());
-            catalog.mode_observation = crate::ProviderModeObservation::FromCatalogue;
+            catalog.mode_observation =
+                provider_session_machines::ProviderModeObservation::FromCatalogue;
             if let Some(option) = catalog
                 .config_options
                 .iter_mut()

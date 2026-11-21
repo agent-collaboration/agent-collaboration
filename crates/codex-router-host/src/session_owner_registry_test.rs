@@ -16,9 +16,9 @@ use provider_session_machines::{
     session_owner::{
         AuthorizedWork, CloseOutcome, DispatchResult, EffectOutcome, OwnerEffect, OwnerEvent,
         OwnerInput, PromptAdmission, PublicationBatch, PublicationFact, PublicationResult,
-        RestorePreparation, RestoredMode, SessionOwnerCommand, SessionOwnerReply,
-        SessionPublication, SessionStoreRequest, SessionStoreResult, SessionWireRequest,
-        SessionWireResult, WireOutcome,
+        RestoreLoadReadback, RestorePreparation, RestoredMode, SessionOwnerCommand,
+        SessionOwnerReply, SessionPublication, SessionStoreRequest, SessionStoreResult,
+        SessionWireRequest, SessionWireResult, WireOutcome,
     },
     session_turn_machine::TurnId,
 };
@@ -174,8 +174,11 @@ impl SessionOwnerPorts for ScenarioPorts {
             OwnerEffect::Wire(SessionWireRequest::Restore { run, .. }) => {
                 Some(OwnerEvent::Wire(SessionWireResult::Restore {
                     run,
-                    outcome: WireOutcome::Confirmed(RestoredMode::Observed),
-                    fast_on: None,
+                    outcome: WireOutcome::Confirmed(RestoreLoadReadback {
+                        catalogue: Arc::default(),
+                        mode: RestoredMode::Observed,
+                        fast_on: None,
+                    }),
                 }))
             }
             OwnerEffect::Wire(SessionWireRequest::Close(run)) => {
@@ -213,7 +216,7 @@ impl SessionOwnerPorts for ScenarioPorts {
                 );
                 Some(OwnerEvent::Prepare(RestorePreparation::RouteReady(run)))
             }
-            OwnerEffect::PrepareHost(run) => {
+            OwnerEffect::PrepareHost { run, .. } => {
                 Some(OwnerEvent::Prepare(RestorePreparation::HostReady {
                     run,
                     capabilities: Default::default(),

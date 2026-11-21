@@ -399,7 +399,7 @@ impl SessionOwnerAddress {
         self.owner.handle.snapshots()
     }
 
-    pub(crate) fn catalog(&self) -> Option<acp_client_runtime::ProviderSettingsCatalog> {
+    pub(crate) fn catalog(&self) -> Option<provider_session_machines::ProviderSettingsCatalog> {
         let snapshot = self.snapshots();
         let provider_session_machines::session_lifecycle_machine::SessionLifecycle::Live {
             generation,

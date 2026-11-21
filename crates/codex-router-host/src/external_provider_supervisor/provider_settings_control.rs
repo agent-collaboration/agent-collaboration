@@ -373,7 +373,7 @@ async fn authorized_session(
 fn result(
     target: SessionRef,
     record: ProviderSessionRecord,
-    observed: acp_client_runtime::EffectiveProviderSettings,
+    observed: provider_session_machines::EffectiveProviderSettings,
 ) -> ProviderSettingsResult {
     let mut effective = effective_settings(record.requested_policy);
     effective.mapping_status = ProviderSettingsMappingStatus::Verified;
@@ -546,7 +546,7 @@ mod tests;
 
 pub(crate) fn snapshot_settings(
     snapshot: &provider_session_machines::session_owner::SessionSnapshot,
-) -> acp_client_runtime::EffectiveProviderSettings {
+) -> provider_session_machines::EffectiveProviderSettings {
     use provider_session_machines::{ProviderSettingKind, session_owner::ObservedSetting};
     let current = |kind| {
         snapshot
@@ -557,15 +557,15 @@ pub(crate) fn snapshot_settings(
                 _ => None,
             })
     };
-    acp_client_runtime::EffectiveProviderSettings {
+    provider_session_machines::EffectiveProviderSettings {
         mode: current(ProviderSettingKind::Mode),
         model: current(ProviderSettingKind::Model),
         effort: current(ProviderSettingKind::Effort),
         fast: current(ProviderSettingKind::Fast).map(|value| {
             if matches!(value.as_str(), "false" | "off") {
-                acp_client_runtime::FastObserved::Off
+                provider_session_machines::FastObserved::Off
             } else {
-                acp_client_runtime::FastObserved::On
+                provider_session_machines::FastObserved::On
             }
         }),
     }

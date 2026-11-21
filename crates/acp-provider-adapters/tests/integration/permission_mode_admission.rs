@@ -756,7 +756,7 @@ async fn claude_default_fast_is_a_no_op_and_reports_none() {
     fixture.client.shutdown().await;
     assert_eq!(
         created.effective_settings.fast,
-        Some(acp_client_runtime::FastObserved::NoOption)
+        Some(provider_session_machines::FastObserved::NoOption)
     );
     assert_eq!(fixture.receipt()["fastRequests"], json!([]));
 }

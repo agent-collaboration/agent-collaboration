@@ -49,7 +49,7 @@ impl ProviderBehavior for CursorAcpBehavior {
     fn decode_model_metadata(
         &self,
         value: &serde_json::Value,
-    ) -> acp_client_runtime::ModelReasoningMetadata {
+    ) -> provider_session_machines::ModelReasoningMetadata {
         crate::model_reasoning_metadata::decode_cursor_models(value)
     }
     fn stated_permission_target(

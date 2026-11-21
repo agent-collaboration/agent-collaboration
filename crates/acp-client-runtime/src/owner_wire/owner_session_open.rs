@@ -1,8 +1,7 @@
 //! Start SDK routing as an ordered connection effect.
 
 use crate::{
-    ExternalProviderRuntimeError, ModelReasoningMetadata, ProviderBehavior,
-    ProviderCapabilityReport, ProviderSettingsCatalog, SessionWorkRoots,
+    ExternalProviderRuntimeError, ProviderBehavior, ProviderCapabilityReport, SessionWorkRoots,
     owner_session_stream::{OwnerStreamTarget, ProjectionBuffer},
     provider_item_projection::ProviderItemProjection,
 };
@@ -12,6 +11,7 @@ use agent_client_protocol::schema::v1::{
 use agent_client_protocol::{ActiveSession, Agent, ConnectionTo, Dispatch};
 use futures_util::FutureExt as _;
 use provider_session_machines::session_lifecycle_machine::{LoadAttempt, RestoreVia};
+use provider_session_machines::{ModelReasoningMetadata, ProviderSettingsCatalog};
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};

@@ -84,7 +84,7 @@ type WireGrants =
     Arc<Mutex<BTreeMap<TransportRun, crate::in_folder_allowance::SessionInFolderGrant>>>;
 
 struct WireCatalogue {
-    current: crate::ProviderSettingsCatalog,
+    current: provider_session_machines::ProviderSettingsCatalog,
     latest_setting: Option<DispatchAuthorization>,
 }
 
@@ -354,7 +354,10 @@ impl OwnerAcpWire {
     }
 
     /// The provider's encoding catalogue for a specific route.
-    pub fn session_catalog(&self, run: TransportRun) -> Option<crate::ProviderSettingsCatalog> {
+    pub fn session_catalog(
+        &self,
+        run: TransportRun,
+    ) -> Option<provider_session_machines::ProviderSettingsCatalog> {
         self.catalogs
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -362,7 +365,11 @@ impl OwnerAcpWire {
             .map(|catalog| catalog.current.clone())
     }
 
-    pub fn install_catalog(&self, run: TransportRun, catalog: crate::ProviderSettingsCatalog) {
+    pub fn install_catalog(
+        &self,
+        run: TransportRun,
+        catalog: provider_session_machines::ProviderSettingsCatalog,
+    ) {
         self.catalogs
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -375,10 +382,10 @@ impl OwnerAcpWire {
             );
     }
 
-    pub(crate) fn update_catalog(
+    pub fn update_catalog(
         &self,
         run: TransportRun,
-        catalog: &crate::ProviderSettingsCatalog,
+        catalog: &provider_session_machines::ProviderSettingsCatalog,
     ) {
         if let Some(current) = self
             .catalogs

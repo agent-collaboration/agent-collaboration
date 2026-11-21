@@ -8,8 +8,9 @@ use agent_client_protocol::{ConnectionTo, JsonRpcMessage, UntypedMessage};
 use provider_session_machines::ProviderSettingKind;
 
 use crate::provider_acp_error_mapping::acp_operation_error;
-use crate::{AppliedProviderSetting, ProviderSettingsCatalog, RequestedProviderSettings};
+use crate::{AppliedProviderSetting, RequestedProviderSettings};
 use agent_client_protocol::Agent;
+use provider_session_machines::ProviderSettingsCatalog;
 use std::time::Duration;
 
 const SETTING_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -221,10 +222,14 @@ async fn apply_fast_off(
         return Err(invalid(Vec::new()));
     };
     let value = match option.current_value {
-        crate::ProviderConfigValue::Boolean(_) => SessionConfigOptionValue::boolean(false),
-        crate::ProviderConfigValue::Select(_) => {
+        provider_session_machines::ProviderConfigValue::Boolean(_) => {
+            SessionConfigOptionValue::boolean(false)
+        }
+        provider_session_machines::ProviderConfigValue::Select(_) => {
             let Some(off) = option.choices.iter().find(|choice| {
-                crate::provider_session_settings::is_fast_off_select_value(&choice.value)
+                provider_session_machines::provider_settings_catalog::is_fast_off_select_value(
+                    &choice.value,
+                )
             }) else {
                 return Err(invalid(
                     option
@@ -281,15 +286,17 @@ fn apply_fast_response(
     // whether or not it confirms off (D1 V14), so nothing reports a stale one.
     *catalog = updated;
     match observed {
-        crate::FastObserved::Off => Ok(()),
-        crate::FastObserved::On => Err(SettingResponseFailure::Rejected {
+        provider_session_machines::FastObserved::Off => Ok(()),
+        provider_session_machines::FastObserved::On => Err(SettingResponseFailure::Rejected {
             reason: "the agent's fast option still reads on".to_owned(),
             confirmed_current: true,
         }),
-        crate::FastObserved::NoOption => Err(SettingResponseFailure::Rejected {
-            reason: "the agent's answer no longer lists a fast option".to_owned(),
-            confirmed_current: true,
-        }),
+        provider_session_machines::FastObserved::NoOption => {
+            Err(SettingResponseFailure::Rejected {
+                reason: "the agent's answer no longer lists a fast option".to_owned(),
+                confirmed_current: true,
+            })
+        }
     }
 }
 
@@ -385,7 +392,8 @@ async fn apply_one_setting(
         };
         if result.is_ok() {
             catalog.current_mode = Some(value.clone());
-            catalog.mode_observation = crate::ProviderModeObservation::FromCatalogue;
+            catalog.mode_observation =
+                provider_session_machines::ProviderModeObservation::FromCatalogue;
         }
         result
     } else {

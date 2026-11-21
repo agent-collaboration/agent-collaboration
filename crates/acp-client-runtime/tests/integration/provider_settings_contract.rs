@@ -1,9 +1,9 @@
 //! Compile-level contract consumed by the Host's provider create projection.
 
 use acp_client_runtime::{
-    AppliedProviderSetting, EffectiveProviderSettings, ExternalProviderCreatedSession,
-    RequestedProviderSettings,
+    AppliedProviderSetting, ExternalProviderCreatedSession, RequestedProviderSettings,
 };
+use provider_session_machines::EffectiveProviderSettings;
 use provider_session_machines::ProviderSettingKind;
 
 /// Oracle: specification R14 reports the effective settings and every applied

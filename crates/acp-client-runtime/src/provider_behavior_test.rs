@@ -20,8 +20,13 @@ impl ProviderBehavior for LiteralBehavior {
     fn model_metadata_source(&self) -> crate::ModelMetadataSource {
         crate::ModelMetadataSource::Unavailable
     }
-    fn decode_model_metadata(&self, _value: &serde_json::Value) -> crate::ModelReasoningMetadata {
-        crate::ModelReasoningMetadata::Unknown(crate::ModelReasoningUnknown::UnsupportedSource)
+    fn decode_model_metadata(
+        &self,
+        _value: &serde_json::Value,
+    ) -> provider_session_machines::ModelReasoningMetadata {
+        provider_session_machines::ModelReasoningMetadata::Unknown(
+            provider_session_machines::ModelReasoningUnknown::UnsupportedSource,
+        )
     }
     fn auto_permission_mode(&self) -> acp_client_runtime::AutoPermissionMode {
         acp_client_runtime::AutoPermissionMode::UNREALIZED

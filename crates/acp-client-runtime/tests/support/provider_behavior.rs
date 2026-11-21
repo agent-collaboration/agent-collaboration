@@ -22,9 +22,9 @@ impl ProviderBehavior for TestProviderBehavior {
     fn decode_model_metadata(
         &self,
         _value: &serde_json::Value,
-    ) -> acp_client_runtime::ModelReasoningMetadata {
-        acp_client_runtime::ModelReasoningMetadata::Unknown(
-            acp_client_runtime::ModelReasoningUnknown::UnsupportedSource,
+    ) -> provider_session_machines::ModelReasoningMetadata {
+        provider_session_machines::ModelReasoningMetadata::Unknown(
+            provider_session_machines::ModelReasoningUnknown::UnsupportedSource,
         )
     }
     fn auto_permission_mode(&self) -> acp_client_runtime::AutoPermissionMode {
@@ -65,7 +65,7 @@ impl ProviderBehavior for ClaudeLikeAutoBehavior {
     fn decode_model_metadata(
         &self,
         value: &serde_json::Value,
-    ) -> acp_client_runtime::ModelReasoningMetadata {
+    ) -> provider_session_machines::ModelReasoningMetadata {
         TestProviderBehavior.decode_model_metadata(value)
     }
     fn auto_permission_mode(&self) -> acp_client_runtime::AutoPermissionMode {

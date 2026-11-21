@@ -9,21 +9,21 @@ use acp_client_runtime::{
     ExternalProviderRuntimeError,
     acp_transport::TransportRun,
     owner_session_open::{OwnerOpenedSession, OwnerSessionOpenSetup},
-    owner_session_setting::{OwnerSettingWirePlan, RestoreSettingPlan, RestoreSettingReadback},
+    owner_session_setting::{OwnerSettingWirePlan, RestoreSettingPlan},
     owner_session_stream::OwnerStreamTarget,
     owner_wire::OwnerAcpWire,
     session_owner_task::{OwnerCompletionPort, OwnerTaskError, SessionOwnerPorts},
 };
 use collaboration_protocol::{ProviderIdentity, SessionRef};
 use provider_session_machines::{
-    ProviderSettingKind, SessionGeneration,
+    ProviderSettingKind, ProviderSettingsCatalog, SessionGeneration,
     session_lifecycle_machine::{LoadAttempt, RestoreVia},
     session_owner::{
         AuthorizedWork, DispatchAuthorization, DispatchResult, ObservationCause, ObservedSetting,
         OwnerAddress, OwnerEffect, OwnerEvent, OwnerSetting, PreparationStage, PublicationBatch,
-        PublicationFact, RestoreFailure, RestoreModeOutcome, RestorePreparation, RunAttempt,
-        SessionOwnerReply, SessionPublication, SessionWireRequest, SessionWireResult,
-        SettingEvidence, TurnMembership, WireOutcome,
+        PublicationFact, RestoreFailure, RestoreLoadReadback, RestoreModeOutcome,
+        RestorePreparation, RunAttempt, SessionOwnerReply, SessionPublication, SessionWireRequest,
+        SessionWireResult, SettingEvidence, TurnMembership, WireOutcome,
     },
     session_setting_machine::SettingValueId,
 };
@@ -59,16 +59,6 @@ struct OpenedRestore {
     requested_mode: Option<String>,
     fallback: Option<String>,
     skills: Option<session_event_model::SkillView>,
-    setting_readback: Option<RestoreSettingReadback>,
-}
-
-impl OpenedRestore {
-    fn apply_setting_readback(&mut self) {
-        if let Some(readback) = self.setting_readback.take() {
-            self.session
-                .apply_restore_setting_readback(readback, self.requested_mode.as_deref());
-        }
-    }
 }
 
 struct OwnerRun {
@@ -279,6 +269,7 @@ impl SessionOwnerExecution {
                 accepted_mode_fallback,
                 fast_off,
             } = session.restore_setting_plan(saved.resume.requested_mode.as_deref());
+            let catalogue = Arc::new(session.catalog().clone());
             lock(&opened).insert(
                 run.attempt,
                 OpenedRestore {
@@ -286,13 +277,15 @@ impl SessionOwnerExecution {
                     requested_mode: saved.resume.requested_mode,
                     fallback: accepted_mode_fallback,
                     skills,
-                    setting_readback: None,
                 },
             );
             completion.send(OwnerEvent::Wire(SessionWireResult::Restore {
                 run,
-                outcome: WireOutcome::Confirmed(mode),
-                fast_on: fast_off,
+                outcome: WireOutcome::Confirmed(RestoreLoadReadback {
+                    catalogue,
+                    mode,
+                    fast_on: fast_off,
+                }),
             }));
         });
         Ok(None)
@@ -304,16 +297,16 @@ impl SessionOwnerExecution {
         run: RunAttempt<LoadAttempt>,
         setting: OwnerSetting,
         value: SettingValueId,
+        catalogue: &ProviderSettingsCatalog,
         completions: &OwnerCompletionPort,
     ) -> Result<Option<OwnerEvent>, OwnerTaskError> {
-        let mut connection = lock(&self.opens);
-        let Some(opened) = connection.get_mut(&run.attempt) else {
+        let connection = lock(&self.opens);
+        let Some(opened) = connection.get(&run.attempt) else {
             return Ok(Some(setting_unsent(run, setting)));
         };
-        opened.apply_setting_readback();
         let request = match OwnerSettingWirePlan::from_catalog(
             self.session_id(),
-            opened.session.catalog(),
+            catalogue,
             setting.kind,
             value.0,
             opened.fallback.clone(),
@@ -321,7 +314,6 @@ impl SessionOwnerExecution {
             Ok(request) => request,
             Err(_) => return Ok(Some(setting_unsent(run, setting))),
         };
-        let (request, readback) = request.retain_restore_readback();
         let completion = completions.reserve(address)?;
         if self
             .wire
@@ -330,7 +322,6 @@ impl SessionOwnerExecution {
         {
             return Ok(Some(setting_unsent(run, setting)));
         }
-        opened.setting_readback = Some(readback);
         Ok(None)
     }
 
@@ -537,15 +528,20 @@ impl SessionOwnerPorts for SessionOwnerExecution {
                 run,
                 setting,
                 value,
-            }) => self.restore_setting(owner, run, setting, value, completions),
-            OwnerEffect::Wire(SessionWireRequest::RestoreFastOff { run, setting }) => self
-                .restore_setting(
-                    owner,
-                    run,
-                    setting,
-                    SettingValueId("off".into()),
-                    completions,
-                ),
+                catalogue,
+            }) => self.restore_setting(owner, run, setting, value, &catalogue, completions),
+            OwnerEffect::Wire(SessionWireRequest::RestoreFastOff {
+                run,
+                setting,
+                catalogue,
+            }) => self.restore_setting(
+                owner,
+                run,
+                setting,
+                SettingValueId("off".into()),
+                &catalogue,
+                completions,
+            ),
             OwnerEffect::Wire(SessionWireRequest::Close(run)) => {
                 let completion = completions.reserve(owner)?;
                 let unavailable = self
@@ -567,11 +563,13 @@ impl SessionOwnerPorts for SessionOwnerExecution {
                     }
                 },
             ))),
-            OwnerEffect::PrepareHost(run) => {
+            OwnerEffect::PrepareHost { run, catalogue } => {
                 let mut openings = lock(&self.opens);
                 let preparation = match openings.get_mut(&run.attempt) {
                     Some(entry) => {
-                        entry.apply_setting_readback();
+                        entry
+                            .session
+                            .accept_restore_catalogue(&catalogue, entry.requested_mode.as_deref());
                         RestorePreparation::HostReady {
                             run,
                             capabilities: entry.session.capabilities().to_session_model(),
@@ -672,6 +670,14 @@ impl SessionOwnerPorts for SessionOwnerExecution {
                 if let PublicationBatch::Commit { facts, .. } = &batch {
                     for fact in facts {
                         match fact {
+                            PublicationFact::Settings {
+                                run,
+                                catalogue: Some(catalogue),
+                                ..
+                            } => {
+                                self.wire
+                                    .update_catalog(Self::transport_run(owner, *run), catalogue);
+                            }
                             PublicationFact::Live(SessionPublication::Activated {
                                 run, ..
                             }) => {
@@ -807,6 +813,7 @@ fn setting_unsent(run: RunAttempt<LoadAttempt>, setting: OwnerSetting) -> OwnerE
         OwnerEvent::Prepare(RestorePreparation::FastOff {
             run,
             setting,
+            catalogue: None,
             observation: SettingEvidence {
                 value: ObservedSetting::Unknown,
                 cause: Some(ObservationCause::Unconfirmed),
@@ -817,6 +824,7 @@ fn setting_unsent(run: RunAttempt<LoadAttempt>, setting: OwnerSetting) -> OwnerE
             run,
             setting,
             outcome: RestoreModeOutcome::Unconfirmed,
+            catalogue: None,
         })
     }
 }

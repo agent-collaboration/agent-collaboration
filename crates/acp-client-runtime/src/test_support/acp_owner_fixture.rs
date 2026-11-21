@@ -1,17 +1,16 @@
 //! Scripted ACP fixtures addressed through the session owner and ordered wire ports.
 
 use crate::{
-    AgentSessionClient, EffectiveProviderSettings, ExternalProviderCreatedSession,
-    ExternalProviderLaunch, ExternalProviderRuntimeError, InteractionPort, ProviderBehavior,
-    ProviderCapabilityReport, ProviderModelPicker, ProviderPromptContent,
-    ProviderPromptDispatchObservation, ProviderSettingRequest, ProviderSettingsCatalog,
-    ProviderTurnInput, RequestedProviderSettings, SessionEventSink, SessionRestoreSetup,
-    SessionWorkRoots,
+    AgentSessionClient, ExternalProviderCreatedSession, ExternalProviderLaunch,
+    ExternalProviderRuntimeError, InteractionPort, ProviderBehavior, ProviderCapabilityReport,
+    ProviderModelPicker, ProviderPromptContent, ProviderPromptDispatchObservation,
+    ProviderSettingRequest, ProviderTurnInput, RequestedProviderSettings, SessionEventSink,
+    SessionRestoreSetup, SessionWorkRoots,
     owner_session_open::{OwnerOpenedSession, OwnerSessionOpenSetup},
     session_owner_task::{SessionOwnerHandle, SessionOwnerTask},
 };
 use provider_session_machines::{
-    SessionGeneration,
+    EffectiveProviderSettings, ProviderSettingsCatalog, SessionGeneration,
     session_lifecycle_machine::{CloseAttempt, LoadAttempt, RestoreVia, SessionLifecycle},
     session_owner::{
         CancelDrainReport, CloseOutcome, CloseRequest, ConnectionEpoch, CreatedSessionFacts,
@@ -812,7 +811,8 @@ impl<P: InteractionPort> FixtureClient<P> {
                 })?;
         catalog.current_mode = session.effective_settings().mode;
         if catalog.current_mode.is_none() {
-            catalog.mode_observation = crate::ProviderModeObservation::Unconfirmed;
+            catalog.mode_observation =
+                provider_session_machines::ProviderModeObservation::Unconfirmed;
         }
         Some(catalog)
     }
@@ -975,9 +975,9 @@ impl<P: InteractionPort> FixtureSession<P> {
             effort: confirmed(ProviderSettingKind::Effort),
             fast: confirmed(ProviderSettingKind::Fast).map(|state| {
                 if state == "off" {
-                    crate::FastObserved::Off
+                    provider_session_machines::FastObserved::Off
                 } else {
-                    crate::FastObserved::On
+                    provider_session_machines::FastObserved::On
                 }
             }),
         }

@@ -120,8 +120,11 @@ fn open_wire(state: &mut SessionOwnerState, number: u64) -> RunAttempt<LoadAttem
 fn restore_reply(run: RunAttempt<LoadAttempt>) -> OwnerEvent {
     OwnerEvent::Wire(SessionWireResult::Restore {
         run,
-        outcome: WireOutcome::Confirmed(RestoredMode::Observed),
-        fast_on: None,
+        outcome: WireOutcome::Confirmed(RestoreLoadReadback {
+            catalogue: Arc::default(),
+            mode: RestoredMode::Observed,
+            fast_on: None,
+        }),
     })
 }
 

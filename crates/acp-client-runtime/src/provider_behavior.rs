@@ -28,6 +28,13 @@ pub struct SessionRestoreSetup {
     pub work_roots: SessionWorkRoots,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ModelMetadataSource {
+    SessionMetadata,
+    ConnectionRequest { method: &'static str },
+    Unavailable,
+}
+
 pub trait ProviderBehavior: Send + Sync {
     fn initialization_authentication(&self) -> ProviderInitializationAuthentication;
     fn can_reuse_setting_confirmation(
@@ -35,7 +42,10 @@ pub trait ProviderBehavior: Send + Sync {
         kind: provider_session_machines::ProviderSettingKind,
     ) -> bool;
     fn model_metadata_source(&self) -> crate::ModelMetadataSource;
-    fn decode_model_metadata(&self, value: &serde_json::Value) -> crate::ModelReasoningMetadata;
+    fn decode_model_metadata(
+        &self,
+        value: &serde_json::Value,
+    ) -> provider_session_machines::ModelReasoningMetadata;
     /// What `auto` means for this agent: its own mode realizing it, its ask-first
     /// fallback, and how actions outside its grant are treated (R3, R7).
     fn auto_permission_mode(&self) -> crate::AutoPermissionMode;

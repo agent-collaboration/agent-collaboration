@@ -1,7 +1,8 @@
 //! One optional descriptor read on the existing initialized connection.
 
-use crate::{ModelMetadataSource, ModelReasoningMetadata, ModelReasoningUnknown, ProviderBehavior};
+use crate::{ModelMetadataSource, ProviderBehavior};
 use agent_client_protocol::{Agent, ConnectionTo, UntypedMessage};
+use provider_session_machines::{ModelReasoningMetadata, ModelReasoningUnknown};
 use router_clock::{ClockInstant, RuntimeClock};
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;

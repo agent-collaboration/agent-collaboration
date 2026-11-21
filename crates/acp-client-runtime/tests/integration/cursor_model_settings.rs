@@ -6,10 +6,9 @@ mod acp_wire_fixture;
 #[path = "../cursor_model_settings/cursor_fast_settings.rs"]
 mod cursor_fast_settings;
 
-use acp_client_runtime::{
-    ExternalProviderRuntimeError, ProviderConfigValue, RequestedProviderSettings,
-};
+use acp_client_runtime::{ExternalProviderRuntimeError, RequestedProviderSettings};
 use acp_wire_fixture::AcpWireFixture;
+use provider_session_machines::ProviderConfigValue;
 use session_event_model::ConfigValueState;
 
 async fn assert_shared_setting_is_reasserted(
@@ -57,7 +56,7 @@ async fn assert_shared_setting_is_reasserted(
         )
         .await?;
     fixture.client.shutdown().await;
-    let value = |settings: acp_client_runtime::EffectiveProviderSettings| match kind {
+    let value = |settings: provider_session_machines::EffectiveProviderSettings| match kind {
         ProviderSettingKind::Model => settings.model,
         ProviderSettingKind::Effort => settings.effort,
         ProviderSettingKind::Mode => settings.mode,

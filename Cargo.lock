@@ -4126,6 +4126,7 @@ name = "provider-session-machines"
 version = "0.1.157"
 dependencies = [
  "hegeltest",
+ "serde",
  "session-event-model",
  "state-machine-core",
  "uuid",

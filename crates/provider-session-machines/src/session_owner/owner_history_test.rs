@@ -428,7 +428,10 @@ fn input_waits_for_owner_commit_and_failed_preparation_never_waits_for_a_turn() 
         [OwnerEffect::InputQueued(waiting.clone())]
     );
     let prepared = apply(&mut state, restore_reply(run));
-    assert!(prepared.contains(&OwnerEffect::PrepareHost(run)));
+    assert!(prepared.contains(&OwnerEffect::PrepareHost {
+        run,
+        catalogue: Arc::default(),
+    }));
     assert!(
         !prepared.contains(&OwnerEffect::Store(SessionStoreRequest::MarkDispatch(
             waiting.clone()
