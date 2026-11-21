@@ -36,6 +36,7 @@ import { StreamingMcpClient } from "./transport/streaming-mcp-client.ts";
 import { z } from "zod";
 import { savedModeRestartCase } from "./journeys/saved-mode-restart.ts";
 import { inFolderAllowanceCase } from "./journeys/in-folder-allowance.ts";
+import { hostAdmissionSmokeCase } from "./journeys/host-admission-smoke.ts";
 import { unansweredReopenCase } from "./journeys/unanswered-reopen.ts";
 import { unansweredCloseCase } from "./journeys/unanswered-close.ts";
 import { cancelRestartCase, unconfirmedCancelCase } from "./journeys/unconfirmed-cancel.ts";
@@ -52,6 +53,7 @@ const CASES: Readonly<Record<ControlCase, (inputs: CaseInputs) => Promise<CaseRe
   continuationReload: continuationReloadCase,
   savedModeRestart: savedModeRestartCase,
   inFolderAllowance: inFolderAllowanceCase,
+  hostAdmissionSmoke: hostAdmissionSmokeCase,
   unansweredReopen: unansweredReopenCase,
   unansweredClose: unansweredCloseCase,
   unconfirmedCancel: unconfirmedCancelCase,
@@ -91,6 +93,11 @@ function sessionControlTools(plan: ControlPlan): string[] {
     return plan.sessionControl?.allowanceJourney === "autoReopen"
       ? [...common, "conversation_load", "conversation_settings_set"]
       : common;
+  }
+  if (plan.cases.includes("hostAdmissionSmoke")) {
+    return plan.sessionControl?.restart?.phase === "seed"
+      ? [...common, "events_observe", "conversation_cancel", "conversation_close"]
+      : [...common, "conversation_load", "conversation_settings_set"];
   }
   if (plan.cases.includes("cancelQueued"))
     return [...common, "events_observe", "conversation_cancel"];

@@ -50,6 +50,7 @@ const sessionControlCases = z.enum([
   "cancelQueued",
   "refusedSteer",
   "inFolderAllowance",
+  "hostAdmissionSmoke",
 ]);
 export const controlCaseSchema = z.enum([
   "lifecycle",
@@ -181,6 +182,7 @@ const CASE_EFFECTS: Readonly<
   cancelQueued: { sessions: 1, prompts: 2 },
   refusedSteer: { sessions: 1, prompts: 2 },
   inFolderAllowance: { sessions: 1, prompts: 2 },
+  hostAdmissionSmoke: { sessions: 2, prompts: 4 },
 };
 const CONTINUATION_CASE = { retain: "continuationRetain", reload: "continuationReload" } as const;
 const OWNER_LOOKUP_COMMAND = "/usr/bin/id"; // collaboration-client owner_identity_resolution.rs:8
@@ -399,10 +401,12 @@ function checkSessionControlDeclaration(plan: ControlPlan): void {
     (control.restart !== undefined) !==
     (selected[0] === "savedModeRestart" ||
       selected[0] === "cancelRestart" ||
+      selected[0] === "hostAdmissionSmoke" ||
       control.allowanceJourney === "autoSeed" ||
       control.allowanceJourney === "autoReopen")
   )
     throw new Error("only the restart cases declare seed and reopen lifetimes");
+  if (selected[0] === "hostAdmissionSmoke") checkHostAdmissionSmoke(plan, control);
   if (control.closePrimer === false && selected[0] !== "unansweredClose")
     throw new Error("only the unanswered-close case declares a metadata-only seed");
   checkCursorCancelDeclaration(plan, selected[0], control.cursorCancelLoad);
@@ -490,6 +494,20 @@ function checkAutomationContext(plan: ControlPlan): void {
   }
 }
 
+function checkHostAdmissionSmoke(
+  plan: ControlPlan,
+  control: NonNullable<ControlPlan["sessionControl"]>,
+): void {
+  if (
+    plan.endpointId !== "claude-local" ||
+    plan.host.kind !== "automationDebugHost" ||
+    plan.peer.kind !== "provider" ||
+    control.savedMode !== "plan" ||
+    control.restore !== "load"
+  )
+    throw new Error("the admission smoke requires the private Claude Plan route");
+}
+
 function checkAllowanceDeclaration(
   plan: ControlPlan,
   selected: ControlCase | undefined,
@@ -574,6 +592,7 @@ function checkActor(plan: ControlPlan): void {
 }
 
 function casePromptBudget(plan: ControlPlan, name: ControlCase): number {
+  if (name === "hostAdmissionSmoke" && plan.sessionControl?.restart?.phase === "reopen") return 1;
   if (
     name === "inFolderAllowance" &&
     plan.sessionControl?.observeRestoredDelete &&
@@ -595,7 +614,11 @@ function casePromptBudget(plan: ControlPlan, name: ControlCase): number {
 function checkEffectsAndTime(plan: ControlPlan, now: Date): void {
   const needed = plan.cases.reduce(
     (total, name) => ({
-      sessions: total.sessions + CASE_EFFECTS[name].sessions,
+      sessions:
+        total.sessions +
+        (name === "hostAdmissionSmoke" && plan.sessionControl?.restart?.phase === "reopen"
+          ? 0
+          : CASE_EFFECTS[name].sessions),
       prompts:
         total.prompts +
         casePromptBudget(plan, name) +

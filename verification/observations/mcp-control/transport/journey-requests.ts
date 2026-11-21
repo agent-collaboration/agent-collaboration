@@ -41,6 +41,7 @@ export function createArguments(
     operationId,
     endpoint: { serviceId: plan.expectedServiceId, endpointId: plan.endpointId },
     workingDirectory: plan.workingDirectory,
+    ...(plan.cases.includes("hostAdmissionSmoke") ? { workRoots: [plan.workingDirectory] } : {}),
     access: "write-restricted",
     ...(plan.peer.kind === "provider" && plan.peer.selection.selectOnCreate
       ? { model: plan.peer.selection.model }

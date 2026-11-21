@@ -91,6 +91,8 @@ const routePlanSchema = z.strictObject({
     }),
     z.strictObject({ kind: z.literal("cancelRestartSeed") }),
     z.strictObject({ kind: z.literal("cancelRestartReopen"), record: pathSchema }),
+    z.strictObject({ kind: z.literal("hostAdmissionSeed") }),
+    z.strictObject({ kind: z.literal("hostAdmissionReopen"), record: pathSchema }),
     z.strictObject({ kind: z.enum(["allowanceAutoProbe", "allowanceDefault"]) }),
     z.strictObject({
       kind: z.literal("allowanceAutoSeed"),
@@ -109,6 +111,7 @@ function isReopen(plan: RoutePlan): boolean {
   return (
     plan.journey.kind === "savedModeReopen" ||
     plan.journey.kind === "cancelRestartReopen" ||
+    plan.journey.kind === "hostAdmissionReopen" ||
     plan.journey.kind === "allowanceAutoReopen"
   );
 }
@@ -332,10 +335,12 @@ function restartIntent(
 ): NonNullable<ControlPlan["sessionControl"]>["restart"] {
   return plan.journey.kind === "savedModeSeed" ||
     plan.journey.kind === "cancelRestartSeed" ||
+    plan.journey.kind === "hostAdmissionSeed" ||
     plan.journey.kind === "allowanceAutoSeed"
     ? { phase: "seed", record: join(evidence, "seed.json") }
     : plan.journey.kind === "savedModeReopen" ||
         plan.journey.kind === "cancelRestartReopen" ||
+        plan.journey.kind === "hostAdmissionReopen" ||
         plan.journey.kind === "allowanceAutoReopen"
       ? {
           phase: "reopen",
@@ -362,6 +367,42 @@ function allowancePhase(
   }
 }
 
+function routeCase(
+  journey: Exclude<RoutePlan["journey"], { kind: "preflight" }>,
+): ControlPlan["cases"][number] {
+  switch (journey.kind) {
+    case "savedModeSeed":
+    case "savedModeReopen":
+      return "savedModeRestart";
+    case "cancelRestartSeed":
+    case "cancelRestartReopen":
+      return "cancelRestart";
+    case "hostAdmissionSeed":
+    case "hostAdmissionReopen":
+      return "hostAdmissionSmoke";
+    case "allowanceAutoSeed":
+    case "allowanceAutoReopen":
+    case "allowanceAutoProbe":
+    case "allowanceDefault":
+      return "inFolderAllowance";
+    default:
+      return journey.kind;
+  }
+}
+
+function routePromptBudget(plan: RoutePlan): number {
+  if (plan.journey.kind === "hostAdmissionSeed") return 4;
+  if (plan.journey.kind === "hostAdmissionReopen") return 1;
+  if (plan.journey.kind === "unconfirmedCancel") {
+    if (plan.journey.cursorCancelLoad === "afterPrimer" || plan.journey.primedCancelGuidance)
+      return 4;
+    if (plan.journey.cursorCancelLoad === undefined) return 3;
+  }
+  if (plan.journey.kind === "allowanceAutoProbe") return 3;
+  if (plan.journey.kind === "allowanceAutoSeed" && observesRestoredDelete(plan.journey)) return 1;
+  return 2;
+}
+
 function makeControlPlan(
   plan: RoutePlan,
   prepared: ReturnType<typeof prepare>,
@@ -373,14 +414,7 @@ function makeControlPlan(
   const evidence = join(prepared.evidence, "case");
   const allowanceJourney = allowancePhase(plan.journey);
   const restart = restartIntent(plan, evidence);
-  const caseName =
-    allowanceJourney !== undefined
-      ? "inFolderAllowance"
-      : plan.journey.kind === "savedModeReopen" || plan.journey.kind === "savedModeSeed"
-        ? "savedModeRestart"
-        : plan.journey.kind === "cancelRestartReopen" || plan.journey.kind === "cancelRestartSeed"
-          ? "cancelRestart"
-          : plan.journey.kind;
+  const caseName = routeCase(plan.journey);
   const actor = localActor();
   const cursorCancelLoad =
     plan.journey.kind === "unconfirmedCancel" ? plan.journey.cursorCancelLoad : undefined;
@@ -390,15 +424,7 @@ function makeControlPlan(
     plan.journey.kind === "savedModeSeed" || plan.journey.kind === "savedModeReopen"
       ? plan.journey.restoreReapply
       : undefined;
-  const maxPrompts =
-    cursorCancelLoad === "afterPrimer" || primedCancelGuidance
-      ? 4
-      : allowanceJourney === "autoProbe" ||
-          (caseName === "unconfirmedCancel" && cursorCancelLoad === undefined)
-        ? 3
-        : plan.journey.kind === "allowanceAutoSeed" && observesRestoredDelete(plan.journey)
-          ? 1
-          : 2;
+  const maxPrompts = routePromptBudget(plan);
   return controlPlanSchema.parse({
     repository: plan.repository,
     sourceHead: plan.sourceHead,
