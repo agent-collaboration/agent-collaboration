@@ -17,6 +17,7 @@ members = [
     "crates/fleet-schedules",
     "crates/fleet-timer-policy",
     "crates/central-engine-test-support",
+    "crates/fleet-runtime-test-support",
     "crates/fleet-workspace-access",
     "crates/fleet-workspace-directory",
     "crates/fleet-storage-schema",
@@ -87,6 +88,7 @@ workspace-model = { path = "crates/workspace-model", version = "0.1.149" }
 central-storage = { path = "crates/central-storage", version = "0.1.149" }
 central-engine-model = { path = "crates/central-engine-model", version = "0.1.153" }
 fleet-runtime-ports = { path = "crates/fleet-runtime-ports", version = "0.1.156" }
+fleet-runtime-test-support = { path = "crates/fleet-runtime-test-support" }
 fleet-contracts = { path = "crates/fleet-contracts", version = "0.1.156" }
 fleet-runtime = { path = "crates/fleet-runtime", version = "0.1.156" }
 fleet-engine = { path = "crates/fleet-engine", version = "0.1.156" }

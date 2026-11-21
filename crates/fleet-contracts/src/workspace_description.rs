@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-/// The UTF-8 byte limit shared by workspace requests and stored directory rows.
+/// The UTF-8 byte limit for signed workspace descriptions and stored directory-row decoding.
 pub const MAXIMUM_DESCRIPTION_BYTES: usize = 2048;
 
 pub fn description_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {

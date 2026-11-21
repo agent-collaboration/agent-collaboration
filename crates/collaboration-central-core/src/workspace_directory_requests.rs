@@ -106,13 +106,7 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
             }
             let directory_store =
                 CentralWorkspaceDirectory::new(runtime.execution.statement_host());
-            let workspace = directory_store
-                .read_by_id(workspace_id)
-                .await?
-                .ok_or_else(|| corrupt("directory_workspaces.workspace_id"))?;
-            Ok(reply(m::WorkspaceResult::Done(m::WorkspaceAnswer::Item {
-                item: m::ItemView::Workspace(workspace.into()),
-            })))
+            show_directory_workspace(&directory_store, workspace_id).await
         }
         DirectoryRequest::List {
             query,
@@ -161,6 +155,19 @@ pub(crate) async fn execute<Host: CentralStore, Stores: WorkspaceStores>(
             write(runtime, caller, request, directory).await
         }
     }
+}
+
+async fn show_directory_workspace(
+    directory: &impl WorkspaceDirectory,
+    workspace_id: &m::WorkspaceId,
+) -> Result<m::WorkspaceReply, StoreFailure> {
+    let workspace = directory
+        .read_by_id(workspace_id)
+        .await?
+        .ok_or_else(|| corrupt("directory_workspaces.workspace_id"))?;
+    Ok(reply(m::WorkspaceResult::Done(m::WorkspaceAnswer::Item {
+        item: m::ItemView::Workspace(workspace.into()),
+    })))
 }
 
 async fn write<Host: CentralStore, Stores: WorkspaceStores>(
@@ -311,3 +318,7 @@ async fn write<Host: CentralStore, Stores: WorkspaceStores>(
     }
     Ok(reply(answer))
 }
+
+#[cfg(test)]
+#[path = "workspace_directory_requests_test.rs"]
+mod tests;

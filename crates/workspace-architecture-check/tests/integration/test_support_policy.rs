@@ -6,6 +6,8 @@ use std::path::{Component, Path, PathBuf};
 
 #[path = "source_path_policy.rs"]
 mod source_path_policy;
+#[path = "workspace_directory_placement.rs"]
+mod workspace_directory_placement;
 
 type PolicyResult = Result<(), Box<dyn std::error::Error>>;
 

@@ -1,4 +1,7 @@
 //! Directory reads and write planning against the caller's central store.
+//!
+//! The caller admits the request and applies guarded plans under its own turn,
+//! with its own receipt.
 use central_storage::{GuardedStatement, ReadOutcome, Statement, StoreFailure};
 use fleet_contracts::{
     DirectoryWorkspace, MAXIMUM_DESCRIPTION_BYTES, WorkspaceDirectory, WorkspaceView,
@@ -62,11 +65,13 @@ pub struct CentralWorkspaceDirectory<'store, Host: CentralStore> {
 }
 
 impl<'store, Host: CentralStore> CentralWorkspaceDirectory<'store, Host> {
+    /// Borrows the central store of one organization.
     pub fn new(host: &'store Host) -> Self {
         Self { host }
     }
 
-    /// Every workspace of the organization, archived ones included.
+    /// Reads the organization's full directory, including archived workspaces,
+    /// in workspace ID order after the caller has admitted the request.
     pub async fn read_all(&self) -> Result<Vec<DirectoryWorkspace>, StoreFailure> {
         let rows = self.host.read(Statement {
             sql: "SELECT workspace_id,name,description,state,created_at,updated_at FROM directory_workspaces ORDER BY workspace_id",
