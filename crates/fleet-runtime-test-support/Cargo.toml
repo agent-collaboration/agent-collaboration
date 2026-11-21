@@ -1,0 +1,20 @@
+[package]
+name = "fleet-runtime-test-support"
+autotests = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "In-memory fixtures for Fleet Runtime contract consumers"
+
+[lints]
+workspace = true
+
+[dependencies]
+central-storage.workspace = true
+fleet-contracts.workspace = true
+fleet-runtime-ports.workspace = true
+fleet-storage-schema.workspace = true
+fleet-store-sqlx.workspace = true
+fleet-workspace-directory.workspace = true
+workspace-model.workspace = true

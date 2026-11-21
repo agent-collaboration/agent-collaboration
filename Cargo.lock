@@ -1476,11 +1476,13 @@ dependencies = [
  "fleet-notices",
  "fleet-runtime",
  "fleet-runtime-ports",
+ "fleet-runtime-test-support",
  "fleet-schedules",
  "fleet-storage-schema",
  "fleet-timer-policy",
  "fleet-wakes",
  "fleet-workspace-access",
+ "fleet-workspace-directory",
  "futures-util",
  "hegeltest",
  "http",
@@ -2504,6 +2506,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "fleet-runtime-test-support"
+version = "0.1.156"
+dependencies = [
+ "central-storage",
+ "fleet-contracts",
+ "fleet-runtime-ports",
+ "fleet-storage-schema",
+ "fleet-store-sqlx",
+ "fleet-workspace-directory",
+ "workspace-model",
+]
+
+[[package]]
 name = "fleet-schedules"
 version = "0.1.156"
 dependencies = [
@@ -2580,6 +2595,17 @@ dependencies = [
  "serde_json",
  "serde_json_canonicalizer",
  "workspace-ids",
+ "workspace-model",
+]
+
+[[package]]
+name = "fleet-workspace-directory"
+version = "0.1.156"
+dependencies = [
+ "central-storage",
+ "fleet-contracts",
+ "fleet-runtime-ports",
+ "message-board",
  "workspace-model",
 ]
 

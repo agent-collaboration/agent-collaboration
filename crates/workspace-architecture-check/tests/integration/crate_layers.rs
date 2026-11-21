@@ -56,6 +56,7 @@ const LAYER_POLICY: [(&str, &[&str]); 36] = [
             "fleet-runtime-ports",
             "fleet-runtime",
             "fleet-workspace-access",
+            "fleet-workspace-directory",
             "message-board",
             "workspace-ids",
             "workspace-model",
@@ -244,6 +245,7 @@ fn layer_policy() -> impl Iterator<Item = (&'static str, &'static [&'static str]
         .chain([
             workspace_boundaries::MAIL_LAYER,
             workspace_boundaries::NOTICES_LAYER,
+            workspace_boundaries::DIRECTORY_LAYER,
         ])
 }
 

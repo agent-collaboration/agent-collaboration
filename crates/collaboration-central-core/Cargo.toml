@@ -28,6 +28,7 @@ fleet-timer-policy.workspace = true
 fleet-runtime-ports.workspace = true
 fleet-runtime.workspace = true
 fleet-workspace-access.workspace = true
+fleet-workspace-directory.workspace = true
 workspace-model.workspace = true
 workspace-ids.workspace = true
 workspace-rules = {path="../workspace-rules",version="0.1.149"}
@@ -54,6 +55,7 @@ uuid = { version = "=1.26.0", features = ["v7", "js"] }
 [dev-dependencies]
 agent-automation = {path="../agent-automation",version="0.1.149"}
 central-engine-test-support = { workspace = true, features = ["sqlite-fixtures"] }
+fleet-runtime-test-support.workspace = true
 fleet-storage-schema.workspace = true
 hegel = { package = "hegeltest", version = "=0.52.6", features = ["static-engine"] }
 sqlx = { workspace = true, features = ["sqlite", "migrate"] }

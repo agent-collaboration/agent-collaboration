@@ -3,6 +3,10 @@
 //! operationId, params}`, RFC 8785 JCS, SHA-256, base64url).
 use super::compact_jwt::sha256_url;
 use super::refusal::PersonRequestRefusal;
+use fleet_contracts::{
+    MAXIMUM_DESCRIPTION_BYTES,
+    workspace_description::{description_schema, deserialize_description},
+};
 use fleet_identity_protocol::{EnrollmentId, OrganizationId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -41,31 +45,7 @@ impl AdminOperationId {
     }
 }
 
-pub const MAXIMUM_DESCRIPTION_BYTES: usize = 2048;
 pub const MAXIMUM_RECORD_PAGE: u16 = 100;
-
-pub(crate) fn description_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
-    schemars::json_schema!({
-        "type":"string",
-        "maxLength":MAXIMUM_DESCRIPTION_BYTES,
-        "x-maxUtf8Bytes":MAXIMUM_DESCRIPTION_BYTES
-    })
-}
-
-pub(crate) fn deserialize_description<'de, D, T>(deserializer: D) -> Result<T, D::Error>
-where
-    D: serde::Deserializer<'de>,
-    T: TryFrom<String>,
-    T::Error: std::fmt::Display,
-{
-    let description = String::deserialize(deserializer)?;
-    if description.len() > MAXIMUM_DESCRIPTION_BYTES {
-        return Err(serde::de::Error::custom(
-            "description exceeds 2048 UTF-8 bytes",
-        ));
-    }
-    T::try_from(description).map_err(serde::de::Error::custom)
-}
 
 /// A workspace name exactly as the Fleet stores it: the Fleet's own
 /// `ResourceName` rules, but a name that would be trimmed is refused rather

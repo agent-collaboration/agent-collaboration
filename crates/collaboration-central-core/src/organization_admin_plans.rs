@@ -7,7 +7,9 @@ use crate::{
     person_request::{AdminOperation, AdmissionRefusal, PersonRequestInput, PersonRequestRefusal},
 };
 use central_storage::{BatchOutcome, StatementBatch, StoreFailure};
+use fleet_contracts::WorkspaceDirectory;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_workspace_directory::CentralWorkspaceDirectory;
 impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
     pub async fn admin_person_request(
         &self,
@@ -108,13 +110,12 @@ impl<H: CentralStore, S: WorkspaceStores> WorkspaceRuntime<H, S> {
                     .map_err(|_| {
                         fleet_runtime_ports::workspace_decode_error::corrupt("workspace_id")
                     })?;
-                let found = crate::workspace_directory_rows::read_by_id(
-                    self.execution.statement_host(),
-                    &workspace,
-                )
-                .await?
-                .map(crate::organization_workspace_plans::workspace_view)
-                .transpose()?;
+                let directory = CentralWorkspaceDirectory::new(self.execution.statement_host());
+                let found = directory
+                    .read_by_id(&workspace)
+                    .await?
+                    .map(|row| directory.workspace_view(row))
+                    .transpose()?;
                 OrganizationAdminResult::Found { workspace: found }
             }
             AdminOperation::ReadChangeRecords(request) => OrganizationAdminResult::Records {
