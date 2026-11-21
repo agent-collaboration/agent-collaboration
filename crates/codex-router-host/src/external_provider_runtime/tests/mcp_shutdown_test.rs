@@ -1,4 +1,6 @@
 use super::*;
+#[cfg(unix)]
+use tokio::io::AsyncWriteExt as _;
 
 #[cfg(unix)]
 async fn observe_mcp_fixture(
@@ -140,7 +142,7 @@ fn echoed_router_marker_without_typed_tool_event_is_not_native_execution() {
 
 #[cfg(unix)]
 #[tokio::test]
-async fn overlapping_prompt_cannot_replace_context_and_dropped_waiter_cleans_it() {
+async fn overlapping_prompt_cannot_replace_a_taken_turns_approval_context() {
     let runtime = ExternalProviderRuntime::initialize(
         cancellation_fixture(),
         std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
@@ -159,7 +161,7 @@ async fn overlapping_prompt_cannot_replace_context_and_dropped_waiter_cleans_it(
     ));
     tokio::select! {
         result = &mut first => panic!("first prompt settled unexpectedly: {result:?}"),
-        () = tokio::time::sleep(Duration::from_millis(25)) => {}
+        () = wait_for_foreground_approval(&runtime, "fixture-session") => {}
     }
     let second = runtime
         .prompt_with_approval_context(
@@ -169,7 +171,10 @@ async fn overlapping_prompt_cannot_replace_context_and_dropped_waiter_cleans_it(
         )
         .await
         .expect_err("overlapping prompt must not replace active authorization context");
-    assert!(matches!(second, ExternalProviderRuntimeError::LocalBusy));
+    assert!(matches!(
+        second,
+        ExternalProviderRuntimeError::LocalBusy { .. }
+    ));
     assert_eq!(
         runtime
             .active_approval_operation("fixture-session")
@@ -177,7 +182,20 @@ async fn overlapping_prompt_cannot_replace_context_and_dropped_waiter_cleans_it(
         Some(first_operation.to_owned())
     );
     drop(first);
-    assert!(runtime.active_approval_count() == 0);
+    assert_eq!(
+        runtime.active_approval_count(),
+        1,
+        "the already-taken turn retains its scope"
+    );
+    runtime
+        .cancel_active_prompt("fixture-session".to_owned())
+        .await
+        .expect("cancel the detached turn");
+    runtime
+        .wait_session_idle("fixture-session".to_owned())
+        .await
+        .expect("the provider confirmed cancellation");
+    assert_eq!(runtime.active_approval_count(), 0);
     runtime.shutdown().await;
 }
 
@@ -201,7 +219,7 @@ async fn shutdown_joins_runtime_and_settles_held_prompt() {
     ));
     tokio::select! {
         result = &mut prompt => panic!("held prompt settled unexpectedly: {result:?}"),
-        () = tokio::time::sleep(Duration::from_millis(25)) => {}
+        () = wait_for_foreground_approval(&runtime, "fixture-session") => {}
     }
     runtime.shutdown().await;
     assert!(prompt.await.is_err());
@@ -244,21 +262,16 @@ async fn shutdown_drains_more_than_completion_channel_capacity_of_held_loads() {
                 .await
         }));
     }
-    tokio::time::timeout(Duration::from_secs(2), async {
-        loop {
-            let admissions = std::fs::read_to_string(&admission_log).unwrap_or_default();
-            if admissions.lines().count() == 40 {
-                break;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("all held loads reached the provider");
+    while std::fs::read_to_string(&admission_log)
+        .unwrap_or_default()
+        .lines()
+        .count()
+        != 40
+    {
+        tokio::task::yield_now().await;
+    }
 
-    tokio::time::timeout(Duration::from_secs(2), runtime.shutdown())
-        .await
-        .expect("shutdown drains the saturated completion path");
+    runtime.shutdown().await;
     for load in loads {
         assert!(matches!(
             load.await.expect("load task"),
@@ -293,16 +306,15 @@ async fn prompt_cancel_remains_responsive_during_create_admission() {
         "hold".to_owned(),
         None,
     ));
-    assert!(futures_util::poll!(&mut prompt).is_pending());
+    tokio::select! {
+        result = &mut prompt => panic!("held prompt ended: {result:?}"),
+        () = wait_for_foreground_approval(&runtime, "active-session") => {}
+    }
     let mut create = Box::pin(runtime.create_session(PathBuf::from("/tmp")));
-    assert!(futures_util::poll!(&mut create).is_pending());
-    tokio::time::timeout(Duration::from_secs(2), async {
-        while !observed.exists() {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("create reached provider");
+    tokio::select! {
+        result = &mut create => panic!("create ended before cancellation: {result:?}"),
+        () = wait_for_admission_witness(&observed) => {}
+    }
     runtime
         .cancel_prompt_operation("active-session".to_owned(), prompt_id)
         .await
@@ -340,17 +352,16 @@ async fn prompt_cancel_remains_responsive_during_load_admission() {
         "hold".to_owned(),
         None,
     ));
-    assert!(futures_util::poll!(&mut prompt).is_pending());
+    tokio::select! {
+        result = &mut prompt => panic!("held prompt ended: {result:?}"),
+        () = wait_for_foreground_approval(&runtime, "active-session") => {}
+    }
     let mut load =
         Box::pin(runtime.load_session("loaded-session".to_owned(), PathBuf::from("/tmp")));
-    assert!(futures_util::poll!(&mut load).is_pending());
-    tokio::time::timeout(Duration::from_secs(2), async {
-        while !observed.exists() {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("load reached provider");
+    tokio::select! {
+        result = &mut load => panic!("load ended before cancellation: {result:?}"),
+        () = wait_for_admission_witness(&observed) => {}
+    }
     runtime
         .cancel_prompt_operation("active-session".to_owned(), prompt_id)
         .await
@@ -364,10 +375,27 @@ async fn prompt_cancel_remains_responsive_during_load_admission() {
 }
 
 #[cfg(unix)]
+async fn wait_for_foreground_approval(runtime: &ExternalProviderRuntime, session: &str) {
+    while runtime.active_approval_operation(session).is_none() {
+        tokio::task::yield_now().await;
+    }
+}
+
+#[cfg(unix)]
+async fn wait_for_admission_witness(receipt: &std::path::Path) {
+    while !receipt.exists() {
+        tokio::task::yield_now().await;
+    }
+}
+
+#[cfg(unix)]
 #[tokio::test]
 async fn late_cancel_for_prior_operation_cannot_cancel_successor_prompt() {
+    let fixture = tempfile::tempdir().expect("successor fixture root");
+    let release_path = fixture.path().join("successor.sock");
+    let witness = tokio::net::UnixListener::bind(&release_path).expect("successor witness");
     let runtime = ExternalProviderRuntime::initialize(
-        successor_prompt_fixture(),
+        successor_prompt_fixture(&release_path),
         std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
     )
     .await
@@ -391,10 +419,10 @@ async fn late_cancel_for_prior_operation_cannot_cancel_successor_prompt() {
         "second".to_owned(),
         approval_context(second_id),
     ));
-    tokio::select! {
+    let (mut release, _) = tokio::select! {
         result = &mut second => panic!("successor settled too early: {result:?}"),
-        () = tokio::time::sleep(Duration::from_millis(25)) => {}
-    }
+        observed = witness.accept() => observed.expect("the peer is holding the successor"),
+    };
     let stale_cancel = runtime
         .cancel_prompt_operation(
             "fixture-session".to_owned(),
@@ -403,6 +431,10 @@ async fn late_cancel_for_prior_operation_cannot_cancel_successor_prompt() {
         .await
         .expect_err("stale cancel must not reach successor prompt");
     assert!(stale_cancel.to_string().contains("no longer active"));
+    release
+        .write_all(b"release")
+        .await
+        .expect("release the successor");
     assert_eq!(
         second.await.expect("successor settles").stop_reason,
         ProviderPromptStopReason::EndTurn
@@ -563,15 +595,18 @@ async fn live_external_provider_explicit_cancel() {
         .expect("provider conversation created");
 
     {
-        let prompt = runtime.prompt(
+        let (dispatch, taken) = tokio::sync::oneshot::channel();
+        let prompt = runtime.prompt_for_operation(
             provider_session_id.clone(),
+            None,
             "Without using tools, write the integers from 1 through 100000, one per line."
                 .to_owned(),
+            Some(dispatch),
         );
         tokio::pin!(prompt);
         tokio::select! {
             result = &mut prompt => panic!("provider prompt settled before explicit cancel: {result:?}"),
-            () = tokio::time::sleep(Duration::from_millis(500)) => {}
+            observed = taken => assert_eq!(observed.expect("prompt dispatch observation"), ProviderPromptDispatchObservation::Submitted),
         }
         runtime
             .cancel_active_prompt(provider_session_id.clone())

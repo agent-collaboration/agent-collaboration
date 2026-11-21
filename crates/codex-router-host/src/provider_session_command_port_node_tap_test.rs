@@ -26,6 +26,9 @@ use message_board::SessionRef as BoardSessionRef;
 use session_event_model::{PromptContent, ProviderSubmission, SettingApplicationIntent};
 use std::path::PathBuf;
 
+#[path = "provider_session_command_port_acp_failure_test.rs"]
+mod acp_failures;
+
 const SERVICE_ID: &str = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
 const SCRIPTED_AGENT: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -200,6 +203,7 @@ async fn command_port_rig(fixture: AgentFixture) -> CommandPortRig {
         Arc::clone(&hub),
         board_endpoint,
         behavior,
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     )
     .await
     .expect("provider runtime");
@@ -223,6 +227,7 @@ async fn command_port_rig(fixture: AgentFixture) -> CommandPortRig {
             created_by: target.clone().into(),
             approver: target.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("record session");
@@ -243,9 +248,15 @@ async fn command_port_rig(fixture: AgentFixture) -> CommandPortRig {
         Arc::clone(&supervisor),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
-    let port =
-        HostSessionCommandPort::new(Arc::clone(&supervisor), delivery, Arc::clone(&hub), store);
+    let port = HostSessionCommandPort::new(
+        Arc::clone(&supervisor),
+        delivery,
+        Arc::clone(&hub),
+        store,
+        Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
+    );
     let board_target: BoardSessionRef =
         serde_json::from_value(serde_json::to_value(&target).expect("target JSON"))
             .expect("board target");

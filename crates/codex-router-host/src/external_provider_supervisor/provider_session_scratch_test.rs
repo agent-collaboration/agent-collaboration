@@ -90,7 +90,11 @@ async fn supervisor_create_grants_the_agent_a_fresh_session_folder() {
         let operation_id = OperationId::generate();
         backend
             .create(ConversationCreateRequest {
-                settings: None,
+                work_roots: Vec::new(),
+                settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    ..collaboration_protocol::ProviderRequestedSettings::default()
+                }),
                 operation_id: operation_id.clone(),
                 endpoint: binding.endpoint.clone(),
                 generation: None,

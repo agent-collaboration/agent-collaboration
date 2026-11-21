@@ -30,6 +30,10 @@ pub(super) struct RecordedEvidence(
 );
 
 impl AttemptEvidenceSink for RecordedEvidence {
+    fn retain_queued_dispatch(&self) -> Option<std::sync::Arc<dyn AttemptEvidenceSink>> {
+        collaboration_contracts::UnstoredAttemptEvidenceSink.retain_queued_dispatch()
+    }
+
     fn record(
         &self,
         evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
@@ -172,4 +176,17 @@ pub(super) fn request(target: SessionRef, text: &str) -> DeliveryRequest {
         correlation,
         attempt: AttemptId::generate(),
     }
+}
+
+/// How many requests named `method` a reactive fixture's wire receipt holds.
+pub(super) fn recorded_requests(receipt: &Path, method: &str) -> usize {
+    std::fs::read(receipt)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Vec<serde_json::Value>>(&bytes).ok())
+        .map_or(0, |requests| {
+            requests
+                .iter()
+                .filter(|request| request["method"] == method)
+                .count()
+        })
 }

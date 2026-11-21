@@ -41,6 +41,7 @@ export function createArguments(
     operationId,
     endpoint: { serviceId: plan.expectedServiceId, endpointId: plan.endpointId },
     workingDirectory: plan.workingDirectory,
+    ...(plan.cases.includes("hostAdmissionSmoke") ? { workRoots: [plan.workingDirectory] } : {}),
     access: "write-restricted",
     ...(plan.peer.kind === "provider" && plan.peer.selection.selectOnCreate
       ? { model: plan.peer.selection.model }
@@ -58,6 +59,7 @@ export function promptArguments(props: {
   readonly operationId: string;
   readonly text: string;
   readonly timeoutSeconds: number;
+  readonly delivery?: "queue" | "steer";
   readonly requester?: DeclaredIdentity;
 }): Arguments {
   const requester = props.requester ?? props.plan.actor;
@@ -71,6 +73,7 @@ export function promptArguments(props: {
         ? { kind: "humanUser", text: props.text }
         : { kind: "agent", sender: requester.session, text: props.text },
     timeoutSeconds: props.timeoutSeconds,
+    ...(props.delivery === undefined ? {} : { delivery: props.delivery }),
   };
 }
 

@@ -1,5 +1,6 @@
 use super::*;
-use acp_client_runtime::{ProviderBehavior, ProviderSettingKind};
+use acp_client_runtime::ProviderBehavior;
+use provider_session_machines::ProviderSettingKind;
 use serde_json::json;
 
 #[test]

@@ -39,8 +39,28 @@ pub struct ExternalProviderLaunchBinding {
     pub label: NonEmptyText,
     pub provider: ProviderKind,
     pub launch: crate::ExternalProviderLaunch,
+    /// Claude only: the owner's cache-warm setting, carried from the settings
+    /// file with the startup. Absent means this binding keeps no cache warm.
+    pub cache_warm: Option<crate::CacheWarmSetting>,
+    /// The owner's work roots from the settings file (D1 R18), already
+    /// absolute. Empty means sessions get no work roots beyond their own
+    /// folders.
+    pub work_roots: Vec<PathBuf>,
 }
 impl ExternalProviderLaunchBinding {
+    #[must_use]
+    pub fn with_cache_warm(mut self, setting: crate::CacheWarmSetting) -> Self {
+        self.cache_warm = Some(setting);
+        self
+    }
+
+    /// The work roots sessions this binding starts in auto work in (D1 R18).
+    #[must_use]
+    pub fn with_work_roots(mut self, work_roots: Vec<PathBuf>) -> Self {
+        self.work_roots = work_roots;
+        self
+    }
+
     pub fn claude(executable: PathBuf, arguments: Vec<String>) -> Result<Self, &'static str> {
         Self::fixed(
             "claude-local",
@@ -79,6 +99,8 @@ impl ExternalProviderLaunchBinding {
                 arguments,
                 environment: Vec::new(),
             },
+            cache_warm: None,
+            work_roots: Vec::new(),
         })
     }
 
@@ -111,7 +133,11 @@ pub struct CollaborationRuntime {
     owner_human_id: Option<message_board::HumanId>,
     provider_store:
         Option<std::sync::Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>>,
+    #[cfg(feature = "runtime-test-support")]
+    provider_test_hub: Option<std::sync::Weak<collaboration_runtime::ProviderSessionEventHub>>,
     external_provider_supervisor: Option<std::sync::Arc<crate::ExternalProviderSupervisor>>,
+    /// Keeps Claude's prompt cache warm; stopped before the supervisor so nothing submits after.
+    provider_cache_warm: Option<std::sync::Arc<crate::provider_cache_warm::ProviderCacheWarm>>,
     provider_delivery_route: Option<std::sync::Arc<crate::ProviderAcpDeliveryRoute>>,
     session_delivery_router: Option<std::sync::Arc<collaboration_runtime::SessionDeliveryRouter>>,
     provider_retention: Option<tokio::task::JoinHandle<()>>,
@@ -140,6 +166,24 @@ pub struct CollaborationRuntime {
 }
 
 impl CollaborationRuntime {
+    #[cfg(feature = "runtime-test-support")]
+    pub async fn attach_provider_events_for_test(
+        &self,
+        session: message_board::SessionRef,
+    ) -> Result<
+        collaboration_contracts::SessionEventAttachment,
+        collaboration_contracts::SessionEventHubError,
+    > {
+        use collaboration_contracts::{SessionEventHub as _, SessionEventHubError};
+
+        let hub = self
+            .provider_test_hub
+            .as_ref()
+            .and_then(std::sync::Weak::upgrade)
+            .ok_or(SessionEventHubError::Unavailable)?;
+        hub.attach(session).await
+    }
+
     /// Delivery routes share the provider and native resources of this Host run.
     pub fn session_delivery(&self) -> Option<&collaboration_runtime::SessionDeliveryRouter> {
         self.session_delivery_router.as_deref()
@@ -229,3 +273,7 @@ pub(crate) mod scratch_sweep;
 #[cfg(test)]
 #[path = "collaboration_runtime/startup_failure_tests.rs"]
 mod startup_failure_tests;
+
+#[cfg(test)]
+#[path = "collaboration_runtime/shutdown_ownership_test.rs"]
+mod shutdown_ownership_tests;

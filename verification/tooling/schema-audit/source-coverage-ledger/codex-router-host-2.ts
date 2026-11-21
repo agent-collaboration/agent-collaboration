@@ -61,7 +61,7 @@ export const section: LedgerSection = {
     {
       file: "crates/codex-router-host/src/external_provider_runtime.rs",
       disposition: { kind: "sends", owners: ["acp", "router-vocabulary"] },
-      note: "ExternalProviderRuntime is the Host delegation layer over AgentSessionClient (the frames are written by acp-client-runtime): initialize (115,137,169; 200 is cfg(test)), session/new (276), set_config_option or set_mode (306), session/load (331), session/resume (342), session/close (382), _session/steering (417,432), session/cancel (465; 474 is cfg(test)), session/prompt (578); host_prompt_outcome (54-84) maps StopReason to ProviderPromptStopReason and repeats safe_unknown_stop_reason; text_contents builds PromptContent::text (610-616)",
+      note: "Initializes AgentSessionClient; session commands are delegated to the owner through provider_session_command_port.rs after 9c6fb389c. host_prompt_outcome maps StopReason to ProviderPromptStopReason.",
     },
     {
       file: "crates/codex-router-host/src/external_provider_runtime/acp_scripted_fixture.rs",
@@ -298,7 +298,7 @@ export const section: LedgerSection = {
     {
       file: "crates/codex-router-host/src/provider_acp_delivery_route/provider_content_commands.rs",
       disposition: { kind: "converts", owners: ["acp", "router-vocabulary"] },
-      note: "prompt_contents (45), compact (62), submit_input (78), steer_contents (167), queue_contents (235); RouteClaim/ProviderSessionLoadOutcome to ProviderQueueAdmissionError (97-135); unsupported_content_type (318-337) repeats the ACP content capability check of acp-client-runtime provider_prompt_content.rs:82",
+      note: "prompt_contents (45), compact (62), submit_input (78), place_steer (194), queue_contents (235); RouteClaim/ProviderSessionLoadOutcome to ProviderQueueAdmissionError (97-135); unsupported_content_type (318-337) repeats the ACP content capability check of acp-client-runtime provider_prompt_content.rs:82",
     },
     {
       file: "crates/codex-router-host/src/provider_acp_delivery_route/provider_delivery_request.rs",
@@ -533,7 +533,7 @@ export const section: LedgerSection = {
     },
     {
       file: "crates/codex-router-host/src/external_provider_runtime.rs",
-      line: 115,
+      line: 167,
       edge: "acp-agent",
       sends: "initialize (AgentSessionClient::initialize; authenticate when required)",
       owner: { crate: "codex-router-host" },
@@ -546,7 +546,7 @@ export const section: LedgerSection = {
     },
     {
       file: "crates/codex-router-host/src/external_provider_runtime.rs",
-      line: 137,
+      line: 197,
       edge: "acp-agent",
       sends: "initialize with MCP HTTP server (AgentSessionClient::initialize_with_mcp_http)",
       owner: { crate: "codex-router-host" },
@@ -555,7 +555,7 @@ export const section: LedgerSection = {
     },
     {
       file: "crates/codex-router-host/src/external_provider_runtime.rs",
-      line: 169,
+      line: 238,
       edge: "acp-agent",
       sends: "initialize with MCP HTTP server and the event hub (production Host path)",
       owner: { crate: "codex-router-host" },
@@ -567,8 +567,8 @@ export const section: LedgerSection = {
       },
     },
     {
-      file: "crates/codex-router-host/src/external_provider_runtime.rs",
-      line: 276,
+      file: "crates/codex-router-host/src/provider_session_command_port.rs",
+      line: 133,
       edge: "acp-agent",
       sends: "session/new (then set_config_option or set_mode for requested settings)",
       owner: { crate: "codex-router-host" },
@@ -580,8 +580,8 @@ export const section: LedgerSection = {
       },
     },
     {
-      file: "crates/codex-router-host/src/external_provider_runtime.rs",
-      line: 306,
+      file: "crates/codex-router-host/src/provider_session_command_port.rs",
+      line: 488,
       edge: "acp-agent",
       sends: "session/set_config_option or session/set_mode",
       owner: { crate: "codex-router-host" },
@@ -593,8 +593,8 @@ export const section: LedgerSection = {
       },
     },
     {
-      file: "crates/codex-router-host/src/external_provider_runtime.rs",
-      line: 331,
+      file: "crates/codex-router-host/src/provider_session_command_port.rs",
+      line: 171,
       edge: "acp-agent",
       sends: "session/load",
       owner: { crate: "codex-router-host" },
@@ -602,8 +602,8 @@ export const section: LedgerSection = {
       coverage: { kind: "uncovered", reason: "no tap loads a session" },
     },
     {
-      file: "crates/codex-router-host/src/external_provider_runtime.rs",
-      line: 342,
+      file: "crates/codex-router-host/src/provider_session_command_port.rs",
+      line: 204,
       edge: "acp-agent",
       sends: "session/resume",
       owner: { crate: "codex-router-host" },
@@ -611,8 +611,8 @@ export const section: LedgerSection = {
       coverage: { kind: "uncovered", reason: "no tap resumes a session" },
     },
     {
-      file: "crates/codex-router-host/src/external_provider_runtime.rs",
-      line: 382,
+      file: "crates/codex-router-host/src/provider_session_command_port.rs",
+      line: 459,
       edge: "acp-agent",
       sends: "session/close",
       owner: { crate: "codex-router-host" },
@@ -620,21 +620,20 @@ export const section: LedgerSection = {
       coverage: { kind: "uncovered", reason: "no tap closes a session" },
     },
     {
-      file: "crates/codex-router-host/src/external_provider_runtime.rs",
-      line: 417,
+      file: "crates/codex-router-host/src/provider_acp_delivery_route.rs",
+      line: 395,
       edge: "acp-agent",
       sends: "_session/steering (Router extension), plain text prompt",
       owner: { crate: "codex-router-host" },
       origin: "product",
       coverage: {
         kind: "uncovered",
-        reason:
-          "no tap steers through steer_session_with_input; the N4 steer case reaches steer_session_contents_with_input through provider_content_commands.rs:219; this path is the delivery route (provider_acp_delivery_route.rs:369)",
+        reason: "no tap records the delivery route's owner-mediated steer as a wire frame",
       },
     },
     {
-      file: "crates/codex-router-host/src/external_provider_runtime.rs",
-      line: 432,
+      file: "crates/codex-router-host/src/provider_session_command_port.rs",
+      line: 297,
       edge: "acp-agent",
       sends: "_session/steering (Router extension), submission contents",
       owner: { crate: "codex-router-host" },
@@ -646,8 +645,8 @@ export const section: LedgerSection = {
       },
     },
     {
-      file: "crates/codex-router-host/src/external_provider_runtime.rs",
-      line: 465,
+      file: "crates/codex-router-host/src/provider_session_command_port.rs",
+      line: 437,
       edge: "acp-agent",
       sends: "session/cancel notification",
       owner: { crate: "codex-router-host" },
@@ -659,8 +658,8 @@ export const section: LedgerSection = {
       },
     },
     {
-      file: "crates/codex-router-host/src/external_provider_runtime.rs",
-      line: 578,
+      file: "crates/codex-router-host/src/provider_session_command_port.rs",
+      line: 237,
       edge: "acp-agent",
       sends: "session/prompt",
       owner: { crate: "codex-router-host" },

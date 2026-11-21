@@ -6,10 +6,16 @@ fn interaction_script(
     method: &str,
     params: Value,
     refusal: Value,
-    replay: bool,
+    duplicate_in_flight: bool,
 ) -> AcpFixtureScript {
     let callback = json!({"jsonrpc":"2.0","id":"callback","method":method,"params":params});
-    let mut script = ready_script()
+    let reply = json!({"jsonrpc":"2.0","id":"callback","result":refusal});
+    let (callbacks, reply) = if duplicate_in_flight {
+        (json!([callback.clone(), callback]), json!([reply]))
+    } else {
+        (callback, reply)
+    };
+    ready_script()
         .expect_request("first", "session/prompt", json!({"sessionId":"session-a"}))
         .send(json!({"jsonrpc":"2.0","method":"session/update","params":{
             "sessionId":"session-a","update":{
@@ -17,21 +23,13 @@ fn interaction_script(
                 "kind":"other","status":"pending"
             }
         }}))
-        .send(callback.clone())
-        .expect_message(json!({"jsonrpc":"2.0","id":"callback","result":refusal}))
+        .send(callbacks)
+        .expect_message(reply)
         .expect_message(
             json!({"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"session-a"}}),
-        );
-    if replay {
-        script = replay_then_sync(script, &callback, "first-sync");
-    }
-    script = script
+        )
         .respond("first", json!({"stopReason":"cancelled"}))
-        .expect_request("next", "session/prompt", json!({"sessionId":"session-a"}));
-    if replay {
-        script = replay_then_sync(script, &callback, "next-sync");
-    }
-    script
+        .expect_request("next", "session/prompt", json!({"sessionId":"session-a"}))
         .send(json!({"jsonrpc":"2.0","method":"session/update","params":{
             "sessionId":"session-a","update":{
                 "sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"next reply"}
@@ -68,17 +66,7 @@ async fn start_scripted_provider(script: AcpFixtureScript) -> ExternalProviderRu
     runtime
 }
 
-fn replay_then_sync(script: AcpFixtureScript, callback: &Value, sync_id: &str) -> AcpFixtureScript {
-    // The reply to the following request keeps each replay on its own side
-    // of the first turn's terminal, with no elapsed-time assumption.
-    script
-        .send(callback.clone())
-        .send(json!({"jsonrpc":"2.0","id":sync_id,"method":"fixture/sync","params":{}}))
-        .expect_message(json!({"jsonrpc":"2.0","id":sync_id,
-            "error":{"code":-32601,"message":"Method not found"}}))
-}
-
-async fn exercise_managed_acp_callbacks(replay: bool) {
+async fn exercise_managed_acp_callbacks(duplicate_in_flight: bool) {
     for (method, params, refusal) in [
         (
             "session/request_permission",
@@ -106,36 +94,37 @@ async fn exercise_managed_acp_callbacks(replay: bool) {
             json!({"outcome":"cancelled"}),
         ),
     ] {
-        tokio::time::timeout(Duration::from_secs(10), async {
-            let runtime =
-                start_scripted_provider(interaction_script(method, params, refusal, replay)).await;
-            let first = runtime
-                .prompt("session-a".into(), "request".into())
-                .await
-                .expect("provider terminal after callback refusal");
+        let runtime = start_scripted_provider(interaction_script(
+            method,
+            params,
+            refusal,
+            duplicate_in_flight,
+        ))
+        .await;
+        let first = runtime
+            .prompt("session-a".into(), "request".into())
+            .await
+            .expect("provider terminal after callback refusal");
+        assert_eq!(
+            first.stop_reason,
+            ProviderPromptStopReason::Cancelled,
+            "{method}"
+        );
+        if method == "session/request_permission" {
             assert_eq!(
-                first.stop_reason,
-                ProviderPromptStopReason::Cancelled,
-                "{method}"
+                first
+                    .permission_refusal_reason
+                    .map(ExternalProviderApprovalRefusalReason::code),
+                Some("approvalsUnavailableOnBuild"),
             );
-            if method == "session/request_permission" {
-                assert_eq!(
-                    first
-                        .permission_refusal_reason
-                        .map(ExternalProviderApprovalRefusalReason::code),
-                    Some("approvalsUnavailableOnBuild"),
-                );
-            }
-            let next = runtime
-                .prompt("session-a".into(), "next".into())
-                .await
-                .expect("next prompt on the same session");
-            assert_eq!(next.stop_reason, ProviderPromptStopReason::EndTurn);
-            assert_eq!(next.output, "next reply");
-            runtime.shutdown().await;
-        })
-        .await
-        .unwrap_or_else(|error| panic!("{method} did not settle: {error}"));
+        }
+        let next = runtime
+            .prompt("session-a".into(), "next".into())
+            .await
+            .expect("next prompt on the same session");
+        assert_eq!(next.stop_reason, ProviderPromptStopReason::EndTurn);
+        assert_eq!(next.output, "next reply");
+        runtime.shutdown().await;
     }
 }
 
@@ -145,59 +134,93 @@ async fn managed_acp_callbacks_refuse_before_cancel_and_next_prompt_succeeds() {
 }
 
 #[tokio::test]
-async fn managed_acp_replay_cannot_reply_twice_or_cancel_the_next_operation() {
+async fn managed_acp_in_flight_duplicate_replies_and_cancels_once() {
     exercise_managed_acp_callbacks(true).await;
 }
 
 #[tokio::test]
-async fn managed_acp_distinct_request_reusing_finished_id_is_refused_and_cancelled() {
+async fn managed_permission_after_explicit_cancel_replies_without_a_second_cancel() {
+    let root = tempfile::tempdir().expect("ACP fixture directory");
+    let prompt_received = root.path().join("prompt-received");
+    let script = ready_script()
+        .expect_request("first", "session/prompt", json!({"sessionId":"session-a"}))
+        .write_marker(&prompt_received)
+        .expect_message(json!({"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"session-a"}}))
+        .send(json!({"jsonrpc":"2.0","id":"late","method":"session/request_permission","params":{
+            "sessionId":"session-a","toolCall":{"toolCallId":"late-tool","title":"Late permission"},
+            "options":[{"optionId":"allow","name":"Allow once","kind":"allow_once"}]
+        }}))
+        .expect_message(json!({"jsonrpc":"2.0","id":"late","result":{"outcome":{"outcome":"cancelled"}}}))
+        .respond("first", json!({"stopReason":"cancelled"}))
+        .expect_request("next", "session/prompt", json!({"sessionId":"session-a"}))
+        .respond("next", json!({"stopReason":"end_turn"}));
+    let runtime = start_scripted_provider(script).await;
+    let (first, cancel) = tokio::join!(runtime.prompt("session-a".into(), "first".into()), async {
+        while !prompt_received.is_file() {
+            tokio::task::yield_now().await;
+        }
+        runtime.cancel_active_prompt("session-a".into()).await
+    });
+    cancel.expect("explicit cancel reached the writer");
+    assert_eq!(
+        first.expect("first provider terminal").stop_reason,
+        ProviderPromptStopReason::Cancelled
+    );
+    let next = runtime
+        .prompt("session-a".into(), "next".into())
+        .await
+        .expect("provider got the next prompt without another cancel");
+    assert_eq!(next.stop_reason, ProviderPromptStopReason::EndTurn);
+    runtime.shutdown().await;
+}
+
+#[tokio::test]
+async fn managed_acp_identical_callback_after_reply_is_refused_in_the_next_turn() {
     let root = tempfile::tempdir().expect("ACP fixture directory");
     let reused_sent = root.path().join("reused-request-sent");
-    let permission_request = |tool_call_id| {
-        json!({"jsonrpc":"2.0","id":7,"method":"session/request_permission","params":{
-            "sessionId":"session-a","toolCall":{"toolCallId":tool_call_id,"title":"Run"},
-            "options":[{"optionId":"allow","name":"Allow once","kind":"allow_once"}]
-        }})
-    };
+    let diagnostics = root.path().join("wire-error");
+    let permission_request = json!({"jsonrpc":"2.0","id":7,"method":"session/request_permission","params":{
+        "sessionId":"session-a","toolCall":{"toolCallId":"same-tool","title":"Run"},
+        "options":[{"optionId":"allow","name":"Allow once","kind":"allow_once"}]
+    }});
     let reply = json!({"jsonrpc":"2.0","id":7,"result":{"outcome":{"outcome":"cancelled"}}});
     let cancel =
         json!({"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"session-a"}});
+    let probe = json!({"jsonrpc":"2.0","id":"fixture-sync","method":"fixture/sync","params":{}});
+    let probe_reply = json!({"jsonrpc":"2.0","id":"fixture-sync",
+        "error":{"code":-32601,"message":"Method not found"}});
     let script = ready_script()
         .expect_request("first", "session/prompt", json!({"sessionId":"session-a"}))
-        .send(permission_request("first-tool"))
+        .send(permission_request.clone())
         .expect_message(reply.clone())
         .expect_message(cancel.clone())
         .respond("first", json!({"stopReason":"cancelled"}))
         .expect_request("second", "session/prompt", json!({"sessionId":"session-a"}))
-        .send(permission_request("second-tool"))
+        // A valid sibling makes the wrong build reply with a batch missing ID 7.
+        .send(json!([permission_request, probe]))
         .write_marker(&reused_sent)
-        .expect_message(reply)
+        .expect_message(json!([reply, probe_reply]))
         .expect_message(cancel)
-        .respond("second", json!({"stopReason":"cancelled"}));
+        .respond("second", json!({"stopReason":"cancelled"}))
+        .record_diagnostics(diagnostics.clone());
     let runtime = start_scripted_provider(script).await;
 
-    let first = tokio::time::timeout(
-        Duration::from_secs(5),
-        runtime.prompt("session-a".into(), "first".into()),
-    )
-    .await
-    .expect("the first callback gets a reply and exact cancel")
-    .expect("first provider terminal");
+    let first = runtime
+        .prompt("session-a".into(), "first".into())
+        .await
+        .expect("first provider terminal");
     assert_eq!(first.stop_reason, ProviderPromptStopReason::Cancelled);
-    let second = tokio::time::timeout(
-        Duration::from_secs(5),
-        runtime.prompt("session-a".into(), "second".into()),
-    )
-    .await;
+    let second = runtime.prompt("session-a".into(), "second".into()).await;
     runtime.shutdown().await;
 
     assert!(
         reused_sent.is_file(),
         "the provider sent its second callback"
     );
-    let second = second
-        .expect("the distinct callback reusing ID 7 got no refusal and exact cancel")
-        .expect("second provider terminal");
+    let second = second.unwrap_or_else(|error| {
+        panic!("The identical callback reusing ID 7 needs a new refusal and exact cancel: {error:?}\n{}",
+            std::fs::read_to_string(&diagnostics).unwrap_or_default())
+    });
     assert_eq!(second.stop_reason, ProviderPromptStopReason::Cancelled);
     assert_eq!(
         second
@@ -214,13 +237,9 @@ async fn assert_refusal_before_answer_model(method: &str, params: Value, refusal
         interaction_script(method, params, refusal, false).record_diagnostics(diagnostics.clone());
     let runtime = start_scripted_provider(script).await;
 
-    let first = tokio::time::timeout(
-        Duration::from_secs(5),
-        runtime.prompt("session-a".into(), "request".into()),
-    )
-    .await;
-    let first = first
-        .expect("provider terminal after refusal")
+    let first = runtime
+        .prompt("session-a".into(), "request".into())
+        .await
         .unwrap_or_else(|error| {
             panic!(
                 "{method} received no valid refusal and exact cancel: {error:?}\n{}",
@@ -228,13 +247,10 @@ async fn assert_refusal_before_answer_model(method: &str, params: Value, refusal
             )
         });
     assert_eq!(first.stop_reason, ProviderPromptStopReason::Cancelled);
-    let next = tokio::time::timeout(
-        Duration::from_secs(5),
-        runtime.prompt("session-a".into(), "next".into()),
-    )
-    .await
-    .expect("next prompt settles")
-    .expect("next provider terminal");
+    let next = runtime
+        .prompt("session-a".into(), "next".into())
+        .await
+        .expect("next provider terminal");
     assert_eq!(next.stop_reason, ProviderPromptStopReason::EndTurn);
     assert_eq!(next.output, "next reply");
     runtime.shutdown().await;

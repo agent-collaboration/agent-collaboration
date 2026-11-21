@@ -20,6 +20,7 @@ mod native_control_commands;
 mod native_sandbox_access;
 mod permission_diagnostics;
 mod provider_conversation_cli;
+mod provider_create_mode_cli;
 mod provider_inventory_source_reads;
 mod provider_load_error_e2e;
 mod provider_session_list_cli;

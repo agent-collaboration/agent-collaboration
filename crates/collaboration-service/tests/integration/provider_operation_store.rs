@@ -458,7 +458,7 @@ async fn uncertainty_generation_scope(targetless: bool) -> TestResult {
         .record_terminal(
             &record.operation_id,
             ProviderOperationEffect::Unknown,
-            ProviderReconciliationState::NotReconcilable,
+            ProviderReconciliationState::Unresolved,
             None,
             4,
         )

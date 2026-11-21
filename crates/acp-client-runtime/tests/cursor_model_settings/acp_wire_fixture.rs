@@ -1,9 +1,10 @@
 use std::{path::PathBuf, sync::Arc};
 
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::{
-    AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
-    HistoryReplayFuture, InteractionFuture, InteractionPort, ProviderBehavior,
-    ProviderPersistenceTarget, RefusedApprovalOffer, SessionEventSink,
+    ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch, HistoryReplayFuture,
+    InteractionFuture, InteractionPort, ProviderBehavior, ProviderPersistenceTarget,
+    RefusedApprovalOffer, SessionEventSink,
 };
 use session_event_model::{ApprovalRequest, SessionEvent, SessionSettings};
 use tokio_util::sync::CancellationToken;
@@ -18,7 +19,10 @@ impl ProviderBehavior for SharedSettingsBehavior {
     ) -> acp_client_runtime::ProviderInitializationAuthentication {
         acp_client_runtime::ProviderInitializationAuthentication::NotRequested
     }
-    fn can_reuse_setting_confirmation(&self, _: acp_client_runtime::ProviderSettingKind) -> bool {
+    fn can_reuse_setting_confirmation(
+        &self,
+        _: provider_session_machines::ProviderSettingKind,
+    ) -> bool {
         false
     }
     fn model_metadata_source(&self) -> acp_client_runtime::ModelMetadataSource {
@@ -27,7 +31,7 @@ impl ProviderBehavior for SharedSettingsBehavior {
     fn decode_model_metadata(
         &self,
         value: &serde_json::Value,
-    ) -> acp_client_runtime::ModelReasoningMetadata {
+    ) -> provider_session_machines::ModelReasoningMetadata {
         crate::test_behavior::TestProviderBehavior.decode_model_metadata(value)
     }
     fn auto_permission_mode(&self) -> acp_client_runtime::AutoPermissionMode {
@@ -86,9 +90,6 @@ impl InteractionPort for NoopInteractionPort {
     fn cancel_all(&self, _: (), _: &'static str) -> InteractionFuture<'_, ()> {
         Box::pin(async {})
     }
-    fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
 }
 
 #[derive(Default)]
@@ -145,6 +146,7 @@ impl AcpWireFixture {
     pub async fn start(scenario: &str, cursor_picker: bool) -> Self {
         Self::initialize(
             scenario,
+            &[],
             if cursor_picker {
                 ClientInitialization::CursorWithMcp
             } else {
@@ -156,14 +158,23 @@ impl AcpWireFixture {
 
     #[cfg(feature = "test-observation")]
     pub async fn start_without_mcp(scenario: &str) -> Self {
-        Self::initialize(scenario, ClientInitialization::CursorWithoutMcp).await
+        Self::initialize(scenario, &[], ClientInitialization::CursorWithoutMcp).await
+    }
+
+    /// The reactive Cursor scenario with the named fast behaviours.
+    pub async fn start_reactive(behaviours: &[&str]) -> Self {
+        Self::initialize("reactive", behaviours, ClientInitialization::Standard).await
     }
 
     #[expect(
         clippy::expect_used,
         reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
     )]
-    async fn initialize(scenario: &str, initialization: ClientInitialization) -> Self {
+    async fn initialize(
+        scenario: &str,
+        behaviours: &[&str],
+        initialization: ClientInitialization,
+    ) -> Self {
         let root = tempfile::tempdir().expect("fixture root");
         let receipt = root.path().join("wire.json");
         let launch = ExternalProviderLaunch {
@@ -176,7 +187,10 @@ impl AcpWireFixture {
                 .into(),
                 scenario.into(),
                 receipt.to_string_lossy().into_owned(),
-            ],
+            ]
+            .into_iter()
+            .chain(behaviours.iter().map(|behaviour| (*behaviour).to_owned()))
+            .collect(),
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,
         };
@@ -196,6 +210,7 @@ impl AcpWireFixture {
                     Arc::new(NoopInteractionPort),
                     sink.clone(),
                     behavior,
+                    Arc::new(router_clock::SystemRuntimeClock::new()),
                 )
                 .await
             }

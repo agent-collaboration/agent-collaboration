@@ -61,10 +61,12 @@ pub(crate) fn run(arguments: SettingsArguments) -> i32 {
                 "mode" => ProviderSettingName::Mode,
                 "model" => ProviderSettingName::Model,
                 "effort" => ProviderSettingName::Effort,
+                // The Host refuses any value but off or auto (exit 2).
+                "fast" => ProviderSettingName::Fast,
                 _ => {
                     return crate::endpoint_commands::report_failure(
                         "invalidField",
-                        "--setting must be mode, model or effort",
+                        "--setting must be mode, model, effort or fast",
                         2,
                         json,
                     );

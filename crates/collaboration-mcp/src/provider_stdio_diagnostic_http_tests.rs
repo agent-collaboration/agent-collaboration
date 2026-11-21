@@ -164,7 +164,7 @@ async fn exercise_public_stdio(message_kind: &str, interaction_kind: &str) {
         "conversation_create",
         json!({
             "operationId":CREATE_OPERATION,"endpoint":endpoint,"workingDirectory":root.path(),
-            "createdBy":human,"approver":human,"access":"workspace-write","timeoutSeconds":2
+            "createdBy":human,"approver":human,"access":"workspace-write","mode":"auto","timeoutSeconds":2
         }),
     )
     .await;

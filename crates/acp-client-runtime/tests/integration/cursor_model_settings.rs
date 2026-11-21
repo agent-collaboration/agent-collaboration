@@ -1,13 +1,14 @@
 //! R1–R4: real ACP wires and returned catalogs, without native provider state.
 
+use provider_session_machines::ProviderSettingKind;
 #[path = "../cursor_model_settings/acp_wire_fixture.rs"]
 mod acp_wire_fixture;
+#[path = "../cursor_model_settings/cursor_fast_settings.rs"]
+mod cursor_fast_settings;
 
-use acp_client_runtime::{
-    ExternalProviderRuntimeError, ProviderConfigValue, ProviderSettingKind,
-    RequestedProviderSettings,
-};
+use acp_client_runtime::{ExternalProviderRuntimeError, RequestedProviderSettings};
 use acp_wire_fixture::AcpWireFixture;
+use provider_session_machines::ProviderConfigValue;
 use session_event_model::ConfigValueState;
 
 async fn assert_shared_setting_is_reasserted(
@@ -55,10 +56,11 @@ async fn assert_shared_setting_is_reasserted(
         )
         .await?;
     fixture.client.shutdown().await;
-    let value = |settings: acp_client_runtime::EffectiveProviderSettings| match kind {
+    let value = |settings: provider_session_machines::EffectiveProviderSettings| match kind {
         ProviderSettingKind::Model => settings.model,
         ProviderSettingKind::Effort => settings.effort,
         ProviderSettingKind::Mode => settings.mode,
+        ProviderSettingKind::Fast => None,
     };
     assert_eq!(value(confirmed).as_deref(), Some(initial));
     assert_eq!(value(other).as_deref(), Some(changed));
@@ -67,6 +69,7 @@ async fn assert_shared_setting_is_reasserted(
         ProviderSettingKind::Model => "model",
         ProviderSettingKind::Effort => "effort",
         ProviderSettingKind::Mode => "mode",
+        ProviderSettingKind::Fast => "fast",
     };
     let setters = fixture
         .requests()
@@ -358,9 +361,13 @@ async fn thinking_first_and_explicit_effort_win_without_companion_rewrites() {
                 },
             )
             .await;
-        fixture.client.shutdown().await;
         let observed = observed.expect("independent advertised effort must apply");
         assert_eq!(observed.effort.as_deref(), Some("high"));
+        let catalog = fixture
+            .client
+            .settings_catalog(&session)
+            .expect("live catalog");
+        fixture.client.shutdown().await;
         let requests = fixture.requests();
         assert_eq!(requests.len(), 3);
         assert_eq!(requests[2]["method"], "session/set_config_option");
@@ -374,11 +381,6 @@ async fn thinking_first_and_explicit_effort_win_without_companion_rewrites() {
             serde_json::json!({
             "sessionId":"fixture-session", "configId":config_id, "value":"high"})
         );
-        let catalog = fixture
-            .client
-            .settings_catalog(&session)
-            .await
-            .expect("catalog");
         for (config_id, value) in [
             ("model", "fixture-a"),
             ("thinking", "true"),
@@ -465,6 +467,7 @@ async fn create_refreshes_mode_dependent_model_and_model_dependent_effort_choice
                 mode: Some("ask".into()),
                 model: Some("fixture-b".into()),
                 effort: Some("high".into()),
+                ..Default::default()
             },
         )
         .await;
@@ -545,7 +548,6 @@ async fn load_and_live_update_refresh_effort_identity_and_invalid_values_do_not_
             if fixture
                 .client
                 .settings_catalog("fixture-session")
-                .await
                 .expect("loaded catalog")
                 .config_options
                 .iter()

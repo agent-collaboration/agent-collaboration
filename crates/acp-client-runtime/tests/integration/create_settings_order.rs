@@ -2,10 +2,11 @@
 
 use std::{path::PathBuf, sync::Arc};
 
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::{
-    AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
-    HistoryReplayFuture, InteractionFuture, InteractionPort, ProviderPersistenceTarget,
-    RefusedApprovalOffer, RequestedProviderSettings, SessionEventSink,
+    ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch, HistoryReplayFuture,
+    InteractionFuture, InteractionPort, ProviderPersistenceTarget, RefusedApprovalOffer,
+    RequestedProviderSettings, SessionEventSink,
 };
 use session_event_model::{ApprovalRequest, SessionEvent};
 use tokio_util::sync::CancellationToken;
@@ -92,9 +93,6 @@ impl InteractionPort for NoopInteractionPort {
     ) -> InteractionFuture<'_, ()> {
         Box::pin(async {})
     }
-    fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
 }
 
 struct NoopEventSink;
@@ -171,7 +169,7 @@ impl SessionEventSink for ClosedSettingsSink {
 }
 
 #[tokio::test]
-async fn closed_settings_sink_aborts_create_with_typed_error() {
+async fn closed_settings_sink_does_not_retire_the_created_session() {
     let root = tempfile::tempdir().expect("fixture root");
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
@@ -186,11 +184,29 @@ async fn closed_settings_sink_aborts_create_with_typed_error() {
     )
     .await
     .expect("fixture initializes");
-    let result = client.create_session(root.path().to_path_buf()).await;
-    assert!(matches!(
-        result,
-        Err(acp_client_runtime::ExternalProviderRuntimeError::SinkClosed)
-    ));
+    let session = client
+        .create_session(root.path().to_path_buf())
+        .await
+        .expect("the owner created a live session");
+    let completed = client
+        .submit_with_approval_dispatch_for_input(
+            session,
+            session_event_model::InputId::generate(),
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("still available".to_owned())
+                        .expect("prompt text"),
+                ]),
+            ),
+            (),
+            None,
+        )
+        .await
+        .expect("provider prompt completes despite refused publication");
+    assert_eq!(
+        completed.stop_reason,
+        session_event_model::StopReason::EndTurn
+    );
     client.shutdown().await;
 }
 
@@ -226,6 +242,7 @@ async fn create_applies_requested_settings_before_first_prompt() {
                 mode: Some("ask".to_owned()),
                 model: Some("b".to_owned()),
                 effort: Some("high".to_owned()),
+                ..Default::default()
             },
         )
         .await
@@ -313,7 +330,10 @@ async fn invalid_first_setting_closes_created_session() {
             std::fs::read_to_string(&receipt)
         )
     };
-    assert_eq!(setting, acp_client_runtime::ProviderSettingKind::Mode);
+    assert_eq!(
+        setting,
+        provider_session_machines::ProviderSettingKind::Mode
+    );
     assert_eq!(value, "impossible");
     assert_eq!(advertised, ["auto", "ask"]);
     assert_eq!(
@@ -326,10 +346,10 @@ async fn invalid_first_setting_closes_created_session() {
     );
 }
 
-/// Oracle: specification R14 reports a partly applied setup and blocks work
-/// until the caller explicitly accepts the effective settings.
+/// R14 reports each part of a failed setup. A definite failure and an
+/// untried setting leave the created session available for input.
 #[tokio::test]
-async fn partial_setup_blocks_prompt_until_settings_are_accepted() {
+async fn definite_partial_setup_reports_settings_and_dispatches_input() {
     let root = tempfile::tempdir().expect("fixture root");
     let receipt = root.path().join("accepted.txt");
     let client = AgentSessionClient::initialize(
@@ -348,6 +368,7 @@ async fn partial_setup_blocks_prompt_until_settings_are_accepted() {
                 mode: Some("ask".to_owned()),
                 model: Some("b".to_owned()),
                 effort: Some("high".to_owned()),
+                ..Default::default()
             },
         )
         .await;
@@ -356,6 +377,7 @@ async fn partial_setup_blocks_prompt_until_settings_are_accepted() {
         applied,
         failed,
         not_applied,
+        ..
     }) = result
     else {
         panic!("partial setup result: {result:?}")
@@ -364,41 +386,22 @@ async fn partial_setup_blocks_prompt_until_settings_are_accepted() {
     assert_eq!(applied.len(), 1);
     assert_eq!(
         applied[0].kind,
-        acp_client_runtime::ProviderSettingKind::Mode
+        provider_session_machines::ProviderSettingKind::Mode
     );
-    assert_eq!(failed.kind, acp_client_runtime::ProviderSettingKind::Model);
+    assert_eq!(
+        failed.kind,
+        provider_session_machines::ProviderSettingKind::Model
+    );
     assert!(!failed.reason.as_str().contains("private agent detail"));
     assert_eq!(
         not_applied,
         vec![acp_client_runtime::NotAppliedProviderSetting {
-            kind: acp_client_runtime::ProviderSettingKind::Effort,
+            kind: provider_session_machines::ProviderSettingKind::Effort,
             value: "high".to_owned(),
         }]
         .into_boxed_slice()
     );
-    assert!(client.settings_unresolved(&provider_session_id).await);
-    let blocked = client
-        .submit_with_approval_dispatch_for_input(
-            provider_session_id.clone(),
-            session_event_model::InputId::generate(),
-            acp_client_runtime::ProviderTurnInput::Prompt(
-                session_event_model::ProviderSubmission::plain(vec![
-                    session_event_model::PromptContent::text("too early".to_owned())
-                        .expect("text prompt"),
-                ]),
-            ),
-            (),
-            None,
-        )
-        .await;
-    assert!(matches!(
-        blocked,
-        Err(acp_client_runtime::ExternalProviderRuntimeError::SettingsUnresolved)
-    ));
-    client
-        .accept_session_settings(provider_session_id.clone())
-        .await
-        .expect("caller accepts effective settings");
+    assert!(!client.settings_unresolved(&provider_session_id));
     let prompt = client
         .submit_with_approval_dispatch_for_input(
             provider_session_id,
@@ -414,17 +417,17 @@ async fn partial_setup_blocks_prompt_until_settings_are_accepted() {
         )
         .await;
     client.shutdown().await;
-    assert!(prompt.is_ok(), "prompt after accept: {prompt:?}");
+    assert!(prompt.is_ok(), "prompt after known refusal: {prompt:?}");
     assert_eq!(
         std::fs::read_to_string(receipt).expect("prompt receipt"),
         "prompt-after-accept"
     );
 }
 
-/// Oracle: specification R14 lets the caller resolve a partial setup by
-/// applying a currently offered value before prompting.
+/// A caller may repair one failed setting without having to accept the
+/// other untried values before sending input.
 #[tokio::test]
-async fn resolving_failed_kind_keeps_untried_kind_gated_until_accepted() {
+async fn resolving_failed_kind_leaves_untried_kind_nonblocking() {
     let root = tempfile::tempdir().expect("fixture root");
     let receipt = root.path().join("resolved.txt");
     let sink = Arc::new(SettingsEventSink::default());
@@ -444,6 +447,7 @@ async fn resolving_failed_kind_keeps_untried_kind_gated_until_accepted() {
                 mode: Some("ask".to_owned()),
                 model: Some("b".to_owned()),
                 effort: Some("high".to_owned()),
+                ..Default::default()
             },
         )
         .await;
@@ -458,7 +462,7 @@ async fn resolving_failed_kind_keeps_untried_kind_gated_until_accepted() {
         .set_setting(
             provider_session_id.clone(),
             acp_client_runtime::ProviderSettingRequest {
-                kind: acp_client_runtime::ProviderSettingKind::Model,
+                kind: provider_session_machines::ProviderSettingKind::Model,
                 value: "b".to_owned(),
                 intent: session_event_model::SettingApplicationIntent::ExplicitChange,
                 expected_model: None,
@@ -475,12 +479,7 @@ async fn resolving_failed_kind_keeps_untried_kind_gated_until_accepted() {
         assert_eq!(settings[0].model.as_deref(), Some("a"));
         assert_eq!(settings[1].model.as_deref(), Some("b"));
     }
-    assert!(client.settings_unresolved(&provider_session_id).await);
-    client
-        .accept_session_settings(provider_session_id.clone())
-        .await
-        .expect("accept remaining untried setting");
-    assert!(!client.settings_unresolved(&provider_session_id).await);
+    assert!(!client.settings_unresolved(&provider_session_id));
     let prompt = client
         .submit_with_approval_dispatch_for_input(
             provider_session_id,

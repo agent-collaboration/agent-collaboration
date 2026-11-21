@@ -1,9 +1,10 @@
 //! Failed ACP turns keep their emitted items separate from explicit successors.
 
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::{
-    AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
-    ExternalProviderRuntimeError, HistoryReplayFuture, InteractionFuture, InteractionPort,
-    RefusedApprovalOffer, SessionEventSink,
+    ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch, ExternalProviderRuntimeError,
+    HistoryReplayFuture, InteractionFuture, InteractionPort, RefusedApprovalOffer,
+    SessionEventSink,
 };
 use session_event_model::{ApprovalRequest, InputId, PromptContent, SessionEvent};
 use std::{path::PathBuf, sync::Arc};
@@ -54,9 +55,6 @@ impl InteractionPort for NoopInteractionPort {
         Box::pin(async {})
     }
     fn cancel_all(&self, _context: u64, _reason: &'static str) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
-    fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
         Box::pin(async {})
     }
 }

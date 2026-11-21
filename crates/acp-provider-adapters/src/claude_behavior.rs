@@ -34,7 +34,7 @@ impl ProviderBehavior for ClaudeAcpBehavior {
     }
     fn can_reuse_setting_confirmation(
         &self,
-        _kind: acp_client_runtime::ProviderSettingKind,
+        _kind: provider_session_machines::ProviderSettingKind,
     ) -> bool {
         // Only the qualified stock integration establishes per-query settings scope.
         matches!(self.source, ClaudeSkillSource::Annotated)
@@ -45,19 +45,18 @@ impl ProviderBehavior for ClaudeAcpBehavior {
     fn decode_model_metadata(
         &self,
         value: &serde_json::Value,
-    ) -> acp_client_runtime::ModelReasoningMetadata {
+    ) -> provider_session_machines::ModelReasoningMetadata {
         crate::model_reasoning_metadata::decode_claude_models(value)
     }
     fn auto_permission_mode(&self) -> acp_client_runtime::AutoPermissionMode {
-        // Claude's own `auto` refuses through its classifier with only a failed
-        // tool notification, so nothing can be approved. Until escalation is
-        // proven (E2), its ask-first `acceptEdits` stands in: edits in the
-        // project and granted folders run, everything else asks.
+        // Claude's own `auto` realizes Router auto. claude-agent-acp offers `auto`
+        // only for a model that supports it, and lands a requested `auto` on
+        // `acceptEdits` otherwise; that answer is accepted and reported.
         acp_client_runtime::AutoPermissionMode {
-            realized_by: Some("acceptEdits"),
-            fallback: None,
-            realization: acp_client_runtime::AutoRealization::AsksFirst,
-            stand_in_reason: Some(acp_client_runtime::PermissionModeReason::EscalationUnproven),
+            realized_by: Some("auto"),
+            fallback: Some("acceptEdits"),
+            realization: acp_client_runtime::AutoRealization::Unknown,
+            stand_in_reason: None,
         }
     }
     fn observe(&self, update: ProviderUpdate) -> Result<ProviderFacts, ProviderError> {
@@ -166,7 +165,49 @@ impl ProviderBehavior for ClaudeAcpBehavior {
             PromptContent::text("/compact".into()).map_err(|_| ProviderError::Unsupported)?,
         ]))
     }
+
+    /// Claude takes the work roots in its per-session settings (D1 R18): as
+    /// additional directories, and with the Router's PreToolUse hook, which
+    /// makes it ask for a write or a shell call outside them. They travel on
+    /// the Router's own channel, which the Router's Claude entry appends to
+    /// whichever settings win the vendor's precedence; Claude merges them with
+    /// the owner's own settings and never replaces those.
+    fn session_new_meta(
+        &self,
+        work_roots: &acp_client_runtime::SessionWorkRoots,
+    ) -> Option<serde_json::Map<String, serde_json::Value>> {
+        if !work_roots.router_auto {
+            return None;
+        }
+        // An auto start always says so, so the Router's Claude entry refuses
+        // one that arrives without its work-root layer.
+        let Some(command) = work_roots.ask_outside_command.as_ref() else {
+            return Some(serde_json::Map::from_iter([(
+                "codexRouter".to_owned(),
+                serde_json::json!({"startMode": "auto"}),
+            )]));
+        };
+        let directories = work_roots
+            .roots
+            .iter()
+            .map(|root| root.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        let settings = serde_json::json!({
+            "permissions": {"additionalDirectories": directories},
+            "hooks": {"PreToolUse": [{
+                "matcher": ROUTER_HOOK_TOOLS,
+                "hooks": [{"type": "command", "command": command}],
+            }]},
+        });
+        Some(serde_json::Map::from_iter([(
+            "codexRouter".to_owned(),
+            serde_json::json!({"startMode": "auto", "workRootSettings": settings}),
+        )]))
+    }
 }
+
+/// The tools the Router's work-roots hook checks: every write and the shell.
+const ROUTER_HOOK_TOOLS: &str = "Write|Edit|MultiEdit|NotebookEdit|Bash";
 
 fn classify_commands(
     commands: Vec<ProviderCommand>,

@@ -2,13 +2,24 @@
 
 use super::{
     ConversationOperationFailure, ConversationOperationFailureKind,
-    ConversationOperationFailureStage, ConversationOperationSettlement,
-    ConversationOperationSubmission, ConversationPromptRequest, ExternalProviderSupervisor,
-    OperationId, PreparedOperation, ProviderConversationFuture, ProviderIdentity,
-    ProviderOperationCompletion, ProviderOperationEffect, ProviderOperationKind, SessionRef,
-    admitted_submission, existing_submission, failure, optional_message_text,
-    prompt_runtime_failure, retain_operation,
+    ConversationOperationFailureStage, ConversationOperationSubmission, ConversationPromptRequest,
+    ExternalProviderSupervisor, OperationId, ProviderConversationFuture, ProviderIdentity,
+    ProviderOperationEffect, SessionRef, failure,
 };
+
+/// What a prompt to a session that is in a turn does (D1 R12).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PromptBusyPolicy {
+    /// Refuse it: mail, wakes, scheduled runs and the ACP content commands
+    /// decide steer or queue themselves, and cache warm sends only to an
+    /// idle session.
+    RefuseBusy,
+    /// The API prompt (CLI, MCP tools, API): the caller's delivery choice
+    /// decides. Auto steers if the agent can and otherwise refuses with
+    /// CannotSteer; queue waits in the session's line; steer steers or is
+    /// refused.
+    Send(collaboration_protocol::MessageDelivery),
+}
 
 /// Host-internal prompt admission. Public API requests keep their prompt
 /// text as task input before reaching this boundary.
@@ -20,6 +31,7 @@ pub struct ProviderPromptContentsRequest {
     pub requested_by: ProviderIdentity,
     pub approver: ProviderIdentity,
     pub input: acp_client_runtime::ProviderTurnInput,
+    pub busy: PromptBusyPolicy,
 }
 
 impl ProviderPromptContentsRequest {
@@ -42,6 +54,7 @@ impl ProviderPromptContentsRequest {
             input: acp_client_runtime::ProviderTurnInput::Prompt(
                 session_event_model::ProviderSubmission::plain(vec![content]),
             ),
+            busy: PromptBusyPolicy::RefuseBusy,
         })
     }
 
@@ -74,6 +87,7 @@ impl ProviderPromptContentsRequest {
             input: acp_client_runtime::ProviderTurnInput::Prompt(
                 session_event_model::ProviderSubmission::plain(vec![content]),
             ),
+            busy: PromptBusyPolicy::Send(request.delivery),
         })
     }
 }
@@ -83,161 +97,6 @@ impl ExternalProviderSupervisor {
         &self,
         request: ProviderPromptContentsRequest,
     ) -> ProviderConversationFuture<'static, ConversationOperationSubmission> {
-        let operation_id = request.operation_id.clone();
-        let failure_target = Some(request.target.clone());
-        let backend = self.clone();
-        retain_operation(operation_id, failure_target, async move {
-            let target = request.target.clone();
-            let (binding, runtime) = backend.runtime_binding(
-                &target.endpoint,
-                &request.operation_id,
-                Some(target.clone()),
-            )?;
-            let approval_context = crate::ExternalProviderApprovalContext {
-                operation_id: request.operation_id.clone(),
-                binding_retirement: runtime.retirement(),
-            };
-            let prepared = backend
-                .prepare_operation(
-                    request.operation_id.clone(),
-                    ProviderOperationKind::ConversationPrompt,
-                    binding,
-                    Some(&target),
-                )
-                .await?;
-            match prepared {
-                PreparedOperation::Existing(operation) => Ok(existing_submission(operation)),
-                PreparedOperation::Admitted { snapshot, live } => {
-                    let (dispatch, dispatched) = tokio::sync::oneshot::channel();
-                    let operation_id = request.operation_id.clone();
-                    let provider_session_id = String::from(target.session_id.clone());
-                    let input_id = request.input_id;
-                    let completion_target = target.clone();
-                    backend.spawn_operation(operation_id.clone(), live, async move {
-                        match runtime
-                            .submit_with_approval_dispatch_for_input(
-                                provider_session_id,
-                                input_id,
-                                request.input,
-                                approval_context,
-                                Some(dispatch),
-                            )
-                            .await
-                        {
-                            Ok(crate::ExternalProviderPromptOutcome {
-                                permission_refusal_reason: Some(reason),
-                                ..
-                            }) => ProviderOperationCompletion::Failure(failure(
-                                ConversationOperationFailureKind::PermissionRejected,
-                                ConversationOperationFailureStage::Settlement,
-                                ProviderOperationEffect::Applied,
-                                reason.message(),
-                                operation_id,
-                                Some(completion_target),
-                            )),
-                            Ok(outcome) => match optional_message_text(outcome.output) {
-                                Ok(response) => ProviderOperationCompletion::Success {
-                                    settlement: ConversationOperationSettlement::PromptCompleted {
-                                        target: completion_target.clone(),
-                                        stop_reason: outcome.stop_reason,
-                                        response,
-                                    },
-                                    target: Some(completion_target),
-                                    session_record: None,
-                                },
-                                Err(_) => ProviderOperationCompletion::Failure(failure(
-                                    ConversationOperationFailureKind::ProtocolViolation,
-                                    ConversationOperationFailureStage::Settlement,
-                                    ProviderOperationEffect::Applied,
-                                    "provider returned invalid prompt output",
-                                    operation_id,
-                                    Some(completion_target),
-                                )),
-                            },
-                            Err(error) => {
-                                ProviderOperationCompletion::Failure(prompt_runtime_failure(
-                                    operation_id,
-                                    Some(completion_target),
-                                    error,
-                                ))
-                            }
-                        }
-                    });
-                    match tokio::time::timeout(std::time::Duration::from_secs(10), dispatched).await
-                    {
-                        Ok(Ok(
-                            acp_client_runtime::ProviderPromptDispatchObservation::Submitted,
-                        )) => Ok(admitted_submission(snapshot)),
-                        Ok(Ok(acp_client_runtime::ProviderPromptDispatchObservation::Refused(
-                            reason,
-                        ))) => {
-                            use acp_client_runtime::{ProviderDispatchRefusal, ProviderError};
-                            let (kind, message) = match reason {
-                                ProviderDispatchRefusal::Behavior(
-                                    ProviderError::InvalidSelection,
-                                ) => (
-                                    ConversationOperationFailureKind::InvalidRequest,
-                                    "invalid skill selection",
-                                ),
-                                ProviderDispatchRefusal::Behavior(
-                                    ProviderError::Unsupported | ProviderError::SourceUnavailable,
-                                ) => (
-                                    ConversationOperationFailureKind::UnsupportedCapability,
-                                    "provider input is unsupported",
-                                ),
-                                ProviderDispatchRefusal::Behavior(
-                                    ProviderError::MalformedMetadata,
-                                ) => (
-                                    ConversationOperationFailureKind::InvalidRequest,
-                                    "provider metadata is malformed",
-                                ),
-                                ProviderDispatchRefusal::Busy => (
-                                    ConversationOperationFailureKind::Busy,
-                                    "provider session is busy",
-                                ),
-                                ProviderDispatchRefusal::SettingsUnresolved => (
-                                    ConversationOperationFailureKind::SettingsUnresolved,
-                                    "provider settings are unresolved",
-                                ),
-                                ProviderDispatchRefusal::UnsupportedContent(_) => (
-                                    ConversationOperationFailureKind::UnsupportedCapability,
-                                    "provider content is unsupported",
-                                ),
-                            };
-                            Err(failure(
-                                kind,
-                                ConversationOperationFailureStage::Dispatch,
-                                ProviderOperationEffect::None,
-                                message,
-                                request.operation_id,
-                                Some(target),
-                            ))
-                        }
-                        Ok(Ok(
-                            acp_client_runtime::ProviderPromptDispatchObservation::NotSubmitted,
-                        )) => Err(failure(
-                            ConversationOperationFailureKind::Unavailable,
-                            ConversationOperationFailureStage::Dispatch,
-                            ProviderOperationEffect::None,
-                            "provider input was not submitted",
-                            request.operation_id,
-                            Some(target),
-                        )),
-                        Ok(Err(_)) | Err(_) => Err(failure(
-                            ConversationOperationFailureKind::OutcomeUnknown,
-                            ConversationOperationFailureStage::Dispatch,
-                            ProviderOperationEffect::Unknown,
-                            "provider dispatch outcome is unknown",
-                            request.operation_id,
-                            Some(target),
-                        )),
-                    }
-                }
-            }
-        })
+        self.owner_prompt(request)
     }
 }
-
-#[cfg(test)]
-#[path = "provider_prompt_contents_test.rs"]
-mod tests;

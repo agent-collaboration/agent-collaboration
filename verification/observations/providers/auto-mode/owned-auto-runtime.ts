@@ -1,6 +1,5 @@
-// D1 runtime adaptation for the converted #261 root. Only the proxy database argument and its
-// exact allowed-consumer filename change; all lifecycle/config/signature guards remain.
-// The Host's Claude launch uses its qualified stock adapter without legacy wrapper args.
+// D1 runtime adaptation keeps a short private app-server socket and checks
+// the canonical lifecycle's current proxy database and qualified Claude launch.
 import { existsSync, lstatSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, isAbsolute } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -108,15 +107,20 @@ export function adaptRuntimeLaunch(props: {
   const command = [...input.command];
   if (command[1] === "serve") {
     const stateIndex = command.indexOf("--state-db");
-    if (stateIndex < 0 || command[stateIndex + 1] !== join(plan.router_root, "state.sqlite"))
+    if (
+      stateIndex < 0 ||
+      command[stateIndex + 1] !== join(plan.router_root, "provider-proxy.sqlite")
+    )
       throw new Error("canonical runtime proxy command changed");
-    command[stateIndex + 1] = join(plan.router_root, "provider-proxy.sqlite");
   }
   if (command[1] === "host") {
-    const argumentIndex = command.indexOf("--claude-acp-arguments");
-    if (argumentIndex < 0 || command[argumentIndex + 1] !== plan.claude_adapter)
+    const executableIndex = command.indexOf("--claude-acp-executable");
+    if (
+      executableIndex < 0 ||
+      command[executableIndex + 1] !== plan.claude_adapter ||
+      command.includes("--claude-acp-arguments")
+    )
       throw new Error("canonical runtime Claude launch changed");
-    command.splice(argumentIndex, 2);
   }
   const environment =
     command[1] === "host"

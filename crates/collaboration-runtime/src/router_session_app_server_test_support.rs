@@ -77,6 +77,7 @@ pub(super) struct ScriptedSessionBackend {
     pub(super) create_sessions: Mutex<std::collections::VecDeque<SessionRef>>,
     pub(super) create_gates: Mutex<std::collections::VecDeque<Option<Arc<Notify>>>>,
     pub(super) load_commands: Mutex<Vec<SessionTargetCommand>>,
+    pub(super) load_failure: Mutex<Option<CommandFailure>>,
     pub(super) prompt_commands: Mutex<Vec<PromptSessionCommand>>,
     pub(super) steer_commands: Mutex<Vec<SteerSessionCommand>>,
     pub(super) publish_user_receipts: std::sync::atomic::AtomicBool,
@@ -128,6 +129,7 @@ impl ScriptedSessionBackend {
             create_sessions: Mutex::new(std::collections::VecDeque::new()),
             create_gates: Mutex::new(std::collections::VecDeque::new()),
             load_commands: Mutex::new(Vec::new()),
+            load_failure: Mutex::new(None),
             prompt_commands: Mutex::new(Vec::new()),
             steer_commands: Mutex::new(Vec::new()),
             publish_user_receipts: false.into(),
@@ -265,6 +267,9 @@ impl SessionCommandPort for ScriptedSessionBackend {
     }
     fn load_session(&self, command: SessionTargetCommand) -> CommandFuture<'_, ()> {
         self.load_commands.lock().expect("test lock").push(command);
+        if let Some(failure) = self.load_failure.lock().expect("test lock").take() {
+            return Box::pin(async { Err(failure) });
+        }
         self.live_states
             .lock()
             .expect("test lock")

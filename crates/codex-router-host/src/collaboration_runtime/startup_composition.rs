@@ -56,9 +56,18 @@ impl CollaborationRuntime {
         inputs: CollaborationRuntimeInputs,
         worker_clock: std::sync::Arc<dyn router_clock::RuntimeClock>,
     ) -> io::Result<Self> {
+        Self::runtime_test_start_with_provider_clock(inputs, Vec::new(), worker_clock).await
+    }
+
+    #[cfg(feature = "runtime-test-support")]
+    pub async fn runtime_test_start_with_provider_clock(
+        inputs: CollaborationRuntimeInputs,
+        providers: Vec<crate::ExternalProviderStartup>,
+        worker_clock: std::sync::Arc<dyn router_clock::RuntimeClock>,
+    ) -> io::Result<Self> {
         Box::pin(Self::start_with_optional_router_proxy_endpoint(
             inputs,
-            Vec::new(),
+            providers,
             std::sync::Arc::new(collaboration_mcp::FixedRouterExecutableRelation(
                 RouterExecutableRelation::Match,
             )),
@@ -173,12 +182,20 @@ impl CollaborationRuntime {
                 .directory
                 .parent()
                 .map(codex_native_integration::router_scratch_root),
+            Some(inputs.directory.join("hooks")),
+            std::sync::Arc::clone(&worker_clock),
         )
         .await?;
         let provider_face_endpoints = startup.endpoints.clone();
         let provider_retirements = startup.retirements;
         let external_provider_supervisor = startup.supervisor;
         let provider_session_hub = startup.hub;
+        let provider_cache_warm = crate::provider_cache_warm::compose_provider_cache_warm(
+            startup.cache_warm,
+            external_provider_supervisor.as_ref(),
+            provider_store.as_ref(),
+            worker_clock.clone(),
+        );
         let provider_endpoints = startup
             .endpoints
             .iter()
@@ -222,6 +239,7 @@ impl CollaborationRuntime {
         let message_routes =
             crate::session_message_route_composition::compose_session_message_routes(
                 crate::session_message_route_composition::SessionMessageRouteInputs {
+                    clock: worker_clock.clone(),
                     provider_endpoints,
                     directory: endpoint_directory.clone(),
                     native_backend: native_backend.clone(),
@@ -341,6 +359,7 @@ impl CollaborationRuntime {
                     std::sync::Arc::clone(delivery),
                     std::sync::Arc::clone(hub),
                     std::sync::Arc::clone(store),
+                    std::sync::Arc::clone(&worker_clock),
                 ));
             let events: std::sync::Arc<dyn collaboration_contracts::SessionEventHub> =
                 std::sync::Arc::clone(hub) as _;
@@ -366,6 +385,7 @@ impl CollaborationRuntime {
                     endpoint.clone(),
                     std::sync::Arc::clone(&commands),
                     std::sync::Arc::clone(&events),
+                    std::sync::Arc::clone(&worker_clock),
                 );
                 let Some(owner_human_id) = owner_human_id.as_ref() else {
                     continue;
@@ -398,6 +418,8 @@ impl CollaborationRuntime {
                 );
             }
         }
+        #[cfg(feature = "runtime-test-support")]
+        let provider_test_hub = provider_session_hub.as_ref().map(std::sync::Arc::downgrade);
         drop(provider_session_hub);
         let publication = publication.with_acp_listener()?;
         let manifest = collaboration_runtime::ManifestPublication::publish(
@@ -471,7 +493,10 @@ impl CollaborationRuntime {
             installation_peer,
             owner_human_id,
             provider_store,
+            #[cfg(feature = "runtime-test-support")]
+            provider_test_hub,
             external_provider_supervisor,
+            provider_cache_warm,
             provider_delivery_route,
             session_delivery_router,
             provider_retention: None,

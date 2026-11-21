@@ -41,10 +41,18 @@ pub struct ConversationCreateInput {
     pub mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
+    /// Off unless the caller says auto; the Router never turns fast on.
+    /// Claude and Cursor only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fast: Option<crate::protocol::FastSetting>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fork: Option<SessionId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub root_message_id: Option<UuidIdentity>,
+    /// Folders the creator names as work roots for a Claude or Cursor session
+    /// started in auto, on top of the Router's list (D1 R18).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub work_roots: Vec<PathBuf>,
 }
 
 impl ConversationCreateInput {
@@ -85,6 +93,11 @@ pub struct ConversationPromptInput {
     pub effort: Option<String>,
     #[serde(default)]
     pub generation: Option<CodexGeneration>,
+    /// What a busy provider session does with the prompt (D1 R12): auto
+    /// steers if the agent can and otherwise says cannot steer; queue waits
+    /// for the running turn to end; steer steers or is refused.
+    #[serde(default)]
+    pub delivery: collaboration_protocol::MessageDelivery,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
@@ -263,6 +276,8 @@ impl ConversationClient {
             message: input.message,
             effort: input.prompt_effort,
             generation,
+            // A new session is idle, so its first prompt simply starts a turn.
+            delivery: collaboration_protocol::MessageDelivery::Auto,
         };
         let prompt_operation_id = prompt_input.operation_id.clone();
         let prompt = if native {
@@ -392,6 +407,7 @@ impl ConversationClient {
             Self::CodexAcp(acp) => {
                 let (created_by, approver) = codex_create_actors(&input)?;
                 codex_mode_accepted(&input.endpoint, input.mode.as_deref())?;
+                codex_fast_accepted(input.fast)?;
                 if acp.endpoint() != &input.endpoint {
                     return Err(ConversationClientError::InvalidInput(
                         "Codex ACP endpoint changed",
@@ -402,6 +418,13 @@ impl ConversationClient {
                         &input.endpoint,
                         "generation",
                         "omit the generation guard for this Codex ACP create",
+                    ));
+                }
+                if !input.work_roots.is_empty() {
+                    return Err(unsupported(
+                        &input.endpoint,
+                        "workRoots",
+                        "omit work roots for a Codex create",
                     ));
                 }
                 let request = crate::ConversationCreateRequest {
@@ -473,7 +496,20 @@ impl ConversationClient {
                         .to_owned(),
                 )
                 .map_err(|_| ConversationClientError::InvalidInput("invalid working directory"))?;
+                let work_roots = input
+                    .work_roots
+                    .iter()
+                    .map(|root| {
+                        root.to_str()
+                            .map(str::to_owned)
+                            .and_then(|root| ProviderWorkingDirectory::try_from(root).ok())
+                            .ok_or(ConversationClientError::InvalidInput(
+                                "a work root must be an absolute UTF-8 path",
+                            ))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
                 let request = collaboration_protocol::ConversationCreateRequest {
+                    work_roots,
                     operation_id: operation_id.clone(),
                     endpoint: input.endpoint,
                     generation: input.generation,
@@ -490,11 +526,13 @@ impl ConversationClient {
                     settings: if input.mode.is_some()
                         || input.model.is_some()
                         || input.effort.is_some()
+                        || input.fast.is_some()
                     {
                         Some(ProviderRequestedSettings {
                             mode: input.mode,
                             model: input.model,
                             effort: input.effort,
+                            fast: input.fast,
                         })
                     } else {
                         None
@@ -629,6 +667,19 @@ fn codex_mode_accepted(
             endpoint,
             "mode",
             "use mode auto or omit mode for this Codex ACP create",
+        )),
+    }
+}
+
+/// Fast is an agent's own option; Codex has none, so any fast choice, auto
+/// included, is refused before anything starts (D1 R10).
+fn codex_fast_accepted(
+    fast: Option<crate::protocol::FastSetting>,
+) -> Result<(), ConversationClientError> {
+    match fast {
+        None => Ok(()),
+        Some(_) => Err(ConversationClientError::InvalidInput(
+            "fast is a provider setting; Codex has none",
         )),
     }
 }

@@ -11,6 +11,7 @@ pub enum SettingCategory {
     Mode,
     Model,
     Effort,
+    Fast,
 }
 
 /// A decoded ACP setting with its original ID and label and an optional recognized role.
@@ -117,6 +118,8 @@ fn setting_category(
                 "mode" => Some(SettingCategory::Mode),
                 "model" => Some(SettingCategory::Model),
                 "thought_level" => Some(SettingCategory::Effort),
+                // Cursor places Fast in its broad model_config category.
+                "fast" => Some(SettingCategory::Fast),
                 _ => None,
             },
         },

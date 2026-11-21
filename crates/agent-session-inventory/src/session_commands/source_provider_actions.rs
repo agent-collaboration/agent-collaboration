@@ -106,6 +106,7 @@ pub async fn execute_provider_action(
                         .map_err(|_| SourceRejection::InvalidRequest)?,
                 );
                 let input = ConversationCreateInput {
+                    work_roots: Vec::new(),
                     operation_id: operation_id.clone(),
                     endpoint: binding.endpoint.clone(),
                     working_directory: PathBuf::from(directory.as_str()),
@@ -114,8 +115,11 @@ pub async fn execute_provider_action(
                     approver: Some(actor),
                     generation: Some(binding.generation.clone()),
                     model: None,
-                    mode: None,
+                    // The source protocol's create carries no mode, so this
+                    // door asks for auto by name (D1 spec R1).
+                    mode: Some("auto".into()),
                     effort: None,
+                    fast: None,
                     fork: None,
                     root_message_id: None,
                 };

@@ -6,7 +6,7 @@ Run the package with nextest:
 cargo nextest run --locked --profile ci -p agent-collaboration --features quota-reset-test-harness
 ```
 
-- `integration/main.rs` gathers the 61 former CLI, protocol, fixture and opt-in
+- `integration/main.rs` gathers the 62 former CLI, protocol, fixture and opt-in
   live-debug roots. Each root retains its module namespace and ignore policy.
 - `e2e/main.rs` gathers the eight real local Host/central/CLI/MCP journey roots:
   board records, central, takeover, installation directory, messaging rules,

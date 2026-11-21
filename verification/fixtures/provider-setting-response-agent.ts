@@ -46,6 +46,6 @@ if (mode !== "closed") {
       error: { code: -32602, message: "private detail" },
     });
   if (mode === "held" || mode === "rejected") agent.endTurn(await agent.read("session/prompt"));
-}
+} else agent.endTurn(await agent.read("session/prompt"));
 await agent.drain();
 agent.close();

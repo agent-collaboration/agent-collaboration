@@ -3,6 +3,7 @@ use agent_client_protocol::schema::v1::{
     ConfigOptionUpdate, SessionConfigOptionCategory, SessionConfigSelectGroup,
     SessionConfigSelectOption, SessionMode, SessionModeState,
 };
+use provider_session_machines::ProviderSettingKind;
 
 /// Oracle: ACP v1 session config options use semantic categories when
 /// present, and their response after each set is the complete current set
@@ -39,7 +40,7 @@ fn catalog_keeps_current_mode_model_effort_and_advertised_choices() {
     let catalog = catalog_from_session_response(
         &response,
         &crate::test_behavior::TestProviderBehavior,
-        &crate::ModelReasoningMetadata::default(),
+        &provider_session_machines::ModelReasoningMetadata::default(),
     );
     assert_eq!(catalog.effective_settings().mode.as_deref(), Some("ask"));
     assert_eq!(
@@ -95,7 +96,7 @@ fn catalog_preserves_grouped_offers_and_current_values_at_admission_and_update()
     let mut catalog = catalog_from_session_response(
         &response,
         &behavior,
-        &crate::ModelReasoningMetadata::default(),
+        &provider_session_machines::ModelReasoningMetadata::default(),
     );
 
     assert_eq!(

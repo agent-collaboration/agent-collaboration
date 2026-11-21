@@ -5,12 +5,13 @@ use super::{
     CollaborationClient, ConversationAccess, ConversationActor, ConversationCancelInput,
     ConversationClient, ConversationClientError, ConversationCreateInput,
     ConversationCreateOutcome, ConversationCreatePromptInput, ConversationCreatePromptOutcome,
-    ConversationLoadInput, ConversationOperationFailure, ConversationOperationFailureKind,
-    ConversationOperationResult, ConversationPromptInput, ConversationRecord,
-    ConversationStopReason, CreateArguments, Duration, EndpointRef, LoadArguments, OperationEffect,
-    OperationFailure, OperationId, PromptArguments, PublicPromptContent, RouterAccess, SessionId,
-    SessionRef, Write, conversation_target, current_session_ref, io, operation_failure_exit,
-    operation_failure_from_client_error, prepare, validate_choice_value,
+    ConversationFast, ConversationLoadInput, ConversationOperationFailure,
+    ConversationOperationFailureKind, ConversationOperationResult, ConversationPromptInput,
+    ConversationRecord, ConversationStopReason, CreateArguments, Duration, EndpointRef,
+    LoadArguments, OperationEffect, OperationFailure, OperationId, PromptArguments,
+    PublicPromptContent, RouterAccess, SessionId, SessionRef, Write, conversation_target,
+    current_session_ref, io, operation_failure_exit, operation_failure_from_client_error, prepare,
+    validate_choice_value,
 };
 
 #[path = "conversation_client_command_reporting.rs"]
@@ -26,6 +27,24 @@ use reporting::{
 #[path = "conversation_client_lifecycle.rs"]
 mod lifecycle;
 pub(super) use lifecycle::{run_close, run_resume};
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+pub(super) enum ConversationDelivery {
+    Auto,
+    Queue,
+    Steer,
+}
+
+impl ConversationDelivery {
+    const fn message_delivery(self) -> collaboration_client::protocol::MessageDelivery {
+        use collaboration_client::protocol::MessageDelivery;
+        match self {
+            Self::Auto => MessageDelivery::Auto,
+            Self::Queue => MessageDelivery::Queue,
+            Self::Steer => MessageDelivery::Steer,
+        }
+    }
+}
 
 pub(super) fn run_create(args: CreateArguments) -> i32 {
     if let Err(failure) = validate_create_endpoint_options(&args) {
@@ -195,6 +214,7 @@ pub(super) fn run_create(args: CreateArguments) -> i32 {
             }
         };
         let request = ConversationCreateInput {
+            work_roots: args.work_roots,
             operation_id: operation_id.clone(),
             endpoint: endpoint.clone(),
             working_directory: args.cwd,
@@ -203,6 +223,7 @@ pub(super) fn run_create(args: CreateArguments) -> i32 {
             model: args.model,
             mode: args.mode,
             effort: args.effort,
+            fast: args.fast.map(ConversationFast::setting),
             access: match args.access {
                 ConversationAccess::WriteRestricted => RouterAccess::WriteRestricted,
                 ConversationAccess::WorkspaceWrite => RouterAccess::WorkspaceWrite,
@@ -367,6 +388,7 @@ pub(super) fn run_new_prompt(args: PromptArguments) -> i32 {
             }
         };
         let create = ConversationCreateInput {
+            work_roots: args.work_roots.clone(),
             operation_id: create_operation_id.clone(),
             endpoint,
             working_directory: cwd,
@@ -375,8 +397,9 @@ pub(super) fn run_new_prompt(args: PromptArguments) -> i32 {
             approver: approver.map(Into::into),
             generation,
             model: args.model,
-            mode: None,
+            mode: args.mode,
             effort: args.effort.clone(),
+            fast: args.fast.map(ConversationFast::setting),
             fork: None,
             root_message_id,
         };
@@ -550,6 +573,7 @@ pub(super) fn run_existing_prompt(args: PromptArguments) -> i32 {
             message,
             effort: args.effort,
             generation,
+            delivery: args.delivery.message_delivery(),
         };
         let cancel = CancellationToken::new();
         let signal = cancel.clone();

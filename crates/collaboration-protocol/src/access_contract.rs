@@ -23,8 +23,8 @@ pub enum SettingsObservationSource {
 #[serde(rename_all = "camelCase")]
 pub enum SettingsUnavailableReason {
     NativeResponseOmittedSettings,
-    /// The broker holds no access route for this thread, so the app-server
-    /// default governs its access. Threads created before routes were recorded
+    /// The Router has no recorded access route for this thread, so the
+    /// app-server default governs its access. Threads created before routes were recorded
     /// still resume; their access is inherited rather than Router-selected.
     NoRecordedAccessRoute,
     NotObservedBeforeResume,

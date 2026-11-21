@@ -316,6 +316,10 @@ pub struct EffectiveProviderSettings {
     /// Why `mode`, the agent's own report, differs from the requested mode.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode_reason: Option<ProviderModeReason>,
+    /// What the agent last reported for its fast option; absent when the
+    /// Router hasn't observed this session's settings since it started.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fast: Option<FastState>,
 }
 
 /// Why a session's actual permission mode differs from the requested one.
@@ -374,6 +378,8 @@ impl CodexPermissionModeReport {
             effort: None,
             requested_mode: self.requested_mode.clone(),
             mode_reason: self.reason,
+            // Codex has no fast option and the Router reports none for it (R10).
+            fast: None,
         }
     }
 }
@@ -396,6 +402,9 @@ pub struct ProviderRequestedSettings {
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
+    /// Absent means the default, off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fast: Option<FastSetting>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
@@ -404,6 +413,30 @@ pub enum ProviderSettingName {
     Mode,
     Model,
     Effort,
+    Fast,
+}
+
+/// What the caller asks of the agent's fast option. Owner, 2026-11-15:
+/// "--fast off is default in ckursor ... unless user provices --fast auto".
+/// The Router never turns fast on.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FastSetting {
+    /// Turn the agent's fast option off and keep it off.
+    #[default]
+    Off,
+    /// Leave the agent's fast option to the agent.
+    Auto,
+}
+
+/// What the agent last reported for its fast option.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FastState {
+    Off,
+    On,
+    /// The agent offers no fast option.
+    None,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
@@ -453,6 +486,14 @@ pub enum ProviderOperationKind {
     ConversationClose,
     ConversationPrompt,
     ConversationCancel,
+}
+
+impl ProviderOperationKind {
+    /// A completed load or resume no longer owns local session admission.
+    #[must_use]
+    pub const fn is_restore(self) -> bool {
+        matches!(self, Self::ConversationLoad | Self::ConversationResume)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
@@ -547,6 +588,10 @@ pub struct ConversationCreateRequest {
     pub requested_policy: ProviderRequestedPolicy,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settings: Option<ProviderRequestedSettings>,
+    /// Folders the creator names as work roots for a session started in auto,
+    /// on top of the Router's list (D1 R18). Absolute paths.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub work_roots: Vec<ProviderWorkingDirectory>,
 }
 
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
@@ -598,6 +643,11 @@ pub struct ConversationPromptRequest {
     pub requested_by: ProviderIdentity,
     pub approver: ProviderIdentity,
     pub prompt: MessageContent,
+    /// What a busy session does with the prompt (D1 R12): auto steers if the
+    /// agent can and otherwise refuses with CannotSteer; queue waits in the
+    /// session's line; steer steers or is refused.
+    #[serde(default, skip_serializing_if = "crate::MessageDelivery::is_auto")]
+    pub delivery: crate::MessageDelivery,
 }
 
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
@@ -672,6 +722,11 @@ pub enum ConversationOperationSettlement {
     },
     Closed {
         target: SessionRef,
+        /// The agent offers no session/close, so the Router closed the
+        /// session itself: it interrupted the turn and released the session,
+        /// and the agent kept no close of its own (D1 R14).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        router_closed: bool,
     },
     PromptCompleted {
         target: SessionRef,
@@ -682,6 +737,15 @@ pub enum ConversationOperationSettlement {
     CancelRequested {
         target: SessionRef,
         target_operation_id: OperationId,
+    },
+    /// Accepted into the running turn (D1 R12). It doesn't claim the turn
+    /// finished and carries no reply of its own; the reply belongs to that turn.
+    Steered {
+        target: SessionRef,
+        /// The running turn's approver, when it differs from the one this
+        /// request named: a steered message's work is approved by the turn's.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        turn_approver: Option<crate::ProviderIdentity>,
     },
 }
 
@@ -744,6 +808,10 @@ pub enum ConversationOperationFailureKind {
     ProviderRejected,
     ProtocolViolation,
     OutcomeUnknown,
+    /// The session is in a turn and its agent can't take input mid-turn: the
+    /// prompt was not sent, and the caller chooses to queue it or interrupt
+    /// the turn (D1 R12).
+    CannotSteer,
 }
 
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]

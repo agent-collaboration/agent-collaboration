@@ -19,9 +19,8 @@ assert.equal(textField(arrayField(steer, "params", "prompt")[0], "text"), "follo
 assert.equal(field(steer, "params", "_meta", "steering", "idleBehavior"), "promptRequired");
 agent.respond(steer, { outcome: "injected" });
 agent.endTurn(prompt);
-agent.respond(await agent.read("_session/steering"), {
-  outcome: "promptRequired",
-  reason: "noRunningTurn",
-});
+const later = await agent.read("session/prompt");
+assert.equal(textField(arrayField(later, "params", "prompt")[0], "text"), "later");
+agent.endTurn(later);
 await agent.drain();
 agent.close();

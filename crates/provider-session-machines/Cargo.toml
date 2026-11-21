@@ -1,0 +1,19 @@
+[package]
+name = "provider-session-machines"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+autotests = false
+
+[dependencies]
+serde.workspace = true
+session-event-model = { path = "../session-event-model", version = "0.1.40" }
+state-machine-core.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+hegel = { package = "hegeltest", version = "=0.52.6", features = ["static-engine"] }
+
+[lints]
+workspace = true

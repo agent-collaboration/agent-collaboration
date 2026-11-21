@@ -1,18 +1,25 @@
-//! Stateless policy for ACP callbacks in the managed provider runtime.
+//! Managed ACP callback policy and its exact-turn cancellation port.
 
-use acp_client_runtime::{
-    ApprovalPortOutcome, InteractionFuture, InteractionPort, RefusedApprovalOffer, SessionEventSink,
-};
+use acp_client_runtime::{InteractionFuture, InteractionPort};
 use collaboration_protocol::OperationId;
-use session_event_model::{
-    ApprovalRequest, QuestionRequest, QuestionResponse,
-    managed_interaction_refusal::ManagedInteractionRefusal,
-};
+use provider_session_machines::{SessionGeneration, session_turn_machine::TurnId};
+use session_event_model::managed_interaction_refusal::ManagedInteractionRefusal;
 use tokio_util::sync::CancellationToken;
 
-use crate::ExternalProviderApprovalContext;
+use crate::{
+    ExternalProviderApprovalContext, external_provider_approval_context::OwnerApprovalScope,
+};
+use std::sync::Arc;
 
-pub(crate) struct HostInteractionPort;
+pub(crate) trait RefusedTurnCancellation: Send + Sync {
+    fn cancel_refused_turn(
+        &self,
+        session: String,
+        scope: OwnerApprovalScope,
+    ) -> InteractionFuture<'_, ()>;
+}
+
+pub(crate) struct HostInteractionPort(pub(crate) Arc<dyn RefusedTurnCancellation>);
 
 impl InteractionPort for HostInteractionPort {
     type Context = ExternalProviderApprovalContext;
@@ -20,6 +27,15 @@ impl InteractionPort for HostInteractionPort {
 
     fn managed_refusal(&self) -> Option<ManagedInteractionRefusal> {
         Some(ManagedInteractionRefusal::ApprovalsUnavailableOnBuild)
+    }
+
+    fn cancel_after_managed_refusal(&self, context: Self::Context) -> InteractionFuture<'_, ()> {
+        Box::pin(async move {
+            if let Some(scope) = context.owner_scope {
+                let session = String::from(context.target.session_id);
+                self.0.cancel_refused_turn(session, scope).await;
+            }
+        })
     }
 
     fn operation_id(context: &Self::Context) -> Self::OperationId {
@@ -30,71 +46,7 @@ impl InteractionPort for HostInteractionPort {
         context.binding_retirement.clone()
     }
 
-    fn request_approval(
-        &self,
-        _context: Self::Context,
-        _request: ApprovalRequest,
-        _turn_cancellation: CancellationToken,
-        _agent_cancellation: CancellationToken,
-    ) -> InteractionFuture<'_, ApprovalPortOutcome> {
-        Box::pin(async { ApprovalPortOutcome::Unavailable })
-    }
-
-    fn request_question(
-        &self,
-        _context: Self::Context,
-        _request: QuestionRequest,
-        _turn_cancellation: CancellationToken,
-        _agent_cancellation: CancellationToken,
-    ) -> InteractionFuture<'_, QuestionResponse> {
-        Box::pin(async { QuestionResponse::Cancelled })
-    }
-
-    fn record_refusal(
-        &self,
-        _context: Self::Context,
-        _refusal: RefusedApprovalOffer,
-    ) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
-
-    fn cancel_all(
-        &self,
-        _context: Self::Context,
-        _reason: &'static str,
-    ) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
-
-    fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
-}
-
-/// Test-only stand-in for direct runtime fixtures without a Router Host.
-pub(crate) struct NoopSessionEventSink;
-
-impl SessionEventSink for NoopSessionEventSink {
-    fn publish_skill_view(
-        &self,
-        _session_id: &str,
-        _view: session_event_model::SkillView,
-    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
-        Ok(())
-    }
-
-    fn begin_history_replay(
-        &self,
-        _session_id: &str,
-    ) -> acp_client_runtime::HistoryReplayFuture<'_> {
-        Box::pin(async { Ok(()) })
-    }
-
-    fn publish(
-        &self,
-        _session_id: &str,
-        _event: session_event_model::SessionEvent,
-    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
-        Ok(())
+    fn bind_owner_scope(context: &mut Self::Context, run: SessionGeneration, turn: TurnId) {
+        context.owner_scope = Some(OwnerApprovalScope { run, turn });
     }
 }

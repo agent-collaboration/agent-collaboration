@@ -5,21 +5,20 @@ use collaboration_protocol::{
     ObservationTimestamp, OperationId, ProviderBindingIdentity, ProviderOperationEffect,
     ProviderOperationKind, ProviderOperationStage, ProviderReconciliationState, SessionRef,
 };
+#[cfg(test)]
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::{
     collections::HashMap,
-    sync::{
-        Mutex,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::{Arc, Mutex},
 };
-#[cfg(test)]
 use tokio::sync::Notify;
 
-#[derive(Default)]
 pub(crate) struct ProviderQueueOperationRegistry {
     operations: Mutex<HashMap<OperationId, QueuedProviderOperation>>,
-    next_sequence: AtomicU64,
+    clock: Arc<dyn router_clock::RuntimeClock>,
     #[cfg(test)]
+    next_sequence: AtomicU64,
+    /// Wakes whoever waits on a queued input's outcome (D1 R14).
     changed: Notify,
 }
 
@@ -45,11 +44,26 @@ struct QueuedProviderOperation {
     terminal_at_ms: Option<i64>,
     input_id: session_event_model::InputId,
     preview: String,
+    #[cfg(test)]
     sequence: u64,
     started: bool,
 }
 
 impl ProviderQueueOperationRegistry {
+    pub(crate) fn new(clock: Arc<dyn router_clock::RuntimeClock>) -> Self {
+        Self {
+            operations: Mutex::default(),
+            clock,
+            #[cfg(test)]
+            next_sequence: AtomicU64::default(),
+            changed: Notify::new(),
+        }
+    }
+
+    fn now_ms(&self) -> i64 {
+        self.clock.utc_now().timestamp_millis()
+    }
+
     pub(crate) fn record_queued_contents(
         &self,
         operation_id: OperationId,
@@ -58,18 +72,11 @@ impl ProviderQueueOperationRegistry {
         input_id: session_event_model::InputId,
         contents: &[session_event_model::PromptContent],
     ) -> ProviderQueuedInput {
-        let preview = contents
-            .iter()
-            .find_map(|content| match content {
-                session_event_model::PromptContent::Text { text } => Some(text.as_str()),
-                _ => None,
-            })
-            .map(sanitized_text_preview)
-            .unwrap_or_default();
+        let preview = queued_content_preview(contents);
         self.record_queued_with_preview(operation_id, target, binding, input_id, preview)
     }
 
-    fn record_queued_with_preview(
+    pub(crate) fn record_queued_with_preview(
         &self,
         operation_id: OperationId,
         target: SessionRef,
@@ -100,11 +107,12 @@ impl ProviderQueueOperationRegistry {
             QueuedProviderOperation {
                 target,
                 binding,
-                queued_at_ms: now_ms(),
+                queued_at_ms: self.now_ms(),
                 state: ConversationOperationQueueState::RouterQueued,
                 terminal_at_ms: None,
                 input_id,
                 preview,
+                #[cfg(test)]
                 sequence: self.next_sequence.fetch_add(1, Ordering::Relaxed),
                 started: false,
             },
@@ -112,6 +120,35 @@ impl ProviderQueueOperationRegistry {
         queued
     }
 
+    /// Resolve previews using the owner snapshot's order and waiting membership.
+    pub(crate) fn list_in_owner_order(
+        &self,
+        target: &SessionRef,
+        waiting: impl Iterator<Item = session_event_model::InputId>,
+    ) -> Vec<ProviderQueuedInput> {
+        let operations = self
+            .operations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let payloads: HashMap<_, _> = operations
+            .values()
+            .filter(|operation| &operation.target == target)
+            .map(|operation| (&operation.input_id, &operation.preview))
+            .collect();
+        waiting
+            .enumerate()
+            .filter_map(|(position, input_id)| {
+                let preview = (*payloads.get(&input_id)?).clone();
+                Some(ProviderQueuedInput {
+                    input_id,
+                    position: u64::try_from(position.saturating_add(1)).unwrap_or(u64::MAX),
+                    preview,
+                })
+            })
+            .collect()
+    }
+
+    #[cfg(test)]
     pub(crate) fn list(&self, target: &SessionRef) -> Vec<ProviderQueuedInput> {
         let operations = self
             .operations
@@ -137,18 +174,21 @@ impl ProviderQueueOperationRegistry {
             .collect()
     }
 
+    /// Cancels a waiting entry; returns its operation ID. An entry already
+    /// started can't be cancelled, so a cancel and a dispatch never both win.
+    #[cfg(test)]
     pub(crate) fn cancel(
         &self,
         target: &SessionRef,
         input_id: &session_event_model::InputId,
-    ) -> Result<(), ProviderQueueCancellationError> {
+    ) -> Result<OperationId, ProviderQueueCancellationError> {
         let mut operations = self
             .operations
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let operation = operations
-            .values_mut()
-            .find(|operation| &operation.target == target && &operation.input_id == input_id)
+        let (operation_id, operation) = operations
+            .iter_mut()
+            .find(|(_, operation)| &operation.target == target && &operation.input_id == input_id)
             .ok_or(ProviderQueueCancellationError::NotQueued)?;
         if operation.started || operation.state != ConversationOperationQueueState::RouterQueued {
             return Err(ProviderQueueCancellationError::NotQueued);
@@ -156,10 +196,13 @@ impl ProviderQueueOperationRegistry {
         operation.state = ConversationOperationQueueState::NotSubmitted {
             reason: "queueCancelled".into(),
         };
-        operation.terminal_at_ms = Some(now_ms());
-        Ok(())
+        operation.terminal_at_ms = Some(self.now_ms());
+        // A caller waiting on this input's outcome learns it was not sent now.
+        self.changed.notify_waiters();
+        Ok(operation_id.clone())
     }
 
+    #[cfg(test)]
     pub(crate) fn try_start(&self, operation_id: &OperationId) -> bool {
         let mut operations = self
             .operations
@@ -185,9 +228,8 @@ impl ProviderQueueOperationRegistry {
             operation.state = ConversationOperationQueueState::NotSubmitted {
                 reason: reason.into(),
             };
-            operation.terminal_at_ms = Some(now_ms());
-            #[cfg(test)]
-            self.changed.notify_one();
+            operation.terminal_at_ms = Some(self.now_ms());
+            self.changed.notify_waiters();
         }
     }
 
@@ -215,21 +257,31 @@ impl ProviderQueueOperationRegistry {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .remove(operation_id);
-        #[cfg(test)]
-        self.changed.notify_one();
+        self.changed.notify_waiters();
     }
 
-    #[cfg(test)]
-    pub(crate) async fn wait_for_cleared(&self, operation_id: &OperationId) {
+    /// The reason a session's queued input was not sent, once it wasn't.
+    pub(crate) async fn wait_not_sent(
+        &self,
+        target: &SessionRef,
+        input_id: &session_event_model::InputId,
+    ) -> String {
         loop {
             let changed = self.changed.notified();
-            if !self
+            let reason = self
                 .operations
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .contains_key(operation_id)
-            {
-                return;
+                .values()
+                .find(|operation| &operation.target == target && &operation.input_id == input_id)
+                .and_then(|operation| match &operation.state {
+                    ConversationOperationQueueState::NotSubmitted { reason } => {
+                        Some(reason.clone())
+                    }
+                    ConversationOperationQueueState::RouterQueued => None,
+                });
+            if let Some(reason) = reason {
+                return reason;
             }
             changed.await;
         }
@@ -280,6 +332,17 @@ impl ProviderQueueOperationRegistry {
     }
 }
 
+pub(crate) fn queued_content_preview(contents: &[session_event_model::PromptContent]) -> String {
+    contents
+        .iter()
+        .find_map(|content| match content {
+            session_event_model::PromptContent::Text { text } => Some(text.as_str()),
+            _ => None,
+        })
+        .map(sanitized_text_preview)
+        .unwrap_or_default()
+}
+
 fn sanitized_text_preview(text: &str) -> String {
     text.split_whitespace()
         .collect::<Vec<_>>()
@@ -298,8 +361,13 @@ fn timestamp_from_millis(milliseconds: i64) -> Result<ObservationTimestamp, &'st
         .map_err(|_| "provider queue timestamp is outside the supported range")
 }
 
-fn now_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
+#[cfg(test)]
+impl Default for ProviderQueueOperationRegistry {
+    fn default() -> Self {
+        Self::new(Arc::new(router_clock::ManualClock::new(
+            chrono::DateTime::UNIX_EPOCH,
+        )))
+    }
 }
 
 #[cfg(test)]

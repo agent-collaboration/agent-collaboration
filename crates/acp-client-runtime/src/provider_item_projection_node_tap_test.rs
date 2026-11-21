@@ -71,14 +71,22 @@ impl ProviderBehavior for ScriptedBehavior {
     fn initialization_authentication(&self) -> crate::ProviderInitializationAuthentication {
         crate::ProviderInitializationAuthentication::NotRequested
     }
-    fn can_reuse_setting_confirmation(&self, _: crate::ProviderSettingKind) -> bool {
+    fn can_reuse_setting_confirmation(
+        &self,
+        _: provider_session_machines::ProviderSettingKind,
+    ) -> bool {
         true
     }
     fn model_metadata_source(&self) -> crate::ModelMetadataSource {
         crate::ModelMetadataSource::Unavailable
     }
-    fn decode_model_metadata(&self, _: &serde_json::Value) -> crate::ModelReasoningMetadata {
-        crate::ModelReasoningMetadata::Unknown(crate::ModelReasoningUnknown::UnsupportedSource)
+    fn decode_model_metadata(
+        &self,
+        _: &serde_json::Value,
+    ) -> provider_session_machines::ModelReasoningMetadata {
+        provider_session_machines::ModelReasoningMetadata::Unknown(
+            provider_session_machines::ModelReasoningUnknown::UnsupportedSource,
+        )
     }
     fn auto_permission_mode(&self) -> crate::AutoPermissionMode {
         crate::AutoPermissionMode::UNREALIZED

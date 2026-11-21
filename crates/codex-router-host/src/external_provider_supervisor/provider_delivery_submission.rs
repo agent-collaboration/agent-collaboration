@@ -1,106 +1,32 @@
-//! Delivery prompt admission waits for the ACP request to enter the session actor.
-use super::{
-    ConversationOperationFailure, ConversationOperationFailureKind,
-    ConversationOperationFailureStage, ConversationOperationSettlement, Duration,
-    ExternalProviderSupervisor, PreparedOperation, ProviderOperationEffect, ProviderOperationKind,
-    ProviderPromptContentsRequest, failure, prompt_runtime_failure,
-};
-use crate::external_provider_runtime::ProviderPromptDispatchObservation;
-use crate::provider_operation_settlement::{ProviderOperationCompletion, optional_message_text};
+//! Report owner submission to the scheduled-run delivery adapter.
 
-const DELIVERY_DISPATCH_TIMEOUT: Duration = Duration::from_secs(10);
+use super::{
+    ConversationOperationFailure, ExternalProviderSupervisor, ProviderPromptContentsRequest,
+};
+use crate::session_owner_calls::InputAcceptance;
+use provider_session_machines::session_owner::RevokeReason;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ProviderPromptDispatch {
     Submitted,
-    NotSubmitted,
-    Existing,
+    NotSubmitted { reason: Option<RevokeReason> },
     Uncertain,
-    Refused(acp_client_runtime::ProviderDispatchRefusal),
 }
 
 impl ExternalProviderSupervisor {
-    /// Submits caller-projected content blocks without passing through message rendering.
     pub(crate) async fn submit_delivery_prompt_contents(
         &self,
         request: ProviderPromptContentsRequest,
     ) -> Result<ProviderPromptDispatch, Box<ConversationOperationFailure>> {
-        let operation_id = request.operation_id.clone();
-        let target = request.target.clone();
-        let (binding, runtime) = self
-            .runtime_binding(&target.endpoint, &operation_id, Some(target.clone()))
-            .map_err(Box::new)?;
-        let approval_context = crate::ExternalProviderApprovalContext {
-            operation_id: operation_id.clone(),
-            binding_retirement: runtime.retirement(),
-        };
-        let prepared = self
-            .prepare_operation(
-                operation_id.clone(),
-                ProviderOperationKind::ConversationPrompt,
-                binding,
-                Some(&target),
-            )
+        self.submit_owned_direct_delivery(request)
             .await
-            .map_err(Box::new)?;
-        let PreparedOperation::Admitted { live, .. } = prepared else {
-            return Ok(ProviderPromptDispatch::Existing);
-        };
-        let (dispatched, dispatch_observation) = tokio::sync::oneshot::channel();
-        let input_id = request.input_id;
-        let provider_session_id = String::from(target.session_id.clone());
-        let completion_target = target.clone();
-        let completion_operation_id = operation_id.clone();
-        self.spawn_operation(operation_id, live, async move {
-            match runtime
-                .submit_with_approval_dispatch_for_input(
-                    provider_session_id,
-                    input_id,
-                    request.input,
-                    approval_context,
-                    Some(dispatched),
-                )
-                .await
-            {
-                Ok(outcome) => match optional_message_text(outcome.output) {
-                    Ok(response) => ProviderOperationCompletion::Success {
-                        settlement: ConversationOperationSettlement::PromptCompleted {
-                            target: completion_target.clone(),
-                            stop_reason: outcome.stop_reason,
-                            response,
-                        },
-                        target: Some(completion_target),
-                        session_record: None,
-                    },
-                    Err(_) => ProviderOperationCompletion::Failure(failure(
-                        ConversationOperationFailureKind::ProtocolViolation,
-                        ConversationOperationFailureStage::Settlement,
-                        ProviderOperationEffect::Applied,
-                        "provider returned invalid prompt output",
-                        completion_operation_id,
-                        Some(completion_target),
-                    )),
-                },
-                Err(error) => ProviderOperationCompletion::Failure(prompt_runtime_failure(
-                    completion_operation_id,
-                    Some(completion_target),
-                    error,
-                )),
-            }
-        });
-        Ok(
-            match tokio::time::timeout(DELIVERY_DISPATCH_TIMEOUT, dispatch_observation).await {
-                Ok(Ok(ProviderPromptDispatchObservation::Submitted)) => {
-                    ProviderPromptDispatch::Submitted
+            .map(|acceptance| match acceptance {
+                InputAcceptance::Started => ProviderPromptDispatch::Submitted,
+                InputAcceptance::Unsent { reason } => {
+                    ProviderPromptDispatch::NotSubmitted { reason }
                 }
-                Ok(Ok(ProviderPromptDispatchObservation::NotSubmitted)) => {
-                    ProviderPromptDispatch::NotSubmitted
-                }
-                Ok(Ok(ProviderPromptDispatchObservation::Refused(reason))) => {
-                    ProviderPromptDispatch::Refused(reason)
-                }
-                Ok(Err(_)) | Err(_) => ProviderPromptDispatch::Uncertain,
-            },
-        )
+                _ => ProviderPromptDispatch::Uncertain,
+            })
+            .map_err(Box::new)
     }
 }

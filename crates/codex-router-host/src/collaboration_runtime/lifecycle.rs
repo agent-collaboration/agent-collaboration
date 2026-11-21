@@ -33,6 +33,9 @@ impl CollaborationRuntime {
     pub async fn shutdown(mut self) -> io::Result<()> {
         self.manifest.take();
         self.shutdown.cancel();
+        if let Some(cache_warm) = self.provider_cache_warm.take() {
+            cache_warm.shutdown().await;
+        }
         let mut failure = None;
         if let Some(mut exposure) = self.tailscale_exposure.take()
             && let Err(error) = exposure.shutdown().await
@@ -49,6 +52,18 @@ impl CollaborationRuntime {
         if let Some(route) = self.provider_delivery_route.take() {
             route.shutdown_queue().await;
         }
+        self.drain_native_observer().await;
+        while let Some(result) = self.tasks.join_next().await {
+            match result {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => {
+                    failure.get_or_insert(error);
+                }
+                Err(_) => {
+                    failure.get_or_insert(io::Error::other("collaboration task shutdown failed"));
+                }
+            }
+        }
         if let Some(supervisor) = self.external_provider_supervisor.take()
             && let Err(message) = supervisor.shutdown().await
         {
@@ -64,18 +79,6 @@ impl CollaborationRuntime {
                     failure.get_or_insert(io::Error::other(
                         "provider retirement publication task failed",
                     ));
-                }
-            }
-        }
-        self.drain_native_observer().await;
-        while let Some(result) = self.tasks.join_next().await {
-            match result {
-                Ok(Ok(())) => {}
-                Ok(Err(error)) => {
-                    failure.get_or_insert(error);
-                }
-                Err(_) => {
-                    failure.get_or_insert(io::Error::other("collaboration task shutdown failed"));
                 }
             }
         }

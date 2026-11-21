@@ -407,6 +407,9 @@ async fn thread_resume_loads_an_unloaded_provider_session() -> Result<(), Box<dy
     Ok(())
 }
 
+#[path = "router_session_app_server_failure_test.rs"]
+mod provider_failures;
+
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,

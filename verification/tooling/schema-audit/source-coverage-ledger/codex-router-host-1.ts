@@ -4,6 +4,26 @@ export const section: LedgerSection = {
   root: "crates/codex-router-host",
   files: [
     {
+      file: "crates/codex-router-host/src/operation_machines/custody_machine.rs",
+      disposition: { kind: "none" },
+      note: "Host-local custody transitions and exact write tickets, with no wire encoding",
+    },
+    {
+      file: "crates/codex-router-host/src/operation_machines/operation_record_machine.rs",
+      disposition: { kind: "none" },
+      note: "Host-local operation-record transitions, moved with their tests",
+    },
+    {
+      file: "crates/codex-router-host/src/operation_machines/uncertainty_cell_machine.rs",
+      disposition: { kind: "none" },
+      note: "Host-local admission uncertainty and target scope, moved with their tests",
+    },
+    {
+      file: "crates/codex-router-host/src/provider_cache_warm/cache_warm_machine.rs",
+      disposition: { kind: "none" },
+      note: "Host-local warming schedule and input outcomes, moved with their tests",
+    },
+    {
       file: "crates/codex-router-host/src/acp_interaction_port.rs",
       disposition: { kind: "converts", owners: ["router-vocabulary"] },
       note: "N7 HostInteractionPort: ApprovalRequest/QuestionRequest to PendingInteraction and SessionEvent::InteractionRequested/Resolved (86,222,179,276); RefusedApprovalOption copies (121,310); protocol-to-board SessionRef by JSON round trip board_session_ref (405); cancel-reason literals eventPublicationFailed/turnCancelled/providerRetired/agentCancelled/timedOut (144,152-164,205-210,245,253-261); acp_interaction_port_node_tap_test records TypedInput/TypedOutcome at N7, not WireFrame",

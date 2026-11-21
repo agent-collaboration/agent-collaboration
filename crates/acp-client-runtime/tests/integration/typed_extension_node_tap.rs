@@ -16,17 +16,19 @@
 mod fixture_rig;
 
 use acp_client_runtime::{
-    ExternalProviderRuntimeError, ModelReasoning, ModelReasoningEntry, ModelReasoningMetadata,
-    ModelReasoningUnknown, ProviderSessionActivity, ProviderSteeringOutcome,
+    ExternalProviderRuntimeError, ProviderSessionActivity, ProviderSteeringOutcome,
 };
 use codex_router_test_support::node_taps::{
     AcpPeer, CatalogRowExpectation, EdgeParty, MessageFamily, NodeStateSnapshot, ProtocolNode,
     RecordIntent, RecordLayer, TapCase,
 };
+use provider_session_machines::{
+    ModelReasoning, ModelReasoningEntry, ModelReasoningMetadata, ModelReasoningUnknown,
+};
 use session_event_model::{InputId, SessionEvent};
 
 use crate::acp_wire_capture::{
-    AgentSide, CapturedFrame, HELD_TURN_SETUP, SESSION_SETUP, record_frames, replies_to,
+    AgentSide, CapturedFrame, HELD_TURN_SETUP, SESSION_SETUP, frames_of, record_frames, replies_to,
 };
 use fixture_rig::{Wire, activity_text, drain_events, event_records, submission};
 
@@ -56,7 +58,7 @@ fn masked_replies(capture: &[CapturedFrame], method: &str) -> Vec<serde_json::Va
 }
 
 fn steering_result_kind(
-    result: &Result<ProviderSteeringOutcome<u64>, ExternalProviderRuntimeError>,
+    result: &Result<ProviderSteeringOutcome<u64, ()>, ExternalProviderRuntimeError>,
 ) -> &'static str {
     match result {
         Ok(ProviderSteeringOutcome::Injected { .. }) => "steering result:Injected",
@@ -90,7 +92,7 @@ struct SteerRun {
     /// The capture's fixture setup: the session, and a held turn when there is one.
     setup_methods: &'static [&'static str],
     events: Vec<SessionEvent>,
-    result: Result<ProviderSteeringOutcome<u64>, ExternalProviderRuntimeError>,
+    result: Result<ProviderSteeringOutcome<u64, ()>, ExternalProviderRuntimeError>,
     activity_before: ProviderSessionActivity,
     activity_after: ProviderSessionActivity,
 }
@@ -102,7 +104,6 @@ async fn steer_while_idle(scenario: &str) -> SteerRun {
     let activity_before = wire
         .client
         .session_activity(SESSION_ID.to_owned())
-        .await
         .expect("activity");
     let result = wire
         .client
@@ -116,7 +117,6 @@ async fn steer_while_idle(scenario: &str) -> SteerRun {
     let activity_after = wire
         .client
         .session_activity(SESSION_ID.to_owned())
-        .await
         .expect("activity");
     wire.client.shutdown().await;
     SteerRun {
@@ -130,8 +130,8 @@ async fn steer_while_idle(scenario: &str) -> SteerRun {
 }
 
 /// Running steer: a first prompt holds a turn open until the agent answers.
-async fn steer_while_running() -> SteerRun {
-    let mut wire = Wire::start("steer-injected").await;
+async fn steer_while_running(scenario: &str) -> SteerRun {
+    let mut wire = Wire::start(scenario).await;
     wire.open_session().await;
     let prompt = wire.client.submit_with_approval_dispatch_for_input(
         SESSION_ID.to_owned(),
@@ -152,7 +152,6 @@ async fn steer_while_running() -> SteerRun {
     let activity_before = wire
         .client
         .session_activity(SESSION_ID.to_owned())
-        .await
         .expect("activity");
     let result = wire
         .client
@@ -166,12 +165,13 @@ async fn steer_while_running() -> SteerRun {
     let activity_after = wire
         .client
         .session_activity(SESSION_ID.to_owned())
-        .await
         .expect("activity");
-    wire.client
-        .cancel_active_prompt(SESSION_ID.to_owned())
-        .await
-        .expect("cancel the held turn");
+    if scenario != "steer-prompt-required" {
+        wire.client
+            .cancel_active_prompt(SESSION_ID.to_owned())
+            .await
+            .expect("cancel the held turn");
+    }
     prompt.await.expect("prompt ends");
     wire.client.shutdown().await;
     SteerRun {
@@ -188,7 +188,7 @@ const STEERING_ROW: &str = "N6 catalog: Typed extension messages: Steering";
 
 /// The steering call's whole result as its full `Debug` text (the outcome type has no serde).
 fn result_value(
-    result: &Result<ProviderSteeringOutcome<u64>, ExternalProviderRuntimeError>,
+    result: &Result<ProviderSteeringOutcome<u64, ()>, ExternalProviderRuntimeError>,
 ) -> serde_json::Value {
     serde_json::json!({ "debug": format!("{result:?}") })
 }
@@ -283,14 +283,6 @@ fn input_accepted() -> ExpectedEvent {
     )
 }
 
-fn turn_started() -> ExpectedEvent {
-    (
-        "TurnStarted",
-        serde_json::json!({ "kind": "turnStarted", "turnId": "<volatile:turnId>",
-            "inputId": "tap-steer" }),
-    )
-}
-
 fn user_message_started() -> ExpectedEvent {
     (
         "ItemStarted(UserMessage)",
@@ -306,7 +298,7 @@ fn user_message_completed() -> ExpectedEvent {
     )
 }
 
-type SteeringResult = Result<ProviderSteeringOutcome<u64>, ExternalProviderRuntimeError>;
+type SteeringResult = Result<ProviderSteeringOutcome<u64, ()>, ExternalProviderRuntimeError>;
 
 /// The steer's own catalog row: the steering request, then the session events and the call's
 /// result the steering reply caused. The session setup (and a held turn's prompt and cancel) are
@@ -338,7 +330,7 @@ fn steer_expectation(
 /// Catalog: injected while running publishes InputAccepted plus the user message.
 #[tokio::test]
 async fn node_tap_steering_injected_while_running() {
-    let run = steer_while_running().await;
+    let run = steer_while_running("steer-injected").await;
     assert_steering_reply(&run, serde_json::json!({ "outcome": "injected" }));
     let case = record_steer_case(
         "steering_injected",
@@ -355,80 +347,61 @@ async fn node_tap_steering_injected_while_running() {
         "steering result:Injected",
         &Ok(ProviderSteeringOutcome::Injected {
             running_operation_id: Some(1),
+            // The running turn's approval context, captured with the steer
+            // (design note §12.4).
+            joined_turn: Some(()),
         }),
         "Running",
     );
     case.finish(&row).assert_settled();
 }
 
-/// Catalog: startedNewTurn while idle publishes TurnStarted plus the user
-/// message. Current defect (Correction 8, fixed in D3): today's code then at once
-/// publishes TurnEnded(Lost: EndNotObservable) (provider_session_actor.rs:467-475), so the
-/// turn is reported lost while the agent is still answering.
+/// An explicit steer while idle uses the normal prompt command and the same input ID.
 #[tokio::test]
-async fn node_tap_steering_started_new_turn_while_idle() {
-    let run = steer_while_idle("steer-started-new-turn").await;
-    assert_steering_reply(&run, serde_json::json!({ "outcome": "startedNewTurn" }));
-    let mut case = record_steer_case(
-        "steering_started_new_turn",
-        &format!("{STEERING_ROW}, startedNewTurn while idle"),
-        &run,
-        None,
-    );
-    let row = steer_expectation(
-        vec![
-            turn_started(),
-            user_message_started(),
-            user_message_completed(),
-        ],
-        "steering result:StartedNewTurn",
-        &Ok(ProviderSteeringOutcome::StartedNewTurn),
-        "Idle",
-    );
-    case.current_defect(steer_expectation(
-        vec![
-            turn_started(),
-            user_message_started(),
-            user_message_completed(),
-            (
-                "TurnEnded(Lost:EndNotObservable)",
-                serde_json::json!({ "kind": "turnEnded", "turnId": "<volatile:turnId>", "outcome": { "kind": "lost", "reason": "endNotObservable" } }),
-            ),
-        ],
-        "steering result:StartedNewTurn",
-        &Ok(ProviderSteeringOutcome::StartedNewTurn),
-        "Idle",
+async fn node_tap_idle_steering_uses_one_normal_prompt() {
+    let run = steer_while_idle("steer-idle-prompt").await;
+    assert!(matches!(
+        run.result,
+        Ok(ProviderSteeringOutcome::StartedNewTurn)
     ));
-    case.finish(&row).assert_settled();
+    assert!(frames_of(&run.capture, AgentSide::Received, "_session/steering").is_empty());
+    let prompts = frames_of(&run.capture, AgentSide::Received, "session/prompt");
+    assert_eq!(prompts.len(), 1);
+    assert_eq!(
+        prompts[0]["params"],
+        serde_json::json!({ "sessionId":SESSION_ID, "prompt":[{"type":"text", "text":"steer text"}] })
+    );
+    assert!(run.events.iter().any(|event| matches!(event, SessionEvent::TurnStarted { input_id, .. } if input_id.as_str() == "tap-steer")));
 }
 
-/// Catalog: the outcome is a closed enum; promptRequired publishes nothing.
+/// The definite promptRequired extension reply leads to one ordinary prompt.
 #[tokio::test]
-async fn node_tap_steering_prompt_required_publishes_nothing() {
-    let run = steer_while_idle("steer-prompt-required").await;
+async fn node_tap_steering_prompt_required_routes_one_prompt() {
+    let run = steer_while_running("steer-prompt-required").await;
     assert_steering_reply(
         &run,
         serde_json::json!({ "outcome": "promptRequired", "reason": "noRunningTurn" }),
     );
-    let case = record_steer_case(
-        "steering_prompt_required",
-        &format!("{STEERING_ROW}, promptRequired"),
-        &run,
-        None,
+    let steers = frames_of(&run.capture, AgentSide::Received, "_session/steering");
+    let prompts = frames_of(&run.capture, AgentSide::Received, "session/prompt");
+    assert_eq!(steers.len(), 1);
+    assert_eq!(prompts.len(), 2);
+    assert_eq!(
+        prompts[1]["params"]["prompt"],
+        serde_json::json!([{"type":"text", "text":"steer text"}])
     );
-    let row = steer_expectation(
-        vec![],
-        "steering result:PromptRequired",
-        &Ok(ProviderSteeringOutcome::PromptRequired),
-        "Idle",
-    );
-    case.finish(&row).assert_settled();
+    assert!(matches!(
+        run.result,
+        Ok(ProviderSteeringOutcome::StartedNewTurn)
+    ));
+    assert!(run.events.iter().any(|event| matches!(event, SessionEvent::TurnStarted { input_id, .. } if input_id.as_str() == "tap-steer")));
+    assert!(!run.events.iter().any(|event| matches!(event, SessionEvent::InputAccepted { input_id, .. } if input_id.as_str() == "tap-steer")));
 }
 
 /// Catalog: the outcome is a closed enum; failed publishes nothing.
 #[tokio::test]
 async fn node_tap_steering_failed_publishes_nothing() {
-    let run = steer_while_idle("steer-failed").await;
+    let run = steer_while_running("steer-failed").await;
     assert_steering_reply(&run, serde_json::json!({ "outcome": "failed" }));
     // Claude's steering contract has no `failed` outcome; N6 accepts one, so the fixture stands in
     // for a peer that sends it. The reply is apparatus: it does not represent Claude.
@@ -442,7 +415,7 @@ async fn node_tap_steering_failed_publishes_nothing() {
         vec![],
         "steering result:Failed",
         &Ok(ProviderSteeringOutcome::Failed),
-        "Idle",
+        "Running",
     );
     case.finish(&row).assert_settled();
 }
@@ -450,7 +423,7 @@ async fn node_tap_steering_failed_publishes_nothing() {
 /// Catalog: any outcome outside the closed enum is an invalid-reply error.
 #[tokio::test]
 async fn node_tap_steering_outcome_outside_enum_is_invalid_reply() {
-    let run = steer_while_idle("steer-invalid").await;
+    let run = steer_while_running("steer-invalid").await;
     assert_steering_reply(&run, serde_json::json!({ "outcome": "sideways" }));
     let case = record_steer_case(
         "steering_invalid_outcome",
@@ -469,7 +442,7 @@ async fn node_tap_steering_outcome_outside_enum_is_invalid_reply() {
         &Err(ExternalProviderRuntimeError::Operation(
             "provider returned an invalid steering result".to_owned(),
         )),
-        "Idle",
+        "Running",
     );
     case.finish(&row).assert_settled();
 }
@@ -502,7 +475,6 @@ async fn run_discovery(scenario: &str) -> DiscoveryRun {
     let catalog = wire
         .client
         .settings_catalog(SESSION_ID)
-        .await
         .expect("settings catalog");
     let reply_seen = wire.behavior.reply_seen.lock().expect("reply lock").clone();
     wire.client.shutdown().await;

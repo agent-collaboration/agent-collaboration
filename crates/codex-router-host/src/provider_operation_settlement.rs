@@ -1,14 +1,15 @@
 //! Persist applied provider effects and session metadata at one settlement boundary.
 use collaboration_protocol::{
     AppliedProviderSetting, ConversationOperationFailure, ConversationOperationSettlement,
-    EffectiveProviderSettings, FailedProviderSetting, MessageText, NotAppliedProviderSetting,
-    OperationId, ProviderAuthenticationState, ProviderIdentity, ProviderOperationEffect,
-    ProviderPromptStopReason, ProviderReconciliationState, ProviderRequestedPolicy,
-    ProviderSettingName, ProviderSettingsMappingStatus, ProviderWorkingDirectory, SessionRef,
+    EffectiveProviderSettings, FailedProviderSetting, FastState, MessageText,
+    NotAppliedProviderSetting, OperationId, ProviderAuthenticationState, ProviderIdentity,
+    ProviderOperationEffect, ProviderPromptStopReason, ProviderReconciliationState,
+    ProviderRequestedPolicy, ProviderSettingName, ProviderSettingsMappingStatus,
+    ProviderWorkingDirectory, SessionRef,
 };
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderOperationStoreError;
-use collaboration_runtime::ProviderSessionRecord;
+use collaboration_runtime::{ProviderSessionRecord, ProviderSessionResumeInputs};
 
 pub(crate) enum ProviderOperationCompletion {
     Success {
@@ -17,9 +18,20 @@ pub(crate) enum ProviderOperationCompletion {
         session_record: Option<Box<ProviderSessionRecord>>,
     },
     Failure(ConversationOperationFailure),
+    PromptStartFailed {
+        failure: ConversationOperationFailure,
+        deadline: router_clock::ClockInstant,
+    },
+    /// The dispatch mark failed. The admitted row remains known unsent.
+    DispatchMarkNotWritten(ConversationOperationFailure),
     FailureWithSession {
         failure: ConversationOperationFailure,
         session_record: Box<ProviderSessionRecord>,
+    },
+    Owned {
+        result: Result<ConversationOperationSettlement, ConversationOperationFailure>,
+        target: SessionRef,
+        saved: bool,
     },
 }
 
@@ -66,16 +78,27 @@ pub(crate) fn effective_settings(
         effort: None,
         requested_mode: None,
         mode_reason: None,
+        fast: None,
+    }
+}
+
+/// What the agent last reported for its fast option, on the wire (D1 R11).
+pub(crate) fn provider_fast_state(observed: provider_session_machines::FastObserved) -> FastState {
+    match observed {
+        provider_session_machines::FastObserved::Off => FastState::Off,
+        provider_session_machines::FastObserved::On => FastState::On,
+        provider_session_machines::FastObserved::NoOption => FastState::None,
     }
 }
 
 pub(crate) fn provider_setting_name(
-    kind: acp_client_runtime::ProviderSettingKind,
+    kind: provider_session_machines::ProviderSettingKind,
 ) -> ProviderSettingName {
     match kind {
-        acp_client_runtime::ProviderSettingKind::Mode => ProviderSettingName::Mode,
-        acp_client_runtime::ProviderSettingKind::Model => ProviderSettingName::Model,
-        acp_client_runtime::ProviderSettingKind::Effort => ProviderSettingName::Effort,
+        provider_session_machines::ProviderSettingKind::Mode => ProviderSettingName::Mode,
+        provider_session_machines::ProviderSettingKind::Model => ProviderSettingName::Model,
+        provider_session_machines::ProviderSettingKind::Effort => ProviderSettingName::Effort,
+        provider_session_machines::ProviderSettingKind::Fast => ProviderSettingName::Fast,
     }
 }
 
@@ -121,6 +144,8 @@ pub(crate) fn provider_session_record(
     requested_policy: ProviderRequestedPolicy,
     created_by: ProviderIdentity,
     approver: ProviderIdentity,
+    resume: ProviderSessionResumeInputs,
+    updated_at_ms: i64,
 ) -> ProviderSessionRecord {
     ProviderSessionRecord {
         target,
@@ -128,7 +153,25 @@ pub(crate) fn provider_session_record(
         requested_policy,
         created_by,
         approver,
-        updated_at_ms: chrono::Utc::now().timestamp_millis(),
+        updated_at_ms,
+        resume,
+    }
+}
+
+/// What a create records for a later resume to rebuild (D1 R18; owner
+/// Decision 3): the mode it asked for, the work roots its creator named, and
+/// the scratch folder the Router made for it.
+pub(crate) fn created_session_resume_inputs(
+    requested_mode: Option<String>,
+    named_work_roots: Vec<ProviderWorkingDirectory>,
+    scratch_folder: Option<&std::path::Path>,
+) -> ProviderSessionResumeInputs {
+    ProviderSessionResumeInputs {
+        requested_mode,
+        work_roots: Some(named_work_roots),
+        scratch_folder: scratch_folder
+            .and_then(std::path::Path::to_str)
+            .and_then(|folder| ProviderWorkingDirectory::try_from(folder.to_owned()).ok()),
     }
 }
 

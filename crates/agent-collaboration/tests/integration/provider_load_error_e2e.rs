@@ -213,6 +213,7 @@ async fn record_unloaded_provider_session(
             created_by: caller.clone().into(),
             approver: caller.clone().into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("record provider session");

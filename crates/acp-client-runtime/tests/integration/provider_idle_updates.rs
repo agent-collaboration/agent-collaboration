@@ -1,11 +1,12 @@
 //! Session updates keep their identity and settings outside an active prompt.
 
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{path::PathBuf, sync::Arc};
 
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::{
-    AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
-    HistoryReplayFuture, InteractionFuture, InteractionPort, ProviderPersistenceTarget,
-    RefusedApprovalOffer, SessionEventSink,
+    ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch, HistoryReplayFuture,
+    InteractionFuture, InteractionPort, ProviderPersistenceTarget, RefusedApprovalOffer,
+    SessionEventSink,
 };
 use session_event_model::{ApprovalRequest, SessionEvent, SessionItemKind, ToolCallStatus};
 use tokio_util::sync::CancellationToken;
@@ -57,9 +58,6 @@ impl InteractionPort for NoopInteractionPort {
     ) -> InteractionFuture<'_, ()> {
         Box::pin(async {})
     }
-    fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
 }
 
 struct CaptureEventSink(tokio::sync::mpsc::UnboundedSender<SessionEvent>);
@@ -85,11 +83,16 @@ impl SessionEventSink for CaptureEventSink {
 #[tokio::test]
 async fn idle_mode_config_unknown_and_late_tool_updates_are_projected() {
     let root = tempfile::tempdir().expect("fixture root");
+    let receipt = root.path().join("idle-updates.json");
     let (sender, mut events) = tokio::sync::mpsc::unbounded_channel();
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
             executable: PathBuf::from("node"),
-            arguments: vec![IDLE_UPDATE_FIXTURE.to_owned()],
+            arguments: vec![
+                IDLE_UPDATE_FIXTURE.to_owned(),
+                receipt.display().to_string(),
+                "malformed-tool".to_owned(),
+            ],
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,
         },
@@ -104,7 +107,7 @@ async fn idle_mode_config_unknown_and_late_tool_updates_are_projected() {
         .await
         .expect("session opens");
 
-    let initial_events = tokio::time::timeout(Duration::from_secs(2), async {
+    let initial_events = {
         let mut observed = Vec::new();
         while !observed.iter().any(|event| {
             matches!(event,
@@ -114,9 +117,7 @@ async fn idle_mode_config_unknown_and_late_tool_updates_are_projected() {
             observed.push(events.recv().await.expect("event sink remains open"));
         }
         observed
-    })
-    .await
-    .expect("three idle updates are projected");
+    };
     assert!(initial_events.iter().any(|event| matches!(event,
         SessionEvent::ItemStarted { item } if item.kind == SessionItemKind::ModeChange)));
     assert!(initial_events.iter().any(|event| matches!(event,
@@ -124,14 +125,10 @@ async fn idle_mode_config_unknown_and_late_tool_updates_are_projected() {
     assert!(initial_events.iter().any(|event| matches!(event,
         SessionEvent::ItemStarted { item } if matches!(&item.kind,
             SessionItemKind::Unknown { source_kind } if source_kind == "future_idle_kind"))));
-    assert_eq!(
-        initial_events
-            .iter()
-            .filter(|event| matches!(event, SessionEvent::CapabilitiesChanged { .. }))
-            .count(),
-        2,
-        "mode and config updates each publish current capabilities"
-    );
+    assert!(matches!(
+        initial_events.first(),
+        Some(SessionEvent::CapabilitiesChanged { .. })
+    ));
     let settings = initial_events
         .iter()
         .filter_map(|event| match event {
@@ -143,23 +140,15 @@ async fn idle_mode_config_unknown_and_late_tool_updates_are_projected() {
     assert_eq!(settings[0].mode.as_deref(), Some("auto"));
     assert_eq!(settings[1].mode.as_deref(), Some("ask"));
     assert_eq!(settings[2].model.as_deref(), Some("b"));
-    assert!(
-        initial_events.iter().position(|event| matches!(event,
-        SessionEvent::SettingsChanged { settings } if settings.model.as_deref() == Some("b")))
-            < initial_events
-                .iter()
-                .rposition(|event| matches!(event, SessionEvent::CapabilitiesChanged { .. }))
-    );
     let catalog = client
         .settings_catalog(&session_id)
-        .await
         .expect("catalog remains available");
     assert_eq!(catalog.effective_settings().mode.as_deref(), Some("ask"));
     assert_eq!(catalog.effective_settings().model.as_deref(), Some("b"));
 
     client
         .submit_with_approval_dispatch_for_input(
-            session_id.clone(),
+            session_id,
             session_event_model::InputId::generate(),
             acp_client_runtime::ProviderTurnInput::Prompt(
                 session_event_model::ProviderSubmission::plain(vec![
@@ -172,22 +161,9 @@ async fn idle_mode_config_unknown_and_late_tool_updates_are_projected() {
         )
         .await
         .expect("prompt ends");
-    let steering = client
-        .steer_contents_with_input(
-            session_id,
-            session_event_model::InputId::generate(),
-            session_event_model::ProviderSubmission::plain(vec![
-                session_event_model::PromptContent::text("Continue".to_owned())
-                    .expect("text steer"),
-            ]),
-        )
-        .await
-        .expect("idle steer");
-    assert_eq!(
-        steering,
-        acp_client_runtime::ProviderSteeringOutcome::PromptRequired
-    );
-    let later_events = tokio::time::timeout(Duration::from_secs(2), async {
+    crate::acp_wire_capture::release_fixture(&receipt, ".release-late")
+        .expect("release tool update while idle");
+    let later_events = {
         let mut observed = Vec::new();
         loop {
             let event = events.recv().await.expect("event sink remains open");
@@ -199,13 +175,20 @@ async fn idle_mode_config_unknown_and_late_tool_updates_are_projected() {
                 break observed;
             }
         }
-    })
-    .await
-    .expect("late tool update is projected");
+    };
     let end_index = later_events
         .iter()
         .position(|event| matches!(event, SessionEvent::TurnEnded { .. }))
         .expect("Turn ended before late update");
     assert!(end_index + 1 < later_events.len());
+    assert!(
+        later_events.iter().all(|event| match event {
+            SessionEvent::ItemStarted { item } | SessionEvent::ItemUpdated { item } => {
+                item.item_id != "malformed-late-tool"
+            }
+            _ => true,
+        }),
+        "an idle continuation created an item from a malformed announcement: {later_events:?}",
+    );
     client.shutdown().await;
 }

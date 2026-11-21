@@ -27,9 +27,13 @@ use collaboration_contracts::SessionEventHubError;
 mod inventory_metadata;
 use inventory_metadata::SessionInventoryMetadata;
 
+#[path = "provider_session_event_hub_inbox.rs"]
+pub mod owner_inbox;
+
 pub struct ProviderSessionEventHub {
     store: Arc<Mutex<ProviderOperationStore>>,
     histories: Mutex<BTreeMap<SessionRef, Arc<Mutex<SessionHistory>>>>,
+    owner_inboxes: std::sync::Mutex<BTreeMap<SessionRef, owner_inbox::HubSessionInbox>>,
     subscriber_capacity: usize,
 }
 
@@ -210,6 +214,11 @@ impl SessionHistory {
 }
 
 impl ProviderSessionEventHub {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn store_for_fixture(&self) -> Arc<Mutex<ProviderOperationStore>> {
+        self.store.clone()
+    }
+
     pub async fn publish_skill_view(
         &self,
         session: SessionRef,
@@ -246,7 +255,24 @@ impl ProviderSessionEventHub {
         Self {
             store,
             histories: Mutex::new(BTreeMap::new()),
+            owner_inboxes: std::sync::Mutex::default(),
             subscriber_capacity: subscriber_capacity.max(1),
+        }
+    }
+
+    /// Test support: holds `session`'s history lock until the returned guard
+    /// drops, as a slow publication for that session would (M5 scenarios).
+    #[cfg(any(test, feature = "test-support"))]
+    pub async fn hold_history_for_test(&self, session: SessionRef) -> HeldSessionHistory {
+        let history = self
+            .histories
+            .lock()
+            .await
+            .entry(session)
+            .or_insert_with(|| Arc::new(Mutex::new(SessionHistory::new(self.subscriber_capacity))))
+            .clone();
+        HeldSessionHistory {
+            _held: history.lock_owned().await,
         }
     }
 
@@ -361,61 +387,6 @@ impl ProviderSessionEventHub {
         history.state = SessionState::Unloaded;
         history.settings = None;
         history.next_sequence = 1;
-        history.replay_epoch = replay_epoch;
-        Ok(replay_epoch)
-    }
-
-    /// A resumed Session has no replayable history. Invalidate retained events
-    /// and subscribers while keeping the newly connected Session idle.
-    pub async fn begin_history_unavailable(
-        &self,
-        session: SessionRef,
-    ) -> Result<u64, SessionEventHubError> {
-        let history = self
-            .histories
-            .lock()
-            .await
-            .entry(session)
-            .or_insert_with(|| Arc::new(Mutex::new(SessionHistory::new(self.subscriber_capacity))))
-            .clone();
-        let mut history = history.lock().await;
-        let replay_epoch = history
-            .replay_epoch
-            .checked_add(1)
-            .ok_or(SessionEventHubError::Unavailable)?;
-        let _ = history.sender.send(HubEvent {
-            sequence: history.next_sequence,
-            event: SessionEvent::ResyncRequired { replay_epoch },
-        });
-        // Resume has no transcript replay, but the client publishes its fresh
-        // current settings before this Host invalidation. Carry that state
-        // event into the new epoch ahead of capabilities and Idle.
-        let current_settings = history
-            .events
-            .values()
-            .rev()
-            .find_map(|item| match &item.event {
-                SessionEvent::SettingsChanged { settings } => Some(settings.clone()),
-                _ => None,
-            });
-        let (sender, _) = broadcast::channel(self.subscriber_capacity);
-        history.sender = sender;
-        history.events.clear();
-        history.items.clear();
-        history.pending.clear();
-        history.turn_running = false;
-        history.state = SessionState::Idle;
-        history.next_sequence = 1;
-        if let Some(settings) = current_settings {
-            history.events.insert(
-                1,
-                HubEvent {
-                    sequence: 1,
-                    event: SessionEvent::SettingsChanged { settings },
-                },
-            );
-            history.next_sequence = 2;
-        }
         history.replay_epoch = replay_epoch;
         Ok(replay_epoch)
     }
@@ -614,6 +585,12 @@ fn from_stored_session(
 pub enum HubReceiveError {
     #[error("resyncRequired")]
     ResyncRequired,
+}
+
+/// Test support: one session's history lock, held until dropped.
+#[cfg(any(test, feature = "test-support"))]
+pub struct HeldSessionHistory {
+    _held: tokio::sync::OwnedMutexGuard<SessionHistory>,
 }
 
 pub async fn receive_hub_event(

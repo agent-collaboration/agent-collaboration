@@ -1,0 +1,110 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT working_directory,requested_policy_json,created_by_json,approver_json,updated_at_ms,\n                    requested_mode,work_roots_json,scratch_folder\n             FROM provider_session_records\n             WHERE target_service_id=? AND target_endpoint_id=? AND target_session_id=?",
+  "describe": {
+    "columns": [
+      {
+        "name": "working_directory",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "provider_session_records",
+            "name": "working_directory"
+          }
+        }
+      },
+      {
+        "name": "requested_policy_json",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "provider_session_records",
+            "name": "requested_policy_json"
+          }
+        }
+      },
+      {
+        "name": "created_by_json",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "provider_session_records",
+            "name": "created_by_json"
+          }
+        }
+      },
+      {
+        "name": "approver_json",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "provider_session_records",
+            "name": "approver_json"
+          }
+        }
+      },
+      {
+        "name": "updated_at_ms",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "provider_session_records",
+            "name": "updated_at_ms"
+          }
+        }
+      },
+      {
+        "name": "requested_mode",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "provider_session_records",
+            "name": "requested_mode"
+          }
+        }
+      },
+      {
+        "name": "work_roots_json",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "provider_session_records",
+            "name": "work_roots_json"
+          }
+        }
+      },
+      {
+        "name": "scratch_folder",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "provider_session_records",
+            "name": "scratch_folder"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "abe3d78d7dd43dd6051a1c78c3147326bf093cafe46385883345954b9beb4077"
+}

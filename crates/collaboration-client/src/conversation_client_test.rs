@@ -1,6 +1,7 @@
 use super::{
     ConversationClient, ConversationClientError, ConversationCreateInput, ConversationTransport,
-    advertised_conversation_transport, codex_create_actors, codex_mode_accepted,
+    advertised_conversation_transport, codex_create_actors, codex_fast_accepted,
+    codex_mode_accepted,
 };
 use collaboration_protocol::EndpointDescription;
 use serde_json::json;
@@ -516,4 +517,27 @@ fn codex_create_accepts_auto_or_no_mode_and_refuses_other_names() {
             other => panic!("{refused}: expected a refusal, got {other:?}"),
         }
     }
+}
+
+/// Oracle: D1 V17, spec R10 — an explicit fast on a Codex create, auto
+/// included, is refused before anything starts.
+#[test]
+fn codex_create_refuses_fast() {
+    for fast in [
+        collaboration_protocol::FastSetting::Off,
+        collaboration_protocol::FastSetting::Auto,
+    ] {
+        match codex_fast_accepted(Some(fast)) {
+            Err(ConversationClientError::InvalidInput(message)) => {
+                assert_eq!(message, "fast is a provider setting; Codex has none");
+            }
+            other => panic!("{fast:?}: expected a refusal, got {other:?}"),
+        }
+    }
+}
+
+/// Oracle: D1 V17, spec R10 — a Codex create with no fast is accepted.
+#[test]
+fn codex_create_without_fast_is_accepted() {
+    assert!(codex_fast_accepted(None).is_ok());
 }

@@ -5,7 +5,7 @@ use collaboration_protocol::{
     SessionReachability, SessionRef,
 };
 use serde::{Deserialize, Serialize};
-use std::{future::Future, pin::Pin};
+use std::{future::Future, pin::Pin, sync::Arc};
 
 pub type DeliveryFuture<'a, TValue> =
     Pin<Box<dyn Future<Output = Result<TValue, DeliveryContractError>> + Send + 'a>>;
@@ -133,12 +133,21 @@ pub trait AttemptEvidenceSink: Send + Sync {
         &self,
         evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
     ) -> DeliveryFuture<'_, ()>;
+
+    /// An owned writer for evidence offered after a queue receipt returns.
+    fn retain_queued_dispatch(&self) -> Option<Arc<dyn AttemptEvidenceSink>> {
+        None
+    }
 }
 
 /// Direct and transient messages have no durable attempt record to update.
 pub struct UnstoredAttemptEvidenceSink;
 
 impl AttemptEvidenceSink for UnstoredAttemptEvidenceSink {
+    fn retain_queued_dispatch(&self) -> Option<Arc<dyn AttemptEvidenceSink>> {
+        Some(Arc::new(Self))
+    }
+
     fn record(
         &self,
         _: RouteEffectEvidence<SessionRef, CodexGeneration>,

@@ -16,12 +16,12 @@ async fn provider_process_transport_failure_remains_retryable() {
     )
     .await
     .expect("fixture provider");
+    let provider_retired = runtime.retirement();
     // Only an accepted initialization can release the synthetic process exit.
-    let (mut release_peer, _) =
-        tokio::time::timeout(Duration::from_secs(2), release_listener.accept())
-            .await
-            .expect("provider release connection deadline")
-            .expect("provider release connection");
+    let (mut release_peer, _) = release_listener
+        .accept()
+        .await
+        .expect("provider release connection");
     release_peer
         .write_all(b"X")
         .await
@@ -45,6 +45,7 @@ async fn provider_process_transport_failure_remains_retryable() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -58,13 +59,7 @@ async fn provider_process_transport_failure_remains_retryable() {
         )
         .expect("supervisor"),
     );
-    tokio::time::timeout(Duration::from_secs(2), async {
-        while !exit_marker.exists() {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("provider exit marker deadline");
+    provider_retired.cancelled().await;
     let route = ProviderAcpDeliveryRoute::new(
         target.endpoint.service_id.clone(),
         std::iter::once(target.endpoint.clone()).collect(),
@@ -72,6 +67,7 @@ async fn provider_process_transport_failure_remains_retryable() {
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
 
     let receipt = route
@@ -133,6 +129,7 @@ async fn live_peer_recheck_prevents_provider_load() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -153,6 +150,7 @@ async fn live_peer_recheck_prevents_provider_load() {
         Arc::clone(&supervisor),
         store,
         Arc::new(LivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     assert!(matches!(
         route.presence(&target).await.expect("provider presence"),
@@ -175,8 +173,8 @@ async fn live_peer_recheck_prevents_provider_load() {
     ));
     assert!(!load_marker.exists());
     assert!(matches!(evidence.0.lock().await.as_slice(),
-        [RouteEffectEvidence::ProviderAcp(before), RouteEffectEvidence::ProviderAcp(after)]
-        if before.submission == SubmissionEffect::Dispatching && after.submission == SubmissionEffect::NotDispatched));
+        [RouteEffectEvidence::ProviderAcp(after)]
+        if after.submission == SubmissionEffect::NotDispatched));
     route.shutdown_queue().await;
     supervisor.shutdown().await.expect("shutdown");
 }

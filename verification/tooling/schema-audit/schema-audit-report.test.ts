@@ -305,8 +305,9 @@ test("a boundary encoding yields no finding; a duplicate yields one with its fix
   const boundary: InventoryRow = { ...jsonInString, disposition: "boundary-encoding" };
   const duplicate: InventoryRow = { ...jsonInString, disposition: "duplicate", fixedBy: "D2" };
   const malformed: InventoryRow = { ...jsonInString, disposition: "malformed", fixedBy: "D2" };
+  const retired: InventoryRow = { ...jsonInString, disposition: "retired", removedIn: "9c6fb389c" };
 
-  const fromBoundary = inventoryFindings([boundary]);
+  const fromBoundary = inventoryFindings([boundary, retired]);
   const fromDuplicate = inventoryFindings([duplicate]);
   const fromMalformed = inventoryFindings([malformed]);
 

@@ -1,6 +1,8 @@
 //! ACP route for Router-owned provider Sessions on the shared connection shell.
 use crate::provider_acp_content_translation::parse_prompt_content;
-use crate::provider_acp_event_projection::{ProviderSessionObservers, stream_prompt};
+use crate::provider_acp_event_projection::{
+    ObservedEventPosition, PromptEventStream, ProviderSessionObservers, stream_prompt,
+};
 use codex_acp_adapter::{
     AcpConnectionContext, AcpRouteFuture, AcpRouterChannels, AcpSchemaCatalog, AcpSessionRoute,
 };
@@ -15,17 +17,34 @@ use collaboration_contracts::SessionSteerOutcome;
 use collaboration_contracts::SessionTargetCommand;
 use collaboration_contracts::SteerSessionCommand;
 use message_board::{Identity, SessionEndpointRef, SessionRef};
+use router_clock::RuntimeClock;
 use serde_json::{Value, json};
 use session_event_model::session_profile_codec::ProfileElement;
 use session_event_model::{CapabilityReport, SessionEvent, SessionState};
 
-use std::{io, path::PathBuf, sync::Arc};
+use std::{
+    collections::{HashMap, VecDeque},
+    io,
+    path::PathBuf,
+    sync::Arc,
+    time::Duration,
+};
 use tokio::task::JoinSet;
+
+#[path = "provider_acp_session_restore.rs"]
+mod restore;
+use restore::{
+    AcpRestoreMethod, AwaitingRestore, RESTORE_IN_PROGRESS, RestoreCompletion, RestoreRequest,
+    STORE_ELAPSED, WaitingSessionFrame, reject_duplicate_load,
+};
+
+pub(crate) const STORE_BUDGET: Duration = Duration::from_secs(10);
 
 pub struct ProviderAcpSessionRoute {
     endpoint: SessionEndpointRef,
     commands: Arc<dyn SessionCommandPort>,
     events: Arc<dyn SessionEventHub>,
+    clock: Arc<dyn RuntimeClock>,
 }
 
 impl ProviderAcpSessionRoute {
@@ -33,11 +52,13 @@ impl ProviderAcpSessionRoute {
         endpoint: SessionEndpointRef,
         commands: Arc<dyn SessionCommandPort>,
         events: Arc<dyn SessionEventHub>,
+        clock: Arc<dyn RuntimeClock>,
     ) -> Self {
         Self {
             endpoint,
             commands,
             events,
+            clock,
         }
     }
 }
@@ -73,8 +94,8 @@ pub(crate) fn failure(id: Value, code: i32, message: &str) -> Value {
     json!({"jsonrpc":"2.0","id":id,"error":{"code":code,"message":message}})
 }
 
-fn command_failure(id: Value, error: CommandFailure) -> Value {
-    let code = match error {
+pub(crate) fn command_failure(id: Value, error: CommandFailure) -> Value {
+    let code = match error.classification().as_ref() {
         CommandFailure::SessionNotFound => -32002,
         CommandFailure::Unsupported | CommandFailure::UnsupportedOperation { .. } => -32601,
         CommandFailure::UnauthorizedActor
@@ -82,7 +103,73 @@ fn command_failure(id: Value, error: CommandFailure) -> Value {
         | CommandFailure::UnsupportedContent(_) => -32602,
         _ => -32000,
     };
+    if let Some(operation) = error.operation_failure() {
+        return json!({"jsonrpc":"2.0","id":id,"error":{
+            "code":code,"message":operation.message,"data":{"kind":operation.kind}
+        }});
+    }
     failure(id, code, &error.to_string())
+}
+
+/// A `session/prompt` to place in a session that is, or just became, busy.
+struct PlacedPrompt {
+    commands: Arc<dyn SessionCommandPort>,
+    events: Arc<dyn SessionEventHub>,
+    clock: Arc<dyn RuntimeClock>,
+    output: codex_acp_adapter::AcpOutputSender,
+    id: Value,
+    session: SessionRef,
+    content: Vec<session_event_model::PromptContent>,
+    actor: Identity,
+    attachment: collaboration_contracts::SessionEventAttachment,
+    observed: tokio::sync::watch::Receiver<Option<ObservedEventPosition>>,
+}
+
+/// Steers or queues the prompt, then answers when the turn that took it ends.
+async fn answer_by_placement(prompt: PlacedPrompt) {
+    use crate::provider_acp_busy_prompt::{BusyPrompt, BusyPromptPlacement, place_busy_prompt};
+    let PlacedPrompt {
+        commands,
+        events,
+        clock,
+        output,
+        id,
+        session,
+        content,
+        actor,
+        attachment,
+        observed,
+    } = prompt;
+    let placement = place_busy_prompt(BusyPrompt {
+        commands: commands.as_ref(),
+        session: session.clone(),
+        content,
+        actor,
+        attachment: &attachment,
+    })
+    .await;
+    let frame = match placement {
+        BusyPromptPlacement::InTurn { turn_id } => {
+            stream_prompt(PromptEventStream {
+                output,
+                id,
+                turn_id,
+                events: events.as_ref(),
+                clock: clock.as_ref(),
+                session,
+                attachment,
+                observed,
+            })
+            .await;
+            return;
+        }
+        BusyPromptPlacement::Refused(error) => command_failure(id, error),
+        BusyPromptPlacement::SteerFailed { reason } => failure(id, -32000, &reason),
+        BusyPromptPlacement::NotSent { reason } => {
+            failure(id, -32000, &format!("not sent: {reason}"))
+        }
+    };
+    let _sent = output.send(frame).await;
 }
 
 fn named_session(params: &Value, endpoint: &SessionEndpointRef) -> Result<SessionRef, ()> {
@@ -128,30 +215,35 @@ async fn current_turn_id(events: &dyn SessionEventHub, session: SessionRef) -> O
         })
 }
 
-async fn validate_load_request(
+fn load_working_directory(
     schema: &mut AcpSchemaCatalog,
-    events: &dyn SessionEventHub,
-    session: &SessionRef,
     params: &Value,
-) -> Result<(), (i32, &'static str)> {
+) -> Result<String, (i32, &'static str)> {
     if !schema
         .validate("LoadSessionRequest", params)
         .unwrap_or(false)
     {
         return Err((-32602, "Invalid session load parameters"));
     }
-    let summaries = events
-        .sessions(session.endpoint.clone())
-        .await
-        .map_err(|_| (-32000, "Session inventory unavailable"))?;
-    let stored = summaries
-        .into_iter()
-        .find(|summary| summary.session == *session)
-        .ok_or((-32002, "Session not found"))?;
-    if params.get("cwd").and_then(Value::as_str) != stored.working_directory.to_str() {
-        return Err((-32602, "Session working directory does not match"));
-    }
-    Ok(())
+    params
+        .get("cwd")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .ok_or((-32602, "Invalid session load parameters"))
+}
+
+fn targets_session(method: &str) -> bool {
+    matches!(
+        method,
+        "session/load"
+            | "session/resume"
+            | "session/prompt"
+            | "session/cancel"
+            | "_session/steering"
+            | "_session/queue/add"
+            | "_session/queue/list"
+            | "_session/queue/cancel"
+    )
 }
 
 async fn list_sessions_result(
@@ -186,38 +278,178 @@ async fn list_sessions_result(
 
 async fn serve_provider_sessions(
     route: ProviderAcpSessionRoute,
-    mut router: AcpRouterChannels,
+    router: AcpRouterChannels,
     actor: Option<Identity>,
     supports_state: bool,
 ) -> io::Result<()> {
-    let mut schema = AcpSchemaCatalog::load().map_err(io::Error::other)?;
-    let mut prompts = JoinSet::<()>::new();
-    let mut observers = ProviderSessionObservers::new(
-        Arc::clone(&route.events),
-        router.output.clone(),
-        supports_state,
+    let mut tasks = ProviderConnectionTasks {
+        prompts: JoinSet::new(),
+        restores: JoinSet::new(),
+        observers: ProviderSessionObservers::new(
+            Arc::clone(&route.events),
+            router.output.clone(),
+            supports_state,
+        ),
+    };
+    let closed = router.closed.clone();
+    let result = tokio::select! {
+        biased;
+        () = closed.cancelled() => Ok(()),
+        result = serve_provider_requests(route, router, actor, &mut tasks) => result,
+    };
+    tokio::join!(
+        tasks.restores.shutdown(),
+        tasks.prompts.shutdown(),
+        tasks.observers.tasks.shutdown()
     );
+    result
+}
+
+struct ProviderConnectionTasks {
+    prompts: JoinSet<()>,
+    restores: JoinSet<RestoreCompletion>,
+    observers: ProviderSessionObservers,
+}
+
+async fn serve_provider_requests(
+    route: ProviderAcpSessionRoute,
+    mut router: AcpRouterChannels,
+    actor: Option<Identity>,
+    tasks: &mut ProviderConnectionTasks,
+) -> io::Result<()> {
+    let mut schema = AcpSchemaCatalog::load().map_err(io::Error::other)?;
+    let ProviderConnectionTasks {
+        prompts,
+        restores,
+        observers,
+    } = tasks;
+    let mut awaiting_restore = HashMap::<SessionRef, AwaitingRestore>::new();
+    let mut ready_frames = VecDeque::new();
     loop {
-        let frame = tokio::select! {
-            _ = router.closed.cancelled() => break,
-            completed = prompts.join_next(), if !prompts.is_empty() => {
-                if completed.is_some_and(|result| result.is_err()) {
-                    return Err(io::Error::other("provider ACP prompt task failed"));
+        let frame = match ready_frames.pop_front() {
+            Some(WaitingSessionFrame::Command(frame)) => frame,
+            Some(WaitingSessionFrame::RestoreRefusal {
+                frame,
+                code,
+                message,
+            })
+            | Some(WaitingSessionFrame::DuplicateResume {
+                frame,
+                refusal: (code, message),
+            }) => {
+                if let Some(id) = frame.get("id").cloned() {
+                    router.output.send(failure(id, code, message)).await?;
                 }
                 continue;
-            },
-            completed = observers.tasks.join_next(), if !observers.tasks.is_empty() => {
-                if completed.is_some_and(|result| result.is_err()) {
-                    return Err(io::Error::other("provider ACP observer task failed"));
+            }
+            Some(WaitingSessionFrame::DuplicateLoad {
+                frame,
+                session,
+                cwd,
+                valid_refusal,
+            }) => {
+                if let Some(id) = frame.get("id").cloned() {
+                    awaiting_restore.insert(
+                        session.clone(),
+                        AwaitingRestore {
+                            frames: std::mem::take(&mut ready_frames),
+                        },
+                    );
+                    let events = Arc::clone(&route.events);
+                    let clock = Arc::clone(&route.clock);
+                    restores.spawn(async move {
+                        reject_duplicate_load(
+                            events.as_ref(),
+                            clock.as_ref(),
+                            session,
+                            id,
+                            cwd,
+                            valid_refusal,
+                        )
+                        .await
+                    });
                 }
                 continue;
+            }
+            None => tokio::select! {
+                completed = restores.join_next(), if !restores.is_empty() => {
+                    let Some(Ok(completion)) = completed else {
+                        return Err(io::Error::other("provider ACP restore task failed"));
+                    };
+                    let (session, reply, post_activation_elapsed) = match completion {
+                        RestoreCompletion::Reply { session, reply } => (session, reply, false),
+                        RestoreCompletion::Activated(request) => {
+                            let include_history = request.method == AcpRestoreMethod::Load;
+                            observers.detach(&request.session);
+                            let prepare = observers.prepare_attachment(request.session.clone(), include_history);
+                            let events = Arc::clone(&route.events);
+                            let clock = Arc::clone(&route.clock);
+                            restores.spawn(async move { request.reply(events.as_ref(), clock.as_ref(), prepare).await });
+                            continue;
+                        }
+                        RestoreCompletion::Observed { session, reply, observation } => {
+                            observers.install_attachment(session.clone(), *observation);
+                            (session, reply, false)
+                        }
+                        RestoreCompletion::PostActivationElapsed { session, id } => {
+                            (session, failure(id, STORE_ELAPSED.0, STORE_ELAPSED.1), true)
+                        }
+                    };
+                    router.output.send(reply).await?;
+                    if let Some(waiting) = awaiting_restore.remove(&session) {
+                        ready_frames = waiting.ready_after(post_activation_elapsed);
+                    }
+                    continue;
+                },
+                completed = prompts.join_next(), if !prompts.is_empty() => {
+                    if completed.is_some_and(|result| result.is_err()) {
+                        return Err(io::Error::other("provider ACP prompt task failed"));
+                    }
+                    continue;
+                },
+                completed = observers.tasks.join_next(), if !observers.tasks.is_empty() => {
+                    if completed.is_some_and(|result| result.is_err()) {
+                        return Err(io::Error::other("provider ACP observer task failed"));
+                    }
+                    continue;
+                },
+                frame = router.input.recv() => match frame { Some(frame) => frame, None => break },
             },
-            frame = router.input.recv() => match frame { Some(frame) => frame, None => break },
         };
         let method = frame.get("method").and_then(Value::as_str).unwrap_or("");
         let params = frame.get("params").cloned().unwrap_or_else(|| json!({}));
         let id = frame.get("id").cloned();
         if frame.get("method").is_none() {
+            continue;
+        }
+        if !awaiting_restore.is_empty()
+            && targets_session(method)
+            && let Ok(session) = named_session(&params, &route.endpoint)
+            && let Some(waiting) = awaiting_restore.get_mut(&session)
+        {
+            let queued = match (id, AcpRestoreMethod::from_rpc(method)) {
+                (Some(_), Some(AcpRestoreMethod::Load)) => {
+                    match load_working_directory(&mut schema, &params) {
+                        Ok(cwd) => WaitingSessionFrame::DuplicateLoad {
+                            frame,
+                            session,
+                            cwd,
+                            valid_refusal: RESTORE_IN_PROGRESS,
+                        },
+                        Err((code, message)) => WaitingSessionFrame::RestoreRefusal {
+                            frame,
+                            code,
+                            message,
+                        },
+                    }
+                }
+                (Some(_), Some(AcpRestoreMethod::Resume)) => WaitingSessionFrame::DuplicateResume {
+                    frame,
+                    refusal: RESTORE_IN_PROGRESS,
+                },
+                _ => WaitingSessionFrame::Command(frame),
+            };
+            waiting.frames.push_back(queued);
             continue;
         }
         if method == "session/cancel" && id.is_none() {
@@ -277,7 +509,12 @@ async fn serve_provider_sessions(
                             .create(CreateSessionCommand {
                                 endpoint: route.endpoint.clone(),
                                 working_directory: PathBuf::from(cwd),
-                                settings: SessionSettingsCommand::default(),
+                                // ACP session/new carries no mode, so this door
+                                // asks for auto by name (D1 spec R1).
+                                settings: SessionSettingsCommand {
+                                    mode: Some(crate::AUTO_SESSION_MODE.into()),
+                                    ..SessionSettingsCommand::default()
+                                },
                                 actor,
                             })
                             .await
@@ -305,68 +542,41 @@ async fn serve_provider_sessions(
                     }
                 }
             }
-            "session/load" | "session/resume" => match named_session(&params, &route.endpoint) {
-                Err(()) => failure(id, -32602, "Invalid SessionRef"),
-                Ok(session) => {
-                    if method == "session/load"
-                        && let Err((code, message)) = validate_load_request(
-                            &mut schema,
-                            route.events.as_ref(),
-                            &session,
-                            &params,
-                        )
-                        .await
-                    {
-                        router.output.send(failure(id, code, message)).await?;
-                        continue;
-                    }
-                    let state = route.events.state(session.clone()).await;
-                    match state {
-                        Err(_) => failure(id, -32002, "Session not found"),
-                        Ok(state) => {
-                            let activation = if state == SessionState::Unloaded {
-                                let command = SessionTargetCommand {
-                                    target: session.clone(),
-                                    actor,
-                                };
-                                if method == "session/load" {
-                                    route.commands.load_session(command).await
-                                } else {
-                                    route.commands.resume_session(command).await
-                                }
-                            } else {
-                                Ok(())
-                            };
-                            match activation {
-                                Err(error) => command_failure(id, error),
-                                Ok(()) => {
-                                    match observers
-                                        .attach(session.clone(), method == "session/load", true)
-                                        .await
-                                    {
-                                        Ok(report) => match session_result(
-                                            route.events.as_ref(),
-                                            &session,
-                                            report,
-                                            method == "session/resume",
-                                        )
-                                        .await
-                                        {
-                                            Ok(result) => response(id, result),
-                                            Err(()) => {
-                                                failure(id, -32000, "Session inventory unavailable")
-                                            }
-                                        },
-                                        Err(()) => {
-                                            failure(id, -32000, "Session event hub unavailable")
-                                        }
-                                    }
-                                }
-                            }
+            method if let Some(restore_method) = AcpRestoreMethod::from_rpc(method) => {
+                let Ok(session) = named_session(&params, &route.endpoint) else {
+                    router
+                        .output
+                        .send(failure(id, -32602, "Invalid SessionRef"))
+                        .await?;
+                    continue;
+                };
+                let cwd = match restore_method {
+                    AcpRestoreMethod::Load => match load_working_directory(&mut schema, &params) {
+                        Ok(cwd) => Some(cwd),
+                        Err((code, message)) => {
+                            router.output.send(failure(id, code, message)).await?;
+                            continue;
                         }
-                    }
-                }
-            },
+                    },
+                    AcpRestoreMethod::Resume => None,
+                };
+                let request = RestoreRequest {
+                    method: restore_method,
+                    session: session.clone(),
+                    id,
+                    cwd,
+                };
+                awaiting_restore.insert(session, AwaitingRestore::default());
+                let commands = Arc::clone(&route.commands);
+                let events = Arc::clone(&route.events);
+                let clock = Arc::clone(&route.clock);
+                restores.spawn(async move {
+                    request
+                        .activate(commands.as_ref(), events.as_ref(), clock.as_ref(), actor)
+                        .await
+                });
+                continue;
+            }
             "session/prompt" => {
                 match (
                     named_session(&params, &route.endpoint),
@@ -377,18 +587,37 @@ async fn serve_provider_sessions(
                             route.events.state(session.clone()).await,
                             Ok(SessionState::Running | SessionState::RequiresAction { .. })
                         ) {
-                            router
-                                .output
-                                .send(command_failure(id, CommandFailure::Busy))
-                                .await?;
+                            // A busy session steers or queues; it is never refused (D1 R12).
+                            let (Ok(attachment), Some(observed)) = (
+                                route.events.attach(session.clone()).await,
+                                observers.observed_events.get(&session).cloned(),
+                            ) else {
+                                router
+                                    .output
+                                    .send(failure(id, -32000, "Session observer unavailable"))
+                                    .await?;
+                                continue;
+                            };
+                            prompts.spawn(answer_by_placement(PlacedPrompt {
+                                commands: Arc::clone(&route.commands),
+                                events: Arc::clone(&route.events),
+                                clock: Arc::clone(&route.clock),
+                                output: router.output.clone(),
+                                id,
+                                session,
+                                content,
+                                actor,
+                                attachment,
+                                observed,
+                            }));
                             continue;
                         }
                         let attachment = route.events.attach(session.clone()).await;
                         match attachment {
                             Err(_) => failure(id, -32002, "Session not found"),
                             Ok(attachment) => {
-                                let Some(observed_turn) =
-                                    observers.observed_turns.get(&session).cloned()
+                                let Some(observed) =
+                                    observers.observed_events.get(&session).cloned()
                                 else {
                                     router
                                         .output
@@ -400,22 +629,58 @@ async fn serve_provider_sessions(
                                     target: session.clone(),
                                     input_id: session_event_model::InputId::generate(),
                                     submission: session_event_model::ProviderSubmission::plain(
-                                        content,
+                                        content.clone(),
                                     ),
-                                    actor,
+                                    actor: actor.clone(),
                                 };
                                 match route.commands.prompt(command).await {
+                                    // A turn started after the idle read: place it as a
+                                    // busy prompt, never refuse it as busy (D1 R12).
+                                    Err(error)
+                                        if matches!(
+                                            error.classification().as_ref(),
+                                            CommandFailure::Busy
+                                        ) =>
+                                    {
+                                        let Ok(attachment) =
+                                            route.events.attach(session.clone()).await
+                                        else {
+                                            router
+                                                .output
+                                                .send(failure(id, -32002, "Session not found"))
+                                                .await?;
+                                            continue;
+                                        };
+                                        prompts.spawn(answer_by_placement(PlacedPrompt {
+                                            commands: Arc::clone(&route.commands),
+                                            events: Arc::clone(&route.events),
+                                            clock: Arc::clone(&route.clock),
+                                            output: router.output.clone(),
+                                            id,
+                                            session,
+                                            content,
+                                            actor,
+                                            attachment,
+                                            observed,
+                                        }));
+                                        continue;
+                                    }
                                     Err(error) => command_failure(id, error),
                                     Ok(turn) => {
                                         let output = router.output.clone();
+                                        let events = Arc::clone(&route.events);
+                                        let clock = Arc::clone(&route.clock);
                                         prompts.spawn(async move {
-                                            stream_prompt(
+                                            stream_prompt(PromptEventStream {
                                                 output,
                                                 id,
-                                                turn.turn_id,
+                                                turn_id: turn.turn_id,
+                                                events: events.as_ref(),
+                                                clock: clock.as_ref(),
+                                                session,
                                                 attachment,
-                                                observed_turn,
-                                            )
+                                                observed,
+                                            })
                                             .await;
                                         });
                                         continue;
@@ -534,12 +799,12 @@ async fn serve_provider_sessions(
         };
         router.output.send(result).await?;
     }
-    prompts.abort_all();
-    while prompts.join_next().await.is_some() {}
-    observers.tasks.abort_all();
-    while observers.tasks.join_next().await.is_some() {}
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "provider_acp_session_route_test.rs"]
+mod tests;
 
 #[cfg(test)]
 #[path = "provider_acp_session_route_node_tap_test.rs"]

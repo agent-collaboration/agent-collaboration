@@ -38,6 +38,11 @@ export interface StoredOperation {
 }
 
 const roleRowSchema = z.object({ created_by_json: z.string(), approver_json: z.string() });
+export const savedSetupSchema = z.object({
+  requested_mode: z.string().nullable(),
+  work_roots_json: z.string().nullable(),
+  scratch_folder: z.string().nullable(),
+});
 const operationRowSchema = z.object({
   operation_id: z.string(),
   operation_kind: z.string(),
@@ -66,6 +71,25 @@ export class ProviderStoreReadback {
       createdBy: storedIdentitySchema.parse(decode(parsed.created_by_json)),
       approver: storedIdentitySchema.parse(decode(parsed.approver_json)),
     };
+  }
+
+  savedSetup(target: SessionRef): z.infer<typeof savedSetupSchema> {
+    return savedSetupSchema.parse(
+      this.database
+        .prepare(
+          "SELECT requested_mode, work_roots_json, scratch_folder FROM provider_session_records WHERE target_service_id = ? AND target_endpoint_id = ? AND target_session_id = ?",
+        )
+        .get(target.endpoint.serviceId, target.endpoint.endpointId, target.sessionId),
+    );
+  }
+
+  terminalTime(operationId: string): bigint {
+    const read = this.database.prepare(
+      "SELECT terminal_at_ms FROM provider_operations WHERE operation_id = ?",
+    );
+    read.setReadBigInts(true);
+    const row = z.object({ terminal_at_ms: z.bigint() }).parse(read.get(operationId));
+    return row.terminal_at_ms;
   }
 
   /** Every operation recorded against the target, oldest first. */

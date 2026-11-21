@@ -94,3 +94,16 @@ fn cursor_thinking_boolean_and_effort_select_have_distinct_meanings() {
         assert_eq!(offered.as_deref(), Some([].as_slice()));
     }
 }
+
+#[test]
+fn fast_model_config_keeps_its_category_and_boolean_value() {
+    let options = [SessionConfigOption::boolean("fast", "Fast", false)
+        .category(SessionConfigOptionCategory::ModelConfig)];
+
+    let observed = observe_config_options(Some(&options)).expect("reported option set");
+
+    assert_eq!(observed.len(), 1);
+    assert_eq!(observed[0].id.0.as_ref(), "fast");
+    assert_eq!(observed[0].category, Some(SettingCategory::Fast));
+    assert_eq!(observed[0].value, ObservedSettingValue::Boolean(false));
+}

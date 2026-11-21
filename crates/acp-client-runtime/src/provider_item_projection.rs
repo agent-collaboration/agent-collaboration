@@ -8,7 +8,8 @@ use agent_client_protocol::schema::v1::{
 };
 use session_event_model::{SessionEvent, SessionItem, SessionItemKind, ToolCallStatus};
 
-use crate::{EventSinkClosed, SessionEventSink, agent_session_client::MAX_PROMPT_OUTPUT_BYTES};
+use crate::provider_client_contract::MAX_PROMPT_OUTPUT_BYTES;
+use crate::{EventSinkClosed, SessionEventSink};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ItemProjectionError {
@@ -43,13 +44,6 @@ pub(crate) struct ProviderItemProjection {
 impl ProviderItemProjection {
     pub(crate) fn admit(&mut self) -> Result<(), ItemProjectionError> {
         self.apply_provider_update(crate::ProviderUpdate::SessionAdmitted, Vec::new())
-    }
-
-    pub(crate) fn validates(&self, submission: &session_event_model::ProviderSubmission) -> bool {
-        submission
-            .selected
-            .iter()
-            .all(|selection| self.skill_view.contains_selection(selection))
     }
 
     pub(crate) fn compact_confirmed(&self) -> bool {
@@ -352,6 +346,10 @@ impl ProviderItemProjection {
             })?;
         }
         Ok(())
+    }
+
+    pub(crate) fn has_tool_item(&self, id: &str) -> bool {
+        self.tool_items.contains_key(id)
     }
 
     fn observe_tool_call(&mut self, tool_call: &ToolCall) -> Result<(), ItemProjectionError> {

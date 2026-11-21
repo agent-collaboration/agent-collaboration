@@ -99,22 +99,19 @@ impl ProviderAcpRouteClaim {
             }
             EndpointAvailability::Available { .. } => {}
         }
-        let Some(runtime) = self.supervisor.runtime_for(&target.endpoint) else {
+        if self.supervisor.runtime_for(&target.endpoint).is_none() {
             return unavailable(
                 "provider runtime is not ready",
                 "wait for provider startup",
                 false,
                 UnsentCause::Refused(NativeRefusalCode::RuntimeMissing),
             );
-        };
-        match runtime
-            .session_activity(String::from(target.session_id.clone()))
-            .await
-        {
-            Ok(ProviderSessionActivity::Idle | ProviderSessionActivity::Running) => {
+        }
+        match self.supervisor.owner_session_activity(target) {
+            ProviderSessionActivity::Idle | ProviderSessionActivity::Running => {
                 NativeRouteClaim::holds()
             }
-            Ok(ProviderSessionActivity::NotLoaded) => {
+            ProviderSessionActivity::NotLoaded => {
                 match self.store.lock().await.session_record(target).await {
                     Ok(Some(_)) => NativeRouteClaim::can_load(),
                     Ok(None) => NativeRouteClaim::not_mine(),
@@ -126,14 +123,6 @@ impl ProviderAcpRouteClaim {
                     ),
                 }
             }
-            Err(_) => unavailable(
-                "provider runtime is unavailable",
-                "retry after provider restarts",
-                true,
-                UnsentCause::Holdable {
-                    otherwise: NativeRefusalCode::ActivityUnavailable,
-                },
-            ),
         }
     }
 

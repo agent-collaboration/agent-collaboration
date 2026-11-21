@@ -2,10 +2,11 @@
 
 use super::{
     LoadPolicy, OperationId, ProviderAcpDeliveryRoute, ProviderConversationBackend,
-    ProviderIdentity, ProviderPromptContentsRequest, ProviderQueuedPrompt,
-    ProviderSessionLoadOutcome, ProviderSteeringOutcome, RouteClaim, SessionRef,
-    ensure_provider_session_loaded,
+    ProviderIdentity, ProviderPromptContentsRequest, ProviderSessionLoadOutcome, RouteClaim,
+    SessionRef, ensure_provider_session_loaded, session_queue_plan,
 };
+use crate::session_owner_calls::InputAcceptance;
+use acp_client_runtime::RestorePhase;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ProviderQueueAdmissionError {
@@ -31,12 +32,16 @@ pub enum ProviderSteerContentsError {
     Admission(#[from] ProviderQueueAdmissionError),
     #[error(transparent)]
     Runtime(#[from] crate::ExternalProviderRuntimeError),
+    #[error("provider steer operation failed")]
+    Operation(Box<collaboration_protocol::ConversationOperationFailure>),
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProviderPromptContentsError {
     #[error(transparent)]
     Admission(#[from] ProviderQueueAdmissionError),
+    #[error("{reason}")]
+    RestoreFailed { reason: String },
     #[error("provider prompt operation failed")]
     Operation(Box<collaboration_protocol::ConversationOperationFailure>),
 }
@@ -90,10 +95,6 @@ impl ProviderAcpDeliveryRoute {
         if !self.serves(&target) {
             return Err(ProviderQueueAdmissionError::SessionNotFound.into());
         }
-        let session_lock = self
-            .session_lock(&target)
-            .map_err(|_| ProviderQueueAdmissionError::Unavailable)?;
-        let _guard = session_lock.lock().await;
         match self.claim.claim(&target).await.into_claim() {
             RouteClaim::Holds | RouteClaim::CanLoad => {}
             RouteClaim::Rejected { .. } | RouteClaim::LiveElsewhere { .. } => {
@@ -131,15 +132,40 @@ impl ProviderAcpDeliveryRoute {
             ProviderSessionLoadOutcome::LiveElsewhere => {
                 return Err(ProviderQueueAdmissionError::LiveElsewhere.into());
             }
+            ProviderSessionLoadOutcome::Unavailable {
+                phase: RestorePhase::Attempted,
+                reason,
+            } => {
+                return Err(ProviderPromptContentsError::RestoreFailed { reason });
+            }
+            ProviderSessionLoadOutcome::Rejected {
+                phase: RestorePhase::Attempted,
+                reason,
+            } => {
+                return Err(ProviderPromptContentsError::RestoreFailed {
+                    reason: reason.safe_detail(),
+                });
+            }
+            ProviderSessionLoadOutcome::ClosedWhileLoading {
+                phase: RestorePhase::Attempted,
+            } => {
+                return Err(ProviderPromptContentsError::RestoreFailed {
+                    reason: crate::provider_acp_session_loading::closed_restore_reason(
+                        RestorePhase::Attempted,
+                    )
+                    .to_owned(),
+                });
+            }
             _ => return Err(ProviderQueueAdmissionError::Unavailable.into()),
         }
         let runtime = self
             .supervisor
             .runtime_for(&target.endpoint)
             .ok_or(ProviderQueueAdmissionError::Unavailable)?;
-        if runtime
-            .settings_unresolved(&String::from(target.session_id.clone()))
-            .await
+        if self
+            .supervisor
+            .owner_session_snapshot(&target)
+            .is_some_and(|snapshot| snapshot.settings_block_input)
         {
             return Err(ProviderQueueAdmissionError::SettingsUnresolved.into());
         }
@@ -159,28 +185,26 @@ impl ProviderAcpDeliveryRoute {
                 requested_by: actor,
                 approver: record.approver,
                 input,
+                busy: crate::external_provider_supervisor::PromptBusyPolicy::RefuseBusy,
             })
             .await
             .map_err(|failure| ProviderPromptContentsError::Operation(Box::new(failure)))
     }
 
-    pub async fn steer_contents(
+    pub(crate) async fn place_steer(
         &self,
         target: SessionRef,
         actor: ProviderIdentity,
         input_id: session_event_model::InputId,
+        expected_turn: Option<provider_session_machines::session_turn_machine::TurnId>,
         contents: session_event_model::ProviderSubmission,
-    ) -> Result<ProviderSteeringOutcome, ProviderSteerContentsError> {
+    ) -> Result<InputAcceptance, ProviderSteerContentsError> {
         if contents.content.is_empty() {
             return Err(ProviderQueueAdmissionError::EmptyContent.into());
         }
         if !self.serves(&target) {
             return Err(ProviderQueueAdmissionError::SessionNotFound.into());
         }
-        let session_lock = self
-            .session_lock(&target)
-            .map_err(|_| ProviderQueueAdmissionError::Unavailable)?;
-        let _guard = session_lock.lock().await;
         match self.claim.claim(&target).await.into_claim() {
             RouteClaim::Holds | RouteClaim::CanLoad => {}
             RouteClaim::Rejected { .. } | RouteClaim::LiveElsewhere { .. } => {
@@ -191,7 +215,7 @@ impl ProviderAcpDeliveryRoute {
                 return Err(ProviderQueueAdmissionError::Unavailable.into());
             }
         }
-        let _record = self
+        let record = self
             .store
             .lock()
             .await
@@ -203,9 +227,10 @@ impl ProviderAcpDeliveryRoute {
             .supervisor
             .runtime_for(&target.endpoint)
             .ok_or(ProviderQueueAdmissionError::Unavailable)?;
-        if runtime
-            .settings_unresolved(&String::from(target.session_id.clone()))
-            .await
+        if self
+            .supervisor
+            .owner_session_snapshot(&target)
+            .is_some_and(|snapshot| snapshot.settings_block_input)
         {
             return Err(ProviderQueueAdmissionError::SettingsUnresolved.into());
         }
@@ -215,23 +240,25 @@ impl ProviderAcpDeliveryRoute {
         if let Some(content_type) = unsupported_content_type(&contents.content, &capabilities) {
             return Err(ProviderQueueAdmissionError::UnsupportedContent { content_type }.into());
         }
-        let outcome = runtime
-            .steer_session_contents_with_input(
-                String::from(target.session_id.clone()),
-                input_id.clone(),
-                contents,
-            )
-            .await?;
-        tracing::info!(
-            ?target,
-            ?actor,
-            ?input_id,
-            ?outcome,
-            "provider content steer settled"
-        );
-        Ok(outcome)
+        let mode = collaboration_protocol::MessageDelivery::Steer;
+        let request = ProviderPromptContentsRequest {
+            operation_id: OperationId::generate(),
+            input_id,
+            target,
+            requested_by: actor,
+            approver: record.approver,
+            input: acp_client_runtime::ProviderTurnInput::Prompt(contents),
+            busy: crate::external_provider_supervisor::PromptBusyPolicy::Send(mode),
+        };
+        let result = if let Some(turn) = expected_turn {
+            self.supervisor
+                .submit_existing_turn_steer(request, turn)
+                .await
+        } else {
+            self.supervisor.submit_owned_delivery(request, mode).await
+        };
+        result.map_err(|failure| ProviderSteerContentsError::Operation(Box::new(failure)))
     }
-
     pub async fn queue_contents(
         &self,
         target: SessionRef,
@@ -244,10 +271,6 @@ impl ProviderAcpDeliveryRoute {
         if !self.serves(&target) {
             return Err(ProviderQueueAdmissionError::SessionNotFound);
         }
-        let session_lock = self
-            .session_lock(&target)
-            .map_err(|_| ProviderQueueAdmissionError::Unavailable)?;
-        let _guard = session_lock.lock().await;
         match self.claim.claim(&target).await.into_claim() {
             RouteClaim::Holds | RouteClaim::CanLoad => {}
             RouteClaim::Rejected { .. } | RouteClaim::LiveElsewhere { .. } => {
@@ -268,9 +291,10 @@ impl ProviderAcpDeliveryRoute {
             .supervisor
             .runtime_for(&target.endpoint)
             .ok_or(ProviderQueueAdmissionError::Unavailable)?;
-        if runtime
-            .settings_unresolved(&String::from(target.session_id.clone()))
-            .await
+        if self
+            .supervisor
+            .owner_session_snapshot(&target)
+            .is_some_and(|snapshot| snapshot.settings_block_input)
         {
             return Err(ProviderQueueAdmissionError::SettingsUnresolved);
         }
@@ -284,11 +308,25 @@ impl ProviderAcpDeliveryRoute {
             .supervisor
             .binding(&target.endpoint)
             .ok_or(ProviderQueueAdmissionError::Unavailable)?;
-        let permit = self
-            .queue
-            .reserve(&target)
-            .map_err(|_| ProviderQueueAdmissionError::Busy)?;
         let operation_id = OperationId::generate();
+        let run = match session_queue_plan(
+            &self.supervisor,
+            &self.store,
+            self.ownership.as_ref(),
+            &target,
+            LoadPolicy::MayLoad,
+        )
+        .await
+        {
+            Ok(run) => run,
+            Err(ProviderSessionLoadOutcome::MissingRecord) => {
+                return Err(ProviderQueueAdmissionError::SessionNotFound);
+            }
+            Err(ProviderSessionLoadOutcome::LiveElsewhere) => {
+                return Err(ProviderQueueAdmissionError::LiveElsewhere);
+            }
+            _ => return Err(ProviderQueueAdmissionError::Unavailable),
+        };
         let input_id = session_event_model::InputId::generate();
         let queued = self
             .supervisor
@@ -300,17 +338,45 @@ impl ProviderAcpDeliveryRoute {
                 input_id.clone(),
                 &contents.content,
             );
-        permit.send(ProviderQueuedPrompt::Contents {
-            request: ProviderPromptContentsRequest {
-                operation_id,
-                input_id,
-                target,
-                requested_by: actor,
-                approver: record.approver,
-                input: acp_client_runtime::ProviderTurnInput::Prompt(contents),
-            },
-            load_policy: LoadPolicy::MayLoad,
-        });
+        let request = ProviderPromptContentsRequest {
+            operation_id,
+            input_id,
+            target: target.clone(),
+            requested_by: actor,
+            approver: record.approver,
+            input: acp_client_runtime::ProviderTurnInput::Prompt(contents),
+            busy: crate::external_provider_supervisor::PromptBusyPolicy::Send(
+                collaboration_protocol::MessageDelivery::Queue,
+            ),
+        };
+        let mut acceptance = self
+            .supervisor
+            .submit_queued_on_run(request.clone(), run)
+            .await;
+        if matches!(acceptance, Ok(InputAcceptance::QueuePlanChanged))
+            && let Ok(run) = session_queue_plan(
+                &self.supervisor,
+                &self.store,
+                self.ownership.as_ref(),
+                &target,
+                LoadPolicy::MayLoad,
+            )
+            .await
+        {
+            acceptance = self.supervisor.submit_queued_on_run(request, run).await;
+        }
+        let acceptance = acceptance.map_err(|failure| match failure.kind {
+            collaboration_protocol::ConversationOperationFailureKind::Overloaded => {
+                ProviderQueueAdmissionError::Busy
+            }
+            collaboration_protocol::ConversationOperationFailureKind::SettingsUnresolved => {
+                ProviderQueueAdmissionError::SettingsUnresolved
+            }
+            _ => ProviderQueueAdmissionError::Unavailable,
+        })?;
+        if acceptance != crate::session_owner_calls::InputAcceptance::Queued {
+            return Err(ProviderQueueAdmissionError::Unavailable);
+        }
         Ok(queued)
     }
 }

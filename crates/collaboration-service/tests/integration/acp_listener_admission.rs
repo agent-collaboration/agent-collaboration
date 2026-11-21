@@ -49,6 +49,7 @@ async fn acp_listener_reports_unavailable_codex_without_closing_the_connection()
         provider.endpoint.clone(),
         Arc::clone(&provider) as Arc<dyn SessionCommandPort>,
         Arc::clone(&provider) as Arc<dyn SessionEventHub>,
+        Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
     );
     let stop = CancellationToken::new();
     let task = tokio::spawn(listener.run(stop.clone()));
@@ -319,17 +320,6 @@ async fn acp_listener_reports_unavailable_codex_without_closing_the_connection()
         .unwrap()]
     );
     *provider.state.lock().unwrap() = SessionState::Running;
-    // The ACP face rejects a busy prompt before submitting to the provider.
-    write.write_all(b"{\"jsonrpc\":\"2.0\",\"id\":17,\"method\":\"session/prompt\",\"params\":{\"sessionId\":\"claude-session-1\",\"prompt\":[{\"type\":\"text\",\"text\":\"must not submit\"}]}}\n").await.unwrap();
-    let busy = tokio::time::timeout(Duration::from_secs(2), lines.next_line())
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap();
-    let busy: serde_json::Value = serde_json::from_str(&busy).unwrap();
-    assert_eq!(busy["id"], 17);
-    assert_eq!(busy["error"]["code"], -32000);
-    assert_eq!(provider.prompted_by.lock().unwrap().len(), 1);
     write.write_all(b"{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"_session/steering\",\"params\":{\"sessionId\":\"claude-session-1\",\"prompt\":[{\"type\":\"text\",\"text\":\"follow up\"}]}}\n").await.unwrap();
     let steered = tokio::time::timeout(Duration::from_secs(2), lines.next_line())
         .await

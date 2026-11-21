@@ -190,8 +190,11 @@ pub(super) async fn handle_app_server_thread_request(
                 .create(CreateSessionCommand {
                     endpoint: endpoint.clone(),
                     working_directory,
+                    // thread/start carries no mode, so this door asks for
+                    // auto by name (D1 spec R1).
                     settings: SessionSettingsCommand {
                         model: model_override,
+                        mode: Some(crate::AUTO_SESSION_MODE.into()),
                         ..SessionSettingsCommand::default()
                     },
                     actor,
@@ -269,7 +272,7 @@ pub(super) async fn handle_app_server_thread_request(
                             actor,
                         })
                         .await
-                        .map_err(|error| match error {
+                        .map_err(|error| match error.classification().as_ref() {
                             collaboration_contracts::CommandFailure::SessionNotFound => {
                                 ThreadMethodError::NotFound
                             }
@@ -588,8 +591,12 @@ fn command_error(error: collaboration_contracts::CommandFailure) -> ThreadMethod
         }
         CommandFailure::SettingsContextChanged => ThreadMethodError::SettingsContextChanged,
         CommandFailure::SettingsUnresolved => ThreadMethodError::SettingsUnresolved,
+        CommandFailure::RestoreFailed { reason } => ThreadMethodError::RestoreFailed { reason },
         CommandFailure::UnauthorizedActor | CommandFailure::ProviderFailure => {
             ThreadMethodError::Unavailable
+        }
+        CommandFailure::ProviderOperation(_) | CommandFailure::ProviderSteerOperation(_) => {
+            command_error(error.classification().into_owned())
         }
     }
 }

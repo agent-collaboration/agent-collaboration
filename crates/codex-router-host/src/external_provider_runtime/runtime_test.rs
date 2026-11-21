@@ -79,7 +79,7 @@ fn steering_fixture(observed_prompt_socket: &std::path::Path) -> ExternalProvide
 
 #[cfg(unix)]
 #[tokio::test]
-async fn steering_injects_during_prompt_and_returns_prompt_required_when_idle() {
+async fn steering_injects_during_a_prompt_and_starts_a_normal_prompt_when_idle() {
     let root = tempfile::tempdir().expect("fixture root");
     let marker = root.path().join("prompt.sock");
     let listener = tokio::net::UnixListener::bind(&marker).expect("prompt event listener");
@@ -148,11 +148,15 @@ async fn steering_injects_during_prompt_and_returns_prompt_required_when_idle() 
         .steer_session("fixture-session".to_owned(), "follow-up".to_owned())
         .await
         .expect("steer active turn");
-    assert_eq!(
-        injected,
-        ProviderSteeringOutcome::Injected {
-            running_operation_id: Some(running_operation_id),
-        }
+    assert!(
+        matches!(
+            &injected,
+            ProviderSteeringOutcome::Injected {
+                running_operation_id: Some(running),
+                ..
+            } if *running == running_operation_id
+        ),
+        "{injected:?}"
     );
     prompt
         .await
@@ -170,7 +174,10 @@ async fn steering_injects_during_prompt_and_returns_prompt_required_when_idle() 
         .steer_session("fixture-session".to_owned(), "later".to_owned())
         .await
         .expect("steer idle session");
-    assert_eq!(idle, ProviderSteeringOutcome::PromptRequired);
+    assert!(
+        matches!(idle, ProviderSteeringOutcome::StartedNewTurn),
+        "{idle:?}"
+    );
     runtime.shutdown().await;
 }
 
@@ -183,10 +190,13 @@ fn cancellation_fixture() -> ExternalProviderLaunch {
 }
 
 #[cfg(unix)]
-fn successor_prompt_fixture() -> ExternalProviderLaunch {
+fn successor_prompt_fixture(release_socket: &std::path::Path) -> ExternalProviderLaunch {
     acp_scripted_fixture::launch_fixture_agent(
         "host-basic-session-agent.ts",
-        vec!["successor".to_owned()],
+        vec![
+            "successor".to_owned(),
+            release_socket.to_string_lossy().into_owned(),
+        ],
     )
 }
 
@@ -245,8 +255,14 @@ fn named_mcp_tool_call_fixture(
 }
 
 fn approval_context(operation_id: &str) -> ExternalProviderApprovalContext {
+    let service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
     ExternalProviderApprovalContext {
+            owner_scope: None,
+        requester: serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":service_id,"endpointId":"cursor-local"},"sessionId":"requester"})).expect("requester"),
+        approver: serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"approver"})).expect("approver"),
+        target: serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":service_id,"endpointId":"cursor-local"},"sessionId":"fixture-session"})).expect("target"),
         operation_id: operation_id.to_owned().try_into().expect("operation ID"),
+        binding_generation: serde_json::from_value(serde_json::json!({"serviceEpoch":service_id,"generation":1})).expect("generation"),
         binding_retirement: CancellationToken::new(),
     }
 }
@@ -380,3 +396,6 @@ mod admission_lifecycle_tests;
 
 #[path = "tests/mcp_shutdown_test.rs"]
 mod mcp_shutdown_tests;
+
+#[path = "tests/generation_ownership_test.rs"]
+mod generation_ownership_tests;

@@ -1,4 +1,9 @@
 import { AcpExchange } from "./acp-exchange.ts";
+import { requireArgument } from "./acp-stdio.ts";
+import { fileAppears, startReleaseBarrier } from "./release-barrier.ts";
+const receipt = requireArgument(2);
+const includeMalformedTool = process.argv[3] === "malformed-tool";
+startReleaseBarrier(receipt);
 const agent = new AcpExchange();
 await agent.initialize("idle-update-fixture", { _meta: { steering: { supported: true } } });
 await agent.newSession("fixture-session", {
@@ -32,6 +37,15 @@ agent.update({
   content: { type: "text", text: "Future detail" },
 });
 const prompt = await agent.read("session/prompt");
+if (includeMalformedTool) {
+  // The transport can claim this ID before typed decoding rejects the missing title.
+  agent.update({
+    sessionUpdate: "tool_call",
+    toolCallId: "malformed-late-tool",
+    kind: "execute",
+    status: "pending",
+  });
+}
 agent.update({
   sessionUpdate: "tool_call",
   toolCallId: "late-tool",
@@ -40,13 +54,20 @@ agent.update({
   status: "pending",
 });
 agent.endTurn(prompt);
-const steer = await agent.read("_session/steering");
+await fileAppears(`${receipt}.release-late`);
+if (includeMalformedTool) {
+  agent.update({
+    sessionUpdate: "tool_call_update",
+    toolCallId: "malformed-late-tool",
+    title: "There was no retained item",
+    status: "completed",
+  });
+}
 agent.update({
   sessionUpdate: "tool_call_update",
   toolCallId: "late-tool",
   title: "Check passed",
   status: "completed",
 });
-agent.respond(steer, { outcome: "promptRequired" });
 await agent.drain();
 agent.close();

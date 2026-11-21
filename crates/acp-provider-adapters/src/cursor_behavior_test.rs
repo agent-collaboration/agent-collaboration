@@ -15,6 +15,37 @@ fn initialization_authentication_requires_cursors_documented_agent_method() {
     );
 }
 
+#[test]
+fn restore_invalid_params_only_recognizes_cursors_exact_missing_session_message() {
+    let requested = "session-42";
+    for (data, missing) in [
+        (
+            serde_json::json!({"message":"Session \"session-42\" not found"}),
+            true,
+        ),
+        (
+            serde_json::json!({"message":"Session \"session-42-other\" not found"}),
+            false,
+        ),
+        (
+            serde_json::json!({"message":"Working directory for Session \"session-42\" not found"}),
+            false,
+        ),
+        (
+            serde_json::json!({"message":"Session \"session-42\" has invalid setup"}),
+            false,
+        ),
+        (serde_json::json!({"message":42}), false),
+        (serde_json::json!("Session \"session-42\" not found"), false),
+    ] {
+        assert_eq!(
+            CursorAcpBehavior.restore_invalid_params_means_session_not_found(requested, &data),
+            missing,
+            "{data}"
+        );
+    }
+}
+
 fn command(name: &str, description: &str) -> ProviderCommand {
     ProviderCommand {
         invocation_name: name.into(),
@@ -133,4 +164,43 @@ fn cursor_refuses_unaddressable_and_multi_text_selections() {
         ));
     }
     assert_eq!(CursorAcpBehavior.compact(), Err(ProviderError::Unsupported));
+}
+
+/// Oracle: L6 and Cursor 2026.10.22's `formatOperation` — the title is read
+/// only in the exact shapes Cursor writes; anything ambiguous reads nothing,
+/// so the request asks.
+#[test]
+fn cursor_titles_are_read_only_in_their_exact_shapes() {
+    use acp_client_runtime::{PermissionRequestAction, StatedPermissionTarget};
+    let behavior = super::CursorAcpBehavior;
+    let file = PermissionRequestAction::FileAccess;
+    let shell = PermissionRequestAction::ShellCommand;
+    let path = |text: &str| Some(StatedPermissionTarget::File(text.into()));
+    let cases = [
+        (file, "Delete `/s/a.txt`", path("/s/a.txt")),
+        (file, "Read `/s/a b.txt`", path("/s/a b.txt")),
+        (file, "Edit `/s/a.txt`", path("/s/a.txt")),
+        (file, "Write /s/a.txt", None),
+        (file, "Delete `/s/a` `/t/b`", None),
+        (file, "Delete ``", None),
+        (file, "Delete /s/a.txt", None),
+        (file, "`rm /s/a.txt`", None),
+        (
+            shell,
+            "`rm /s/a.txt`",
+            Some(StatedPermissionTarget::Command("rm /s/a.txt".into())),
+        ),
+        (shell, "`echo \\`id\\``", None),
+        (shell, "rm /s/a.txt", None),
+        (shell, "Delete `/s/a.txt`", None),
+    ];
+    for (action, title, expected) in cases {
+        assert_eq!(
+            acp_client_runtime::ProviderBehavior::stated_permission_target(
+                &behavior, action, title
+            ),
+            expected,
+            "{title}"
+        );
+    }
 }

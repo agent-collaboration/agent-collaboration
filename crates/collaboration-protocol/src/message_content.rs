@@ -79,6 +79,14 @@ pub enum MessageDelivery {
     Steer,
 }
 
+impl MessageDelivery {
+    /// The default choice, which an additive request field leaves off the wire.
+    #[must_use]
+    pub const fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
 #[derive(JsonSchema, Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum MessageInputKind {

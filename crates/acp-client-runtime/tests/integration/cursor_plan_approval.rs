@@ -5,10 +5,11 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::{
-    AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
-    HistoryReplayFuture, InteractionFuture, InteractionPort, ProviderPersistenceTarget,
-    RefusedApprovalOffer, SessionEventSink,
+    ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch, HistoryReplayFuture,
+    InteractionFuture, InteractionPort, ProviderPersistenceTarget, RefusedApprovalOffer,
+    SessionEventSink,
 };
 use session_event_model::{
     ApprovalRequest, ApprovalSubject, OptionsOrigin, QuestionRequest, QuestionResponse,
@@ -74,9 +75,6 @@ impl InteractionPort for PlanPort {
         _context: Self::Context,
         _reason: &'static str,
     ) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
-    fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
         Box::pin(async {})
     }
 }

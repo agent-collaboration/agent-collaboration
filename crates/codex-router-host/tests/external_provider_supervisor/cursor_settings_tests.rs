@@ -41,7 +41,13 @@ async fn cursor_effort_setting_reports_adjusted_catalog_without_public_api_expan
     operation(
         backend
             .create(ConversationCreateRequest {
-                settings: None,
+                work_roots: Vec::new(),
+                settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    // This test is about effort; --fast auto leaves the fixture's fast alone.
+                    fast: Some(collaboration_protocol::FastSetting::Auto),
+                    ..collaboration_protocol::ProviderRequestedSettings::default()
+                }),
                 operation_id: operation_id.clone(),
                 endpoint: provider_endpoint.clone(),
                 generation: Some(generation()?),
@@ -125,6 +131,317 @@ async fn cursor_effort_setting_reports_adjusted_catalog_without_public_api_expan
         &json!({
             "sessionId":"fixture-session", "configId":"effort", "value":"high"
         })
+    );
+    Ok(())
+}
+
+/// A Host over the reactive Cursor fixture, which starts fast on and turns it
+/// back on at every model change.
+struct ReactiveCursor {
+    root: tempfile::TempDir,
+    receipt: PathBuf,
+    endpoint: EndpointRef,
+    creator: SessionRef,
+    backend: ExternalProviderSupervisor,
+}
+
+impl ReactiveCursor {
+    async fn start(behaviours: &[&str]) -> TestResult<Self> {
+        let root = tempfile::tempdir()?;
+        Self::start_in(root, behaviours).await
+    }
+
+    /// A Host over an existing root, as after a restart.
+    async fn start_in(root: tempfile::TempDir, behaviours: &[&str]) -> TestResult<Self> {
+        // Each Host start gets its own receipt, so a restart doesn't overwrite it.
+        static STARTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let start = STARTS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let receipt = root.path().join(format!("wire-{start}.json"));
+        let arguments = ["reactive".to_owned(), receipt.display().to_string()]
+            .into_iter()
+            .chain(behaviours.iter().map(|behaviour| (*behaviour).to_owned()))
+            .collect();
+        let runtime = ExternalProviderRuntime::initialize(
+            launch("cursor-settings-agent.ts", arguments),
+            std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        )
+        .await?;
+        let endpoint = endpoint("cursor-local")?;
+        let backend =
+            supervisor(&root, vec![(binding(endpoint.clone(), "cursor")?, runtime)]).await?;
+        Ok(Self {
+            creator: actor(endpoint.clone(), "creator")?,
+            root,
+            receipt,
+            endpoint,
+            backend,
+        })
+    }
+
+    async fn create(
+        &self,
+        fast: Option<collaboration_protocol::FastSetting>,
+    ) -> TestResult<(
+        SessionRef,
+        collaboration_protocol::EffectiveProviderSettings,
+    )> {
+        let operation_id = OperationId::generate();
+        operation(
+            self.backend
+                .create(ConversationCreateRequest {
+                    work_roots: Vec::new(),
+                    settings: Some(ProviderRequestedSettings {
+                        mode: Some("auto".into()),
+                        fast,
+                        ..ProviderRequestedSettings::default()
+                    }),
+                    operation_id: operation_id.clone(),
+                    endpoint: self.endpoint.clone(),
+                    generation: Some(generation()?),
+                    working_directory: working_directory()?,
+                    created_by: self.creator.clone().into(),
+                    approver: self.creator.clone().into(),
+                    requested_policy: policy(),
+                })
+                .await,
+        )?;
+        match operation(wait(&self.backend, operation_id).await)?.output {
+            ConversationOperationWaitOutput::Available {
+                settlement:
+                    ConversationOperationSettlement::Created {
+                        target,
+                        effective_settings,
+                    },
+            } => Ok((target, effective_settings)),
+            other => Err(format!("expected a created session: {other:?}").into()),
+        }
+    }
+
+    #[expect(
+        clippy::result_large_err,
+        reason = "The test reads the full typed settings failure."
+    )]
+    async fn set(
+        &self,
+        target: &SessionRef,
+        setting: ProviderSettingName,
+        value: &str,
+    ) -> Result<
+        collaboration_protocol::ProviderSettingsResult,
+        collaboration_protocol::ProviderSettingsFailure,
+    > {
+        self.backend
+            .settings_set(ProviderSettingsSetRequest {
+                target: target.clone(),
+                actor: self.creator.clone().into(),
+                setting,
+                value: value.into(),
+            })
+            .await
+    }
+
+    async fn show_fast(
+        &self,
+        target: &SessionRef,
+    ) -> TestResult<Option<collaboration_protocol::FastState>> {
+        Ok(self
+            .backend
+            .inspect_session(ProviderSessionInspectRequest {
+                target: target.clone(),
+            })
+            .await
+            .map_err(|error| error.message)?
+            .fast)
+    }
+
+    fn setting_requests(&self) -> TestResult<usize> {
+        let requests: Vec<Value> = serde_json::from_slice(&std::fs::read(&self.receipt)?)?;
+        Ok(requests
+            .iter()
+            .filter(|request| request["method"] == "session/set_config_option")
+            .count())
+    }
+}
+
+/// Oracle: D1 V12, spec R7 — any fast value but off or auto is refused at the
+/// Host with "fast accepts off or auto", and nothing reaches the agent.
+#[cfg(unix)]
+#[tokio::test]
+async fn fast_values_other_than_off_or_auto_are_refused() -> TestResult {
+    let cursor = ReactiveCursor::start(&[]).await?;
+    let (target, _) = cursor.create(None).await?;
+    let before = cursor.setting_requests()?;
+    for value in ["on", "true", "fast", ""] {
+        let refused = cursor
+            .set(&target, ProviderSettingName::Fast, value)
+            .await
+            .expect_err("only off or auto");
+        ensure_eq!(refused.kind, ProviderSettingsFailureKind::InvalidSetting);
+        ensure_eq!(refused.message, "fast accepts off or auto".to_owned());
+        ensure_eq!(refused.setting, Some(ProviderSettingName::Fast));
+    }
+    let after = cursor.setting_requests()?;
+    cursor.backend.shutdown().await.map_err(str::to_owned)?;
+    ensure_eq!(after, before);
+    Ok(())
+}
+
+/// Oracle: D1 V18, spec R11 — fast is carried on create, on the settings
+/// result and on show: off after the default, the agent's own on with auto.
+#[cfg(unix)]
+#[tokio::test]
+async fn fast_is_reported_on_create_settings_and_show() -> TestResult {
+    use collaboration_protocol::{FastSetting, FastState};
+    let cursor = ReactiveCursor::start(&[]).await?;
+    let (default_target, created) = cursor.create(None).await?;
+    let set = cursor
+        .set(&default_target, ProviderSettingName::Fast, "off")
+        .await
+        .map_err(|error| error.message)?;
+    let shown = cursor.show_fast(&default_target).await?;
+    let (auto_target, created_auto) = cursor.create(Some(FastSetting::Auto)).await?;
+    let shown_auto = cursor.show_fast(&auto_target).await?;
+    cursor.backend.shutdown().await.map_err(str::to_owned)?;
+    ensure_eq!(created.fast, Some(FastState::Off));
+    ensure_eq!(set.effective_settings.fast, Some(FastState::Off));
+    ensure_eq!(shown, Some(FastState::Off));
+    ensure_eq!(created_auto.fast, Some(FastState::On));
+    ensure_eq!(shown_auto, Some(FastState::On));
+    Ok(())
+}
+
+/// Oracle: D1 V19, spec R11 "absent" — after a restart, show of a stored,
+/// unloaded Cursor session has no fast; once loaded, it reports the agent's.
+#[cfg(unix)]
+#[tokio::test]
+async fn cold_host_show_does_not_claim_fast_before_load() -> TestResult {
+    let first = ReactiveCursor::start(&[]).await?;
+    let (target, _) = first.create(None).await?;
+    first.backend.shutdown().await.map_err(str::to_owned)?;
+    let ReactiveCursor { root, .. } = first;
+    let restarted = ReactiveCursor::start_in(root, &[]).await?;
+    let cold = restarted.show_fast(&target).await?;
+    let operation_id = OperationId::generate();
+    operation(
+        restarted
+            .backend
+            .load(ConversationLoadRequest {
+                operation_id: operation_id.clone(),
+                target: target.clone(),
+                generation: Some(generation()?),
+                working_directory: working_directory()?,
+                requested_by: restarted.creator.clone().into(),
+                approver: restarted.creator.clone().into(),
+                requested_policy: policy(),
+            })
+            .await,
+    )?;
+    operation(wait(&restarted.backend, operation_id).await)?;
+    let loaded = restarted.show_fast(&target).await?;
+    restarted.backend.shutdown().await.map_err(str::to_owned)?;
+    ensure_eq!(cold, None);
+    ensure_eq!(loaded, Some(collaboration_protocol::FastState::On));
+    Ok(())
+}
+
+/// Oracle: D1 V15 Host label, spec R9 — a fast failure after a confirmed model
+/// change names the setting fast and the value off, not the model.
+#[cfg(unix)]
+#[tokio::test]
+async fn fast_failure_after_model_change_is_labelled_fast_off() -> TestResult {
+    let cursor = ReactiveCursor::start(&["refuse-fast-after-model"]).await?;
+    let (target, _) = cursor.create(None).await?;
+    let refused = cursor
+        .set(&target, ProviderSettingName::Model, "fixture-b")
+        .await
+        .expect_err("the fast off after the model is refused");
+    cursor.backend.shutdown().await.map_err(str::to_owned)?;
+    ensure_eq!(refused.setting, Some(ProviderSettingName::Fast));
+    ensure_eq!(refused.value.as_deref(), Some("off"));
+    Ok(())
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn model_change_reports_fast_not_offered_to_the_settings_caller() -> TestResult {
+    let cursor = ReactiveCursor::start(&["fast-not-offered-on-fixture-b"]).await?;
+    let (target, _) = cursor.create(None).await?;
+    let prior_settings = cursor.setting_requests()?;
+    let refusal = cursor
+        .set(&target, ProviderSettingName::Model, "fixture-b")
+        .await
+        .expect_err("the new model has no fast off to apply");
+    let catalog = cursor
+        .backend
+        .inspect_session(ProviderSessionInspectRequest {
+            target: target.clone(),
+        })
+        .await
+        .map_err(|error| error.message)?
+        .settings_catalog
+        .ok_or("catalog missing")?;
+    let id = OperationId::generate();
+    operation(
+        cursor
+            .backend
+            .prompt(ConversationPromptRequest {
+                delivery: collaboration_protocol::MessageDelivery::Auto,
+                input_id: None,
+                operation_id: id.clone(),
+                target,
+                generation: Some(generation()?),
+                requested_by: cursor.creator.clone().into(),
+                approver: cursor.creator.clone().into(),
+                prompt: MessageContent::HumanUser {
+                    text: MessageText::try_from("next prompt".to_owned())?,
+                },
+            })
+            .await,
+    )?;
+    let settled = operation(wait(&cursor.backend, id).await)?;
+    cursor.backend.shutdown().await.map_err(str::to_owned)?;
+    let wire: Vec<Value> = serde_json::from_slice(&std::fs::read(&cursor.receipt)?)?;
+    let settings: Vec<_> = wire
+        .iter()
+        .filter(|request| request["method"] == "session/set_config_option")
+        .skip(prior_settings)
+        .map(|request| &request["params"])
+        .collect();
+
+    ensure_eq!(
+        refusal.message.as_str(),
+        "fast is not offered for the current model"
+    );
+    ensure_eq!(refusal.setting, Some(ProviderSettingName::Fast));
+    ensure_eq!(refusal.value.as_deref(), Some("off"));
+    ensure!(
+        catalog
+            .config_options
+            .iter()
+            .any(|option| option.id == "model"
+                && option.current_value
+                    == collaboration_protocol::ProviderConfigValueView::Select {
+                        value: "fixture-b".to_owned()
+                    })
+    );
+    ensure_eq!(settings.len(), 1);
+    ensure_eq!(
+        settings
+            .first()
+            .map(|params| (&params["configId"], &params["value"])),
+        Some((&json!("model"), &json!("fixture-b")))
+    );
+    ensure!(matches!(
+        settled.output,
+        ConversationOperationWaitOutput::Available {
+            settlement: ConversationOperationSettlement::PromptCompleted { .. }
+        }
+    ));
+    ensure_eq!(
+        wire.iter()
+            .filter(|request| request["method"] == "session/prompt")
+            .count(),
+        1
     );
     Ok(())
 }

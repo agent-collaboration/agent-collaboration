@@ -1,3 +1,15 @@
+#[path = "tests/deferred_uncertainty_admission_test.rs"]
+mod deferred_uncertainty_admission_tests;
+#[path = "tests/owner_skill_queue_test.rs"]
+mod owner_skill_queue_tests;
+#[path = "tests/persistence_overlay_test.rs"]
+mod persistence_overlay_tests;
+#[path = "tests/reconcile_reservation_test.rs"]
+mod reconcile_reservation_tests;
+#[path = "tests/restore_recovery_test.rs"]
+mod restore_recovery_tests;
+#[path = "tests/steered_input_join_test.rs"]
+mod steered_input_join_tests;
 #[path = "tests/uncertainty_admission_test.rs"]
 mod uncertainty_admission_tests;
 use super::*;
@@ -166,10 +178,6 @@ async fn delivery_prompt_reports_submission_before_turn_settles() {
     )
     .await
     .expect("fixture initializes");
-    runtime
-        .create_session(PathBuf::from("/tmp"))
-        .await
-        .expect("session/new");
     let store = ProviderOperationStore::open(&root.path().join("operations.sqlite"))
         .await
         .expect("operation store opens");
@@ -182,6 +190,10 @@ async fn delivery_prompt_reports_submission_before_turn_settles() {
     )
     .expect("supervisor initializes");
     let operation_id = OperationId::generate();
+    backend
+        .open_provider_fixture(&endpoint(), PathBuf::from("/tmp"))
+        .await
+        .expect("session/new");
     let target = SessionRef {
         endpoint: endpoint(),
         session_id: SessionId::try_from("fixture-session".to_owned()).expect("session"),
@@ -243,9 +255,13 @@ async fn delivery_prompt_without_loaded_session_is_known_not_submitted() {
         .await
         .expect("delivery prompt admission");
 
+    // Nothing was sent, and the refusal says why (D1 M8); every delivery
+    // consumer handles it as not submitted.
     assert_eq!(
         dispatch,
-        provider_delivery_submission::ProviderPromptDispatch::NotSubmitted
+        provider_delivery_submission::ProviderPromptDispatch::NotSubmitted {
+            reason: Some(provider_session_machines::session_owner::RevokeReason::NotLoaded)
+        }
     );
     backend.shutdown().await.expect("shutdown");
 }
@@ -274,28 +290,25 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
         Arc::clone(&hub),
         hub_endpoint,
         std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     )
     .await
     .expect("fixture initializes");
-    runtime
-        .create_session(PathBuf::from("/tmp"))
-        .await
-        .expect("session/new");
     let backend = Arc::new(
-        ExternalProviderSupervisor::new(
+        ExternalProviderSupervisor::with_fixture_hub(
             vec![ExternalProviderBinding {
                 identity: binding(),
                 runtime,
             }],
             Arc::clone(&store),
+            Arc::clone(&hub),
         )
         .expect("supervisor initializes"),
     );
-    let queue = crate::provider_acp_message_fifo::ProviderAcpMessageFifo::new(
-        Arc::clone(&backend),
-        store,
-        Arc::new(NoLivePeer),
-    );
+    backend
+        .open_provider_fixture(&endpoint(), PathBuf::from("/tmp"))
+        .await
+        .expect("session/new");
     let target = SessionRef {
         endpoint: endpoint(),
         session_id: SessionId::try_from("fixture-session".to_owned()).expect("session"),
@@ -303,7 +316,6 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
     let mut queued_input_ids = Vec::new();
     let mut expected_lines = Vec::new();
     for text in ["first", "second"] {
-        let permit = queue.reserve(&target).expect("queue capacity");
         let operation_id = OperationId::generate();
         let input_id = session_event_model::InputId::generate();
         queued_input_ids.push(input_id.clone());
@@ -336,11 +348,12 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
                 acp_client_runtime::ProviderTurnInput::Compact => panic!("queued ordinary input"),
             },
         );
-        permit.send(
-            crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
-                request: contents,
-                load_policy: collaboration_contracts::LoadPolicy::MayLoad,
-            },
+        assert_eq!(
+            backend
+                .submit_owned_delivery(contents, collaboration_protocol::MessageDelivery::Queue)
+                .await
+                .expect("queue accepted"),
+            crate::session_owner_calls::InputAcceptance::Queued
         );
     }
 
@@ -356,7 +369,7 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
             .expect("prompt event bytes");
         assert_eq!(bytes, expected.as_bytes());
     }
-    queue.shutdown().await;
+    backend.cancel_waiting_owner_inputs().await;
     let hub_target: message_board::SessionRef =
         serde_json::from_value(serde_json::to_value(target).expect("target JSON"))
             .expect("hub target");
@@ -384,10 +397,6 @@ async fn router_queue_shutdown_drops_an_unstarted_prompt() {
     )
     .await
     .expect("fixture initializes");
-    runtime
-        .create_session(PathBuf::from("/tmp"))
-        .await
-        .expect("session/new");
     let store = Arc::new(Mutex::new(
         ProviderOperationStore::open(&root.path().join("operations.sqlite"))
             .await
@@ -403,6 +412,10 @@ async fn router_queue_shutdown_drops_an_unstarted_prompt() {
         )
         .expect("supervisor"),
     );
+    backend
+        .open_provider_fixture(&endpoint(), PathBuf::from("/tmp"))
+        .await
+        .expect("session/new");
     let target = SessionRef {
         endpoint: endpoint(),
         session_id: SessionId::try_from("fixture-session".to_owned()).expect("session"),
@@ -419,11 +432,6 @@ async fn router_queue_shutdown_drops_an_unstarted_prompt() {
     assert_eq!(
         active,
         provider_delivery_submission::ProviderPromptDispatch::Submitted
-    );
-    let queue = crate::provider_acp_message_fifo::ProviderAcpMessageFifo::new(
-        Arc::clone(&backend),
-        Arc::clone(&store),
-        Arc::new(NoLivePeer),
     );
     let queued_id = OperationId::generate();
     let queued_input = session_event_model::InputId::generate();
@@ -456,14 +464,18 @@ async fn router_queue_shutdown_drops_an_unstarted_prompt() {
             acp_client_runtime::ProviderTurnInput::Compact => panic!("queued ordinary input"),
         },
     );
-    queue.reserve(&target).expect("queue capacity").send(
-        crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
-            request: queued_contents,
-            load_policy: collaboration_contracts::LoadPolicy::MayLoad,
-        },
+    assert_eq!(
+        backend
+            .submit_owned_delivery(
+                queued_contents,
+                collaboration_protocol::MessageDelivery::Queue
+            )
+            .await
+            .expect("queue accepted"),
+        crate::session_owner_calls::InputAcceptance::Queued
     );
 
-    queue.shutdown().await;
+    backend.cancel_waiting_owner_inputs().await;
 
     assert!(
         store
@@ -480,7 +492,8 @@ async fn router_queue_shutdown_drops_an_unstarted_prompt() {
 #[tokio::test]
 async fn provider_retirement_settles_queued_input_without_resubmission() {
     // Specification R5: queued Inputs of a lost Session become notSubmitted
-    // with providerRetired and are never sent to a successor connection.
+    // "provider connection closed" and are never sent to a successor
+    // connection.
     let root = tempfile::tempdir().expect("temporary root");
     let runtime = ExternalProviderRuntime::initialize(
         pending_prompt_fixture(),
@@ -488,10 +501,6 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
     )
     .await
     .expect("fixture initializes");
-    runtime
-        .create_session(PathBuf::from("/tmp"))
-        .await
-        .expect("session/new");
     let store = Arc::new(Mutex::new(
         ProviderOperationStore::open(&root.path().join("operations.sqlite"))
             .await
@@ -507,6 +516,10 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
         )
         .expect("supervisor"),
     );
+    backend
+        .open_provider_fixture(&endpoint(), PathBuf::from("/tmp"))
+        .await
+        .expect("session/new");
     let target = SessionRef {
         endpoint: endpoint(),
         session_id: SessionId::try_from("fixture-session".to_owned()).expect("session"),
@@ -523,14 +536,8 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
             .expect("active prompt"),
         provider_delivery_submission::ProviderPromptDispatch::Submitted
     );
-    let queue = crate::provider_acp_message_fifo::ProviderAcpMessageFifo::new(
-        Arc::clone(&backend),
-        Arc::clone(&store),
-        Arc::new(NoLivePeer),
-    );
     let queued_id = OperationId::generate();
     let queued_input_id = session_event_model::InputId::generate();
-    let permit = queue.reserve(&target).expect("queue capacity");
     let push_id = PushId::try_from(agent_automation::AttemptId::generate().as_str().to_owned())
         .expect("UUIDv7 push id");
     let queued_line = MessageText::try_from(format!(
@@ -559,20 +566,25 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
             acp_client_runtime::ProviderTurnInput::Compact => panic!("queued ordinary input"),
         },
     );
-    permit.send(
-        crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
-            request: queued_contents,
-            load_policy: collaboration_contracts::LoadPolicy::MayLoad,
-        },
+    assert_eq!(
+        backend
+            .submit_owned_delivery(
+                queued_contents,
+                collaboration_protocol::MessageDelivery::Queue
+            )
+            .await
+            .expect("queue accepted"),
+        crate::session_owner_calls::InputAcceptance::Queued
     );
     backend
         .runtime_for(&endpoint())
         .expect("provider runtime")
         .shutdown()
         .await;
-    tokio::time::timeout(Duration::from_secs(5), queue.wait_for_workers())
-        .await
-        .expect("queued operation worker settles after provider retirement");
+    backend
+        .queued_operation_registry()
+        .wait_for_not_submitted(&queued_id)
+        .await;
     let snapshot = backend
         .queued_operation_registry()
         .snapshot(&queued_id)
@@ -582,85 +594,10 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
     assert!(matches!(
         snapshot.queue_state,
         Some(collaboration_protocol::ConversationOperationQueueState::NotSubmitted { reason })
-            if reason == "providerRetired"
+            if reason == "provider connection closed"
     ));
-    queue.shutdown().await;
+    backend.cancel_waiting_owner_inputs().await;
     backend.shutdown().await.expect("supervisor shutdown");
-}
-
-#[tokio::test]
-async fn concurrent_admission_precedes_reconcile_live_state_check() {
-    let root = tempfile::tempdir().expect("temporary root");
-    let runtime = ExternalProviderRuntime::initialize(
-        create_fixture(),
-        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
-    )
-    .await
-    .expect("fixture initializes");
-    let store = ProviderOperationStore::open(&root.path().join("operations.sqlite"))
-        .await
-        .expect("operation store opens");
-    let backend = ExternalProviderSupervisor::new(
-        vec![ExternalProviderBinding {
-            identity: binding(),
-            runtime,
-        }],
-        Arc::new(Mutex::new(store)),
-    )
-    .expect("supervisor initializes");
-    let operation_id = OperationId::generate();
-
-    let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
-    let (release_tx, release_rx) = tokio::sync::oneshot::channel();
-    *backend
-        .inner
-        .admission_test_pause
-        .lock()
-        .expect("admission test pause") = Some(AdmissionTestPause {
-        entered: entered_tx,
-        release: release_rx,
-    });
-    let create_backend = backend.clone();
-    let create_operation_id = operation_id.clone();
-    let create_task = tokio::spawn(async move {
-        create_backend
-            .create(ConversationCreateRequest {
-                settings: None,
-                operation_id: create_operation_id,
-                endpoint: endpoint(),
-                generation: Some(generation()),
-                working_directory: ProviderWorkingDirectory::try_from("/tmp".to_owned())
-                    .expect("working directory"),
-                created_by: (requester()).into(),
-                approver: (requester()).into(),
-                requested_policy: ProviderRequestedPolicy {
-                    access: RouterAccess::WriteRestricted,
-                },
-            })
-            .await
-    });
-    entered_rx.await.expect("admission holds the store lock");
-    let reconcile_operation_id = operation_id.clone();
-    let reconcile = backend.reconcile(ConversationOperationReconcileRequest {
-        operation_id: reconcile_operation_id,
-    });
-    tokio::pin!(reconcile);
-    assert!(futures_util::poll!(&mut reconcile).is_pending());
-    release_tx.send(()).expect("release admission");
-
-    let submitted = create_task
-        .await
-        .expect("create task joins")
-        .expect("create admitted");
-    assert_eq!(submitted.operation.operation_id, operation_id);
-    let reconciled = reconcile.await.expect("live operation reconciles");
-    assert_eq!(reconciled.stage, ProviderOperationStage::MayHaveDispatched);
-    assert_eq!(
-        reconciled.reconciliation,
-        ProviderReconciliationState::Unresolved
-    );
-
-    backend.shutdown().await.expect("supervisor shuts down");
 }
 
 #[test]
@@ -688,7 +625,9 @@ fn typed_runtime_failure_mapping_never_classifies_provider_text() {
         assert_eq!(failure.provider_code, Some(-32603));
     }
     for error in [
-        ExternalProviderRuntimeError::LocalBusy,
+        ExternalProviderRuntimeError::LocalBusy {
+            answer: "a turn is running; queue the message or cancel the turn".to_owned(),
+        },
         ExternalProviderRuntimeError::LocalNotFound,
         ExternalProviderRuntimeError::LocalCancelTargetMismatch,
         ExternalProviderRuntimeError::AuthenticationRequired {

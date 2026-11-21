@@ -36,6 +36,8 @@ const stepSchema = z.discriminatedUnion("action", [
   }),
 ]);
 
+const messageFrameSchema = z.union([objectSchema, z.array(objectSchema).min(1)]);
+
 class FixtureMismatch extends Error {}
 
 function mismatch(stepNumber: number, expected: unknown, actual: unknown): FixtureMismatch {
@@ -50,6 +52,17 @@ async function readMessage(io: AcpStdio, stepNumber: number): Promise<Record<str
   return request;
 }
 
+async function readMessageFrame(
+  io: AcpStdio,
+  stepNumber: number,
+  expectsBatch: boolean,
+): Promise<z.infer<typeof messageFrameSchema>> {
+  const line = await io.nextLine();
+  if (line === undefined)
+    throw mismatch(stepNumber, expectsBatch ? "JSON-RPC frame" : "JSON-RPC message", "EOF");
+  return messageFrameSchema.parse(decode(line));
+}
+
 async function expectUnordered(
   io: AcpStdio,
   stepNumber: number,
@@ -57,7 +70,7 @@ async function expectUnordered(
 ): Promise<void> {
   const pending = [...messages];
   while (pending.length > 0) {
-    const actual = await readMessage(io, stepNumber);
+    const actual = await readMessageFrame(io, stepNumber, pending.some(Array.isArray));
     const matched = pending.findIndex((expected) => containsExpected(actual, expected));
     if (matched === -1) throw mismatch(stepNumber, pending, actual);
     pending.splice(matched, 1);
@@ -105,7 +118,7 @@ export async function main(): Promise<void> {
           break;
         }
         case "expect_message": {
-          const actual = await readMessage(io, stepNumber);
+          const actual = await readMessageFrame(io, stepNumber, Array.isArray(step.message));
           if (!containsExpected(actual, step.message))
             throw mismatch(stepNumber, step.message, actual);
           break;

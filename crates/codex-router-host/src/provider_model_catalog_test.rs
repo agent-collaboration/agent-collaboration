@@ -1,11 +1,13 @@
 use super::*;
-use acp_client_runtime::{ProviderConfigOption, ProviderConfigValue, ProviderSettingChoice};
+use provider_session_machines::ProviderSettingKind;
+use provider_session_machines::{ProviderConfigOption, ProviderConfigValue, ProviderSettingChoice};
 
 #[test]
 fn model_choices_replace_provider_default_in_agent_order() {
     let catalog = ProviderSettingsCatalog {
-        model_reasoning: acp_client_runtime::ModelReasoningMetadata::default(),
+        model_reasoning: provider_session_machines::ModelReasoningMetadata::default(),
         current_mode: None,
+        mode_observation: provider_session_machines::ProviderModeObservation::FromCatalogue,
         modes: Vec::new(),
         config_options: vec![ProviderConfigOption {
             id: "model".into(),

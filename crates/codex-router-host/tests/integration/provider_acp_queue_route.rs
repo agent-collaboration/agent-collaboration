@@ -39,8 +39,33 @@ impl LiveSessionOwnershipCheck for NoLivePeer {
     }
 }
 
-struct RecordedEvidence(tokio::sync::Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>);
+struct RecordedEvidence(
+    tokio::sync::Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>,
+    Arc<RetainedDispatchEvidence>,
+);
+
+#[derive(Default)]
+struct RetainedDispatchEvidence(
+    tokio::sync::Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>,
+);
+
+impl AttemptEvidenceSink for RetainedDispatchEvidence {
+    fn record(
+        &self,
+        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+    ) -> DeliveryFuture<'_, ()> {
+        Box::pin(async move {
+            self.0.lock().await.push(evidence);
+            Ok(())
+        })
+    }
+}
+
 impl AttemptEvidenceSink for RecordedEvidence {
+    fn retain_queued_dispatch(&self) -> Option<std::sync::Arc<dyn AttemptEvidenceSink>> {
+        Some(self.1.clone())
+    }
+
     fn record(
         &self,
         evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
@@ -114,10 +139,6 @@ async fn idle_explicit_queue_is_accepted_and_drains_for_both_providers() {
         )
         .await
         .expect("fixture provider");
-        runtime
-            .create_session(PathBuf::from("/tmp"))
-            .await
-            .expect("session/new");
         let store = Arc::new(tokio::sync::Mutex::new(
             ProviderOperationStore::open(&root.path().join("operations.sqlite"))
                 .await
@@ -136,6 +157,7 @@ async fn idle_explicit_queue_is_accepted_and_drains_for_both_providers() {
                 created_by: (target.clone()).into(),
                 approver: (target.clone()).into(),
                 updated_at_ms: 1,
+                resume: Default::default(),
             })
             .await
             .expect("session record");
@@ -149,6 +171,11 @@ async fn idle_explicit_queue_is_accepted_and_drains_for_both_providers() {
             )
             .expect("supervisor"),
         );
+        let created = supervisor
+            .open_provider_fixture(&target.endpoint, PathBuf::from("/tmp"))
+            .await
+            .expect("session/new");
+        assert_eq!(created, String::from(target.session_id.clone()));
         let directory = EndpointDirectory::new(service_id.clone());
         directory
             .publish(EndpointDescription {
@@ -175,8 +202,9 @@ async fn idle_explicit_queue_is_accepted_and_drains_for_both_providers() {
             Arc::clone(&supervisor),
             store,
             Arc::new(NoLivePeer),
+            std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
         );
-        let evidence = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()));
+        let evidence = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()), Arc::default());
         let attempt = AttemptId::generate();
         let push_id = PushId::try_from(attempt.as_str().to_owned()).expect("UUIDv7 push id");
         let correlation = DeliveryCorrelationId::try_from(push_id.as_str().to_owned())
@@ -229,6 +257,11 @@ async fn idle_explicit_queue_is_accepted_and_drains_for_both_providers() {
         let mut marker = Vec::new();
         stream.read_to_end(&mut marker).await.expect("event bytes");
         assert_eq!(marker, b"queued-prompt", "{endpoint_id}");
+        assert!(matches!(
+            evidence.1.0.lock().await.as_slice(),
+            [RouteEffectEvidence::ProviderAcp(effect)]
+                if effect.submission == SubmissionEffect::Dispatching
+        ));
         route.shutdown_queue().await;
         supervisor.shutdown().await.expect("shutdown");
     }

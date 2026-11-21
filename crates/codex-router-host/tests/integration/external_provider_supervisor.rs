@@ -179,21 +179,30 @@ fn saturated_load_fixture(
     )
 }
 
-async fn assert_process_reaped(process_id_path: &std::path::Path) -> TestResult {
+async fn wait_for_fixture_loads(admission_log: &std::path::Path, expected: usize) {
+    loop {
+        let received = tokio::fs::read_to_string(admission_log)
+            .await
+            .unwrap_or_default()
+            .lines()
+            .count();
+        if received >= expected {
+            assert_eq!(received, expected, "each restore should dispatch once");
+            return;
+        }
+        tokio::task::yield_now().await;
+    }
+}
+
+fn assert_process_reaped(process_id_path: &std::path::Path) -> TestResult {
     let process_id = std::fs::read_to_string(process_id_path)?.parse::<i32>()?;
     let process_id = rustix::process::Pid::from_raw(process_id).ok_or("invalid provider PID")?;
-    tokio::time::timeout(std::time::Duration::from_secs(2), async {
-        loop {
-            if matches!(
-                rustix::process::test_kill_process(process_id),
-                Err(rustix::io::Errno::SRCH)
-            ) {
-                break;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await?;
+    if !matches!(
+        rustix::process::test_kill_process(process_id),
+        Err(rustix::io::Errno::SRCH)
+    ) {
+        return Err("provider process still exists after shutdown joined its runtime".into());
+    }
     Ok(())
 }
 
@@ -270,8 +279,14 @@ mod settings_projection_tests;
 #[path = "../external_provider_supervisor/lifecycle_tests.rs"]
 mod lifecycle_tests;
 
+#[path = "../external_provider_supervisor/supervisor_shutdown_tests.rs"]
+mod supervisor_shutdown_tests;
+
 #[path = "../external_provider_supervisor/initialization_authentication_test.rs"]
 mod initialization_authentication_tests;
 
 #[path = "../external_provider_supervisor/cursor_settings_tests.rs"]
 mod cursor_settings_tests;
+
+#[path = "../external_provider_supervisor/start_mode_tests.rs"]
+mod start_mode_tests;

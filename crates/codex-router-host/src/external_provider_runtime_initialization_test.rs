@@ -68,7 +68,7 @@ async fn exercise_sessions_and_setting(
         .set_setting(
             first,
             acp_client_runtime::ProviderSettingRequest {
-                kind: acp_client_runtime::ProviderSettingKind::Effort,
+                kind: provider_session_machines::ProviderSettingKind::Effort,
                 value: "high".to_owned(),
                 intent: session_event_model::SettingApplicationIntent::ExplicitChange,
                 expected_model: None,

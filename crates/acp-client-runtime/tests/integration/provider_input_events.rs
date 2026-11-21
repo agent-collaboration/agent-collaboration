@@ -1,14 +1,40 @@
 //! Provider Input and Turn identity at the scripted ACP boundary.
 
+#[path = "provider_input_events/cancelled_turn.rs"]
+mod cancelled_turn;
+#[path = "provider_input_events/submitted_prompt.rs"]
+mod submitted_prompt;
+
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::{
-    AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
-    HistoryReplayFuture, InteractionFuture, InteractionPort, ProviderPersistenceTarget,
-    RefusedApprovalOffer, SessionEventSink,
+    ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch, HistoryReplayFuture,
+    InteractionFuture, InteractionPort, ProviderPersistenceTarget, RefusedApprovalOffer,
+    SessionEventSink,
 };
 use session_event_model::{ApprovalRequest, InputId, SessionEvent};
 use tokio_util::sync::CancellationToken;
+
+#[expect(
+    clippy::expect_used,
+    reason = "A closed fixture sink cannot acknowledge activation."
+)]
+async fn wait_for_activation(events: &mut tokio::sync::mpsc::UnboundedReceiver<SessionEvent>) {
+    let mut settings = false;
+    loop {
+        match events.recv().await.expect("session activation event") {
+            SessionEvent::SettingsChanged { .. } => settings = true,
+            SessionEvent::StateChanged {
+                state: session_event_model::SessionState::Idle,
+            } => {
+                assert!(settings, "settings precede the activation Idle");
+                break;
+            }
+            _ => {}
+        }
+    }
+}
 
 const INJECTED_STEER_FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -71,9 +97,6 @@ impl InteractionPort for NoopInteractionPort {
         _context: Self::Context,
         _reason: &'static str,
     ) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
-    fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
         Box::pin(async {})
     }
 }
@@ -157,10 +180,7 @@ async fn assert_injected_steer_receipt(
         .create_session(root.path().to_path_buf())
         .await
         .expect("session opens");
-    assert!(matches!(
-        events.recv().await,
-        Some(SessionEvent::SettingsChanged { .. })
-    ));
+    wait_for_activation(&mut events).await;
     let prompt_input = InputId::new("prompt-input").expect("input ID");
     let steer_input = InputId::new("steer-input").expect("input ID");
     let prompt = client.submit_with_approval_dispatch_for_input(
@@ -226,16 +246,20 @@ async fn assert_injected_steer_receipt(
     client.shutdown().await;
 }
 
-/// Oracle: R10 keeps an agent's startedNewTurn outcome distinct from an
-/// injected steer even when Router requested promptRequired idle behavior.
+/// T2 keeps the applied steer and both terminal observations separately correlated.
 #[tokio::test]
-async fn started_new_turn_uses_the_steer_input_id() {
+async fn started_new_turn_uses_the_steer_input_id_and_ends_on_provider_idle() {
     let root = tempfile::tempdir().expect("fixture root");
+    let receipt = root.path().join("started-steer-wire.jsonl");
     let (sender, mut events) = tokio::sync::mpsc::unbounded_channel();
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
             executable: PathBuf::from("node"),
-            arguments: vec![STARTED_STEER_FIXTURE.to_owned(), "started".to_owned()],
+            arguments: vec![
+                STARTED_STEER_FIXTURE.to_owned(),
+                "started".to_owned(),
+                receipt.display().to_string(),
+            ],
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,
         },
@@ -249,10 +273,13 @@ async fn started_new_turn_uses_the_steer_input_id() {
         .create_session(root.path().to_path_buf())
         .await
         .expect("session opens");
-    assert!(matches!(
-        events.recv().await,
-        Some(SessionEvent::SettingsChanged { .. })
-    ));
+    wait_for_activation(&mut events).await;
+    let first = held_foreground(&client, session_id.clone());
+    tokio::pin!(first);
+    expect_held_foreground(&mut events, &mut first).await;
+    assert!(
+        matches!(events.recv().await, Some(SessionEvent::ItemStarted { item }) if item.text.as_deref() == Some("old response"))
+    );
     let input_id = InputId::new("new-turn-steer").expect("input ID");
     let steering = client
         .steer_contents_with_input(
@@ -268,10 +295,7 @@ async fn started_new_turn_uses_the_steer_input_id() {
         steering,
         acp_client_runtime::ProviderSteeringOutcome::StartedNewTurn
     );
-    let event = tokio::time::timeout(Duration::from_secs(2), events.recv())
-        .await
-        .expect("turn starts")
-        .expect("event");
+    let event = next_turn_start(&mut events).await;
     let SessionEvent::TurnStarted {
         turn_id,
         input_id: observed_input,
@@ -287,27 +311,79 @@ async fn started_new_turn_uses_the_steer_input_id() {
         7
     );
     assert_submitted_user_item(&mut events, "Begin").await;
-    let ended = tokio::time::timeout(Duration::from_secs(2), events.recv())
+    assert_eq!(
+        client
+            .session_activity("fixture-session".to_owned())
+            .expect("activity"),
+        acp_client_runtime::ProviderSessionActivity::Running
+    );
+    crate::acp_wire_capture::release_fixture(&receipt, ".release-old")
+        .expect("release old prompt's actual terminal");
+    let original = first.await.expect("old prompt retains its response");
+    assert_eq!(
+        original.stop_reason,
+        session_event_model::StopReason::MaxTokens
+    );
+    assert_eq!(original.output, "old response");
+    assert!(
+        matches!(events.recv().await, Some(SessionEvent::ItemStarted { item }) if item.text.as_deref() == Some("new response"))
+    );
+    assert!(matches!(events.recv().await, Some(SessionEvent::TurnEnded {
+        turn_id: earlier,
+        outcome: session_event_model::TurnOutcome::Ended { stop_reason: session_event_model::StopReason::MaxTokens, .. },
+    }) if earlier != turn_id));
+    assert_eq!(
+        client
+            .session_activity("fixture-session".to_owned())
+            .expect("activity after old terminal"),
+        acp_client_runtime::ProviderSessionActivity::Running
+    );
+    crate::acp_wire_capture::release_fixture(&receipt, ".release-idle")
+        .expect("release provider idle notification");
+    assert!(matches!(
+        events.recv().await,
+        Some(SessionEvent::ItemCompleted { .. })
+    ));
+    let ended = events
+        .recv()
         .await
-        .expect("unobservable turn settles")
-        .expect("event");
+        .expect("the new turn's observed terminal event");
     assert_eq!(
         ended,
         SessionEvent::TurnEnded {
             turn_id,
-            outcome: session_event_model::TurnOutcome::Lost {
-                reason: session_event_model::TurnLostReason::EndNotObservable
+            outcome: session_event_model::TurnOutcome::Ended {
+                stop_reason: session_event_model::StopReason::Unknown("provider_idle".to_owned()),
+                local_cause: None,
             },
         }
     );
     assert_eq!(
         client
             .session_activity("fixture-session".to_owned())
-            .await
             .expect("activity"),
         acp_client_runtime::ProviderSessionActivity::Idle
     );
     client.shutdown().await;
+    let wire = crate::acp_wire_capture::read_capture(&receipt);
+    assert_eq!(
+        crate::acp_wire_capture::frames_of(
+            &wire,
+            crate::acp_wire_capture::AgentSide::Received,
+            "session/prompt"
+        )
+        .len(),
+        1
+    );
+    assert_eq!(
+        crate::acp_wire_capture::frames_of(
+            &wire,
+            crate::acp_wire_capture::AgentSide::Received,
+            "_session/steering"
+        )
+        .len(),
+        1
+    );
 }
 
 #[tokio::test]
@@ -331,10 +407,10 @@ async fn prompt_required_preserves_steer_input_when_prompted_normally() {
         .create_session(root.path().to_path_buf())
         .await
         .expect("session opens");
-    assert!(matches!(
-        events.recv().await,
-        Some(SessionEvent::SettingsChanged { .. })
-    ));
+    wait_for_activation(&mut events).await;
+    let first = held_foreground(&client, session_id.clone());
+    tokio::pin!(first);
+    expect_held_foreground(&mut events, &mut first).await;
     let input_id = InputId::new("steer-then-prompt").expect("input ID");
     let steering = client
         .steer_contents_with_input(
@@ -348,24 +424,10 @@ async fn prompt_required_preserves_steer_input_when_prompted_normally() {
         .expect("steer response");
     assert_eq!(
         steering,
-        acp_client_runtime::ProviderSteeringOutcome::PromptRequired
+        acp_client_runtime::ProviderSteeringOutcome::StartedNewTurn
     );
-    client
-        .submit_with_approval_dispatch_for_input(
-            session_id,
-            input_id.clone(),
-            acp_client_runtime::ProviderTurnInput::Prompt(
-                session_event_model::ProviderSubmission::plain(vec![
-                    session_event_model::PromptContent::text("Hello".to_owned())
-                        .expect("text prompt"),
-                ]),
-            ),
-            (),
-            None,
-        )
-        .await
-        .expect("prompt ends");
-    let started = events.recv().await.expect("turn start");
+    first.await.expect("the foreground prompt settles");
+    let started = next_turn_start(&mut events).await;
     let SessionEvent::TurnStarted {
         turn_id,
         input_id: observed_input,
@@ -381,6 +443,69 @@ async fn prompt_required_preserves_steer_input_when_prompted_normally() {
     }) if ended_id == turn_id)
     );
     client.shutdown().await;
+}
+
+#[expect(
+    clippy::expect_used,
+    reason = "The fixture's literal input ID and text must be valid."
+)]
+async fn held_foreground(
+    client: &AgentSessionClient<NoopInteractionPort>,
+    session: String,
+) -> Result<
+    acp_client_runtime::ExternalProviderPromptOutcome,
+    acp_client_runtime::ExternalProviderRuntimeError,
+> {
+    client
+        .submit_with_approval_dispatch_for_input(
+            session,
+            InputId::new("held-foreground").expect("fixture input ID"),
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("First".to_owned())
+                        .expect("fixture prompt"),
+                ]),
+            ),
+            (),
+            None,
+        )
+        .await
+}
+
+async fn expect_held_foreground(
+    events: &mut tokio::sync::mpsc::UnboundedReceiver<SessionEvent>,
+    foreground: &mut (
+             impl std::future::Future<
+        Output = Result<
+            acp_client_runtime::ExternalProviderPromptOutcome,
+            acp_client_runtime::ExternalProviderRuntimeError,
+        >,
+    > + Unpin
+         ),
+) {
+    let started = tokio::select! {
+        result = foreground => panic!("foreground settled before steering: {result:?}"),
+        event = next_turn_start(events) => event,
+    };
+    assert!(
+        matches!(started, SessionEvent::TurnStarted { input_id, .. } if input_id.as_str() == "held-foreground")
+    );
+    assert_submitted_user_item(events, "First").await;
+}
+
+#[expect(
+    clippy::expect_used,
+    reason = "A closed fixture sink cannot acknowledge turn start."
+)]
+async fn next_turn_start(
+    events: &mut tokio::sync::mpsc::UnboundedReceiver<SessionEvent>,
+) -> SessionEvent {
+    loop {
+        let event = events.recv().await.expect("turn start event");
+        if matches!(event, SessionEvent::TurnStarted { .. }) {
+            return event;
+        }
+    }
 }
 
 /// Oracle: R24 presents the same ordered text Items to every subscriber;

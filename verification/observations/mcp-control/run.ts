@@ -34,6 +34,19 @@ import { openEvidence, record, type JourneyContext } from "./journeys/journey-st
 import { ProviderStoreReadback } from "./evidence/role-readback.ts";
 import { StreamingMcpClient } from "./transport/streaming-mcp-client.ts";
 import { z } from "zod";
+import { savedModeRestartCase } from "./journeys/saved-mode-restart.ts";
+import { inFolderAllowanceCase } from "./journeys/in-folder-allowance.ts";
+import { hostAdmissionSmokeCase } from "./journeys/host-admission-smoke.ts";
+import { unansweredReopenCase } from "./journeys/unanswered-reopen.ts";
+import { unansweredCloseCase } from "./journeys/unanswered-close.ts";
+import { cancelRestartCase, unconfirmedCancelCase } from "./journeys/unconfirmed-cancel.ts";
+import { cancelQueuedCase, refusedSteerCase } from "./journeys/held-turn-controls.ts";
+import {
+  liveQueueCase,
+  liveSteerCase,
+  liveOtherSessionCase,
+  liveQueueCloseCase,
+} from "./journeys/live-admission-placement.ts";
 
 const CASES: Readonly<Record<ControlCase, (inputs: CaseInputs) => Promise<CaseResult>>> = {
   lifecycle: lifecycleCase,
@@ -44,9 +57,22 @@ const CASES: Readonly<Record<ControlCase, (inputs: CaseInputs) => Promise<CaseRe
   loadResume: loadResumeCase,
   continuationRetain: continuationRetainCase,
   continuationReload: continuationReloadCase,
+  savedModeRestart: savedModeRestartCase,
+  inFolderAllowance: inFolderAllowanceCase,
+  hostAdmissionSmoke: hostAdmissionSmokeCase,
+  unansweredReopen: unansweredReopenCase,
+  unansweredClose: unansweredCloseCase,
+  unconfirmedCancel: unconfirmedCancelCase,
+  cancelRestart: cancelRestartCase,
+  cancelQueued: cancelQueuedCase,
+  refusedSteer: refusedSteerCase,
+  liveQueue: liveQueueCase,
+  liveSteer: liveSteerCase,
+  liveOtherSession: liveOtherSessionCase,
+  liveQueueClose: liveQueueCloseCase,
 };
 
-async function discover(context: JourneyContext): Promise<readonly string[]> {
+async function discover(context: JourneyContext, plan: ControlPlan): Promise<readonly string[]> {
   const initialized = await context.client.initialize(15_000);
   record(context, { step: "initialize", outcome: initialized });
   if (initialized.kind !== "answered") throw new Error(`MCP initialize was ${initialized.kind}`);
@@ -57,9 +83,65 @@ async function discover(context: JourneyContext): Promise<readonly string[]> {
     .object({ tools: z.array(z.looseObject({ name: z.string() })) })
     .parse(listed.value)
     .tools.map((tool) => tool.name);
-  const missing = toolCoverageDefects(loadAcpInventory(), names);
+  const missing =
+    plan.sessionControl === undefined
+      ? toolCoverageDefects(loadAcpInventory(), names)
+      : sessionControlTools(plan).filter((name) => !names.includes(name));
   if (missing.length > 0) throw new Error(`inventory: ${missing.join("; ")}`);
   return names;
+}
+
+function sessionControlTools(plan: ControlPlan): string[] {
+  const common = [
+    "conversation_create",
+    "conversation_prompt",
+    "conversation_operation_wait",
+    "conversation_operation_show",
+    "provider_session_inspect",
+  ];
+  if (plan.cases.includes("inFolderAllowance")) {
+    return plan.sessionControl?.allowanceJourney === "autoReopen"
+      ? [...common, "conversation_load", "conversation_settings_set"]
+      : common;
+  }
+  if (plan.cases.includes("hostAdmissionSmoke")) {
+    return plan.sessionControl?.restart?.phase === "seed"
+      ? [...common, "events_observe", "conversation_cancel", "conversation_close"]
+      : [...common, "conversation_load", "conversation_settings_set"];
+  }
+  if (
+    plan.cases.includes("liveQueue") ||
+    plan.cases.includes("liveSteer") ||
+    plan.cases.includes("liveOtherSession")
+  )
+    return common;
+  if (plan.cases.includes("liveQueueClose")) return [...common, "conversation_close"];
+  if (plan.cases.includes("cancelQueued"))
+    return [...common, "events_observe", "conversation_cancel"];
+  if (plan.cases.includes("refusedSteer")) return [...common, "events_observe"];
+  if (plan.cases.includes("unconfirmedCancel") || plan.cases.includes("cancelRestart"))
+    return [
+      ...common,
+      "events_observe",
+      "conversation_cancel",
+      "conversation_close",
+      "conversation_operation_reconcile",
+      "conversation_" + plan.sessionControl?.restore,
+      ...(plan.peer.kind === "provider" && plan.peer.selection.selectOnRestore
+        ? ["conversation_settings_set"]
+        : []),
+    ];
+  if (plan.sessionControl?.observeSilentRestorePrompt)
+    common.push("events_observe", "conversation_cancel");
+  const restore = "conversation_" + plan.sessionControl?.restore;
+  return [
+    ...common,
+    restore,
+    ...(plan.cases.includes("savedModeRestart") ? [] : ["conversation_close"]),
+    ...(plan.peer.kind === "provider" && plan.peer.selection.selectOnRestore
+      ? ["conversation_settings_set"]
+      : []),
+  ];
 }
 
 /** Runs the declared cases in order and stops all later input after the first that does not pass. */
@@ -124,7 +206,7 @@ async function main(): Promise<number> {
   };
   const store = new ProviderStoreReadback(target.providerStore);
   try {
-    await discover(context);
+    await discover(context, plan);
     const results = await runCases(plan, context, store);
     const summary = {
       results,

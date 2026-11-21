@@ -41,7 +41,7 @@ struct ConversationArguments {
 enum ConversationCommand {
     /// Create a conversation and return its stable SessionRef without submitting a prompt.
     #[command(
-        long_about = "Create a conversation and return its stable SessionRef without submitting a prompt. --model and --effort are required for Codex endpoints; provider endpoints accept advertised --mode, --model and --effort values. Example: agent-collaboration conversation create --endpoint codex-local --model gpt-5.6 --effort medium --access workspace-write --cwd /path/to/project"
+        long_about = "Create a conversation and return its stable SessionRef without submitting a prompt. --model and --effort are required for Codex endpoints. Claude and Cursor require --mode: auto, or a mode the agent offers; they accept advertised --model and --effort values, and run with fast off unless --fast auto. Example: agent-collaboration conversation create --endpoint codex-local --model gpt-5.6 --effort medium --access workspace-write --cwd /path/to/project"
     )]
     Create(CreateArguments),
     /// Run an ACP prompt and wait up to the caller deadline. A detached Codex turn
@@ -69,9 +69,13 @@ enum ConversationCommand {
 struct CreateArguments {
     #[arg(long)]
     endpoint: String,
-    /// Provider mode option value advertised by the agent.
+    /// Required for Claude and Cursor: auto, or a mode the agent offers.
     #[arg(long)]
     mode: Option<String>,
+    /// The agent's fast option: off (the default) turns it off and keeps it
+    /// off; auto leaves it to the agent. Claude and Cursor only.
+    #[arg(long, value_enum)]
+    fast: Option<ConversationFast>,
     /// Required for Codex endpoints; provider value must be advertised by the agent.
     #[arg(long)]
     model: Option<String>,
@@ -97,6 +101,10 @@ struct CreateArguments {
     approver_owner: bool,
     #[arg(long)]
     root_message_id: Option<String>,
+    /// A folder this Claude or Cursor session, started in auto, may also work
+    /// in without asking, on top of the Router's work roots. Repeatable.
+    #[arg(long = "work-root")]
+    work_roots: Vec<PathBuf>,
     #[arg(long)]
     cwd: PathBuf,
     #[arg(long)]
@@ -122,12 +130,23 @@ struct PromptArguments {
     model: Option<String>,
     #[arg(long)]
     effort: Option<String>,
+    /// With --new, required for Claude and Cursor: auto, or a mode the agent offers.
+    #[arg(long)]
+    mode: Option<String>,
+    /// With --new: off (the default) or auto, as on conversation create.
+    #[arg(long, value_enum)]
+    fast: Option<ConversationFast>,
     #[arg(long)]
     generation: Option<String>,
     #[arg(long)]
     operation_id: Option<String>,
     #[arg(long)]
     prompt_operation_id: Option<String>,
+    /// For a busy Claude or Cursor session: auto steers if the agent can and
+    /// otherwise says cannot steer, naming queue and interrupt; queue waits
+    /// for the running turn to end; steer steers or is refused.
+    #[arg(long, value_enum, default_value = "auto")]
+    delivery: client_commands::ConversationDelivery,
     #[arg(long)]
     access: Option<ConversationAccess>,
     /// Exact SessionRef JSON for this caller. Defaults to the unique active Codex, Claude Code, or Cursor harness.
@@ -139,6 +158,11 @@ struct PromptArguments {
     /// Board root message ID used to share owner-private scratch across sessions.
     #[arg(long)]
     root_message_id: Option<String>,
+    /// With --new: a folder this Claude or Cursor session, started in auto,
+    /// may also work in without asking, on top of the Router work roots.
+    /// Repeatable.
+    #[arg(long = "work-root", requires = "new_session")]
+    work_roots: Vec<PathBuf>,
     #[arg(long)]
     cwd: Option<PathBuf>,
     #[arg(
@@ -222,6 +246,19 @@ struct CloseArguments {
 enum ConversationAccess {
     WriteRestricted,
     WorkspaceWrite,
+}
+#[derive(Clone, Copy, ValueEnum)]
+enum ConversationFast {
+    Off,
+    Auto,
+}
+impl ConversationFast {
+    const fn setting(self) -> collaboration_client::protocol::FastSetting {
+        match self {
+            Self::Off => collaboration_client::protocol::FastSetting::Off,
+            Self::Auto => collaboration_client::protocol::FastSetting::Auto,
+        }
+    }
 }
 impl ConversationAccess {
     const fn as_str(self) -> &'static str {
@@ -484,6 +521,9 @@ fn prepare(args: &PromptArguments) -> Result<(PathBuf, String), String> {
             "--model is invalid with --session: model is fixed for a thread; fork to change it"
                 .into(),
         );
+    }
+    if !args.new_session && (args.mode.is_some() || args.fast.is_some()) {
+        return Err("--mode and --fast are valid only with --new".into());
     }
     if args.fork.is_none() && !args.new_session && args.access.is_some() {
         return Err("--access is invalid with --session: access is fixed for a thread".into());

@@ -22,7 +22,8 @@ fn actual_typescript_model_response_enters_real_rust_decoder() {
         .expect("initial response carrier");
     let facts =
         ClaudeAcpBehavior::new(ClaudeSkillSource::Annotated).decode_model_metadata(metadata);
-    let acp_client_runtime::ModelReasoning::Select(select) = facts.for_model("sonnet") else {
+    let provider_session_machines::ModelReasoning::Select(select) = facts.for_model("sonnet")
+    else {
         panic!("qualified descriptor")
     };
     assert_eq!(select.config_id(), "effort");
@@ -37,8 +38,8 @@ fn actual_typescript_model_response_enters_real_rust_decoder() {
     );
     assert_eq!(
         facts.for_model("haiku"),
-        acp_client_runtime::ModelReasoning::Unknown(
-            acp_client_runtime::ModelReasoningUnknown::Unavailable
+        provider_session_machines::ModelReasoning::Unknown(
+            provider_session_machines::ModelReasoningUnknown::Unavailable
         )
     );
 }
@@ -95,8 +96,8 @@ fn actual_typescript_metadata_output_enters_real_rust_decoder() {
                 .pointer("/_meta/codexRouter/modelReasoning")
                 .expect("malformed model carrier")
         ),
-        acp_client_runtime::ModelReasoningMetadata::Unknown(
-            acp_client_runtime::ModelReasoningUnknown::Malformed
+        provider_session_machines::ModelReasoningMetadata::Unknown(
+            provider_session_machines::ModelReasoningUnknown::Malformed
         )
     );
     let facts = behavior

@@ -1,5 +1,7 @@
 //! Provider route decisions before any client effect.
 
+mod restored_mode_delivery;
+
 use crate::provider_fixture_launch;
 
 use agent_automation::{
@@ -12,14 +14,17 @@ use codex_router_host::{
 };
 use collaboration_contracts::{
     AttemptReconciliation, AttemptReconciliationContext, DeliveryPrecondition, LoadPolicy,
-    NOT_LOADED_REASON, RoutePresence, SessionDeliveryRoute, SessionMessageDelivery,
+    NOT_LOADED_REASON, ProviderConversationBackend, RoutePresence, SessionDeliveryRoute,
+    SessionMessageDelivery,
     layer_zero::{DeliveryRequest as PreparedDeliveryRequest, PreparedPush},
 };
 use collaboration_protocol::{
-    AttemptId, CodexGeneration, DeliveryClientReceipt, DeliveryCorrelationId, DeliveryOutcome,
-    DeliveryRejectionReason, GenerationNumber, MessageDelivery, MessageText, OperationId,
-    ProviderOperationEffect, ProviderOperationKind, ProviderReconciliationState,
-    ProviderRequestedPolicy, ProviderWorkingDirectory, PushId, RouterAccess,
+    AttemptId, CodexGeneration, ConversationLoadRequest, ConversationOperationFailureKind,
+    ConversationOperationWaitRequest, DeliveryClientReceipt, DeliveryCorrelationId,
+    DeliveryOutcome, DeliveryRejectionReason, GenerationNumber, MessageDelivery, MessageText,
+    OperationId, PositiveSeconds, ProviderOperationEffect, ProviderOperationKind,
+    ProviderOperationStage, ProviderReconciliationState, ProviderRequestedPolicy,
+    ProviderWorkingDirectory, PushId, RouterAccess,
 };
 use collaboration_runtime::{
     EndpointDirectory, ProviderOperationAdmission, ProviderOperationStore, ProviderSessionRecord,
@@ -41,18 +46,17 @@ use provider_delivery_fixture::{
 #[tokio::test]
 async fn cursor_steer_rejects_before_evidence_or_client_io() {
     let root = tempfile::tempdir().expect("provider root");
+    let event_socket = root.path().join("busy-events.sock");
+    let listener = tokio::net::UnixListener::bind(&event_socket).expect("fixture events");
+    let captured = root.path().join("unexpected-send.json");
     let target = target();
     let binding = provider_binding(&target);
     let runtime = ExternalProviderRuntime::initialize(
-        no_load_fixture(),
+        cursor_prompt_fixture(&event_socket, &captured),
         std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
     )
     .await
     .expect("fixture provider");
-    runtime
-        .create_session(PathBuf::from("/tmp"))
-        .await
-        .expect("session/new");
     let store = Arc::new(tokio::sync::Mutex::new(
         ProviderOperationStore::open(&root.path().join("operations.sqlite"))
             .await
@@ -70,6 +74,7 @@ async fn cursor_steer_rejects_before_evidence_or_client_io() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -83,6 +88,11 @@ async fn cursor_steer_rejects_before_evidence_or_client_io() {
         )
         .expect("supervisor"),
     );
+    let created = supervisor
+        .open_provider_fixture(&target.endpoint, PathBuf::from("/tmp"))
+        .await
+        .expect("session/new");
+    assert_eq!(created, String::from(target.session_id.clone()));
     let route = ProviderAcpDeliveryRoute::new(
         target.endpoint.service_id.clone(),
         std::iter::once(target.endpoint.clone()).collect(),
@@ -90,8 +100,23 @@ async fn cursor_steer_rejects_before_evidence_or_client_io() {
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
 
+    let first_evidence = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()));
+    let started = route
+        .deliver(request(target.clone(), "first"), &first_evidence)
+        .await
+        .expect("first prompt")
+        .into_receipt();
+    assert!(matches!(started.outcome, DeliveryOutcome::Started));
+    let (mut first_event, _) = listener.accept().await.expect("held prompt notice");
+    let mut message = [0_u8; 5];
+    first_event
+        .read_exact(&mut message)
+        .await
+        .expect("fixture event");
+    assert_eq!(&message, b"first");
     let evidence = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()));
 
     let mut request = request(target, "hello");
@@ -107,6 +132,14 @@ async fn cursor_steer_rejects_before_evidence_or_client_io() {
         if rejection.reason == DeliveryRejectionReason::SteerUnsupported)
     );
     assert!(evidence.0.lock().await.is_empty());
+    assert!(
+        !captured.exists(),
+        "the rejected steer never reached the agent"
+    );
+    first_event
+        .write_all(b"x")
+        .await
+        .expect("release the held prompt");
     route.shutdown_queue().await;
     supervisor.shutdown().await.expect("supervisor shutdown");
 }
@@ -125,10 +158,6 @@ async fn cursor_auto_queues_a_prepared_push_with_exact_line_and_push_id() {
     )
     .await
     .expect("fixture provider");
-    runtime
-        .create_session(PathBuf::from("/tmp"))
-        .await
-        .expect("session/new");
     let store = Arc::new(tokio::sync::Mutex::new(
         ProviderOperationStore::open(&root.path().join("operations.sqlite"))
             .await
@@ -146,6 +175,7 @@ async fn cursor_auto_queues_a_prepared_push_with_exact_line_and_push_id() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -159,6 +189,11 @@ async fn cursor_auto_queues_a_prepared_push_with_exact_line_and_push_id() {
         )
         .expect("supervisor"),
     );
+    let created = supervisor
+        .open_provider_fixture(&target.endpoint, PathBuf::from("/tmp"))
+        .await
+        .expect("session/new");
+    assert_eq!(created, String::from(target.session_id.clone()));
     let directory = available_directory(&target, &binding);
     let route = Arc::new(ProviderAcpDeliveryRoute::new(
         target.endpoint.service_id.clone(),
@@ -167,6 +202,7 @@ async fn cursor_auto_queues_a_prepared_push_with_exact_line_and_push_id() {
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
     let router = SessionDeliveryRouter::new(vec![route.clone()]);
     let first_evidence = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()));
@@ -304,6 +340,7 @@ async fn router_queued_reconciliation_uses_only_the_operation_store() {
         supervisor,
         Arc::clone(&store),
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let attempt = AttemptId::generate();
     let operation_id =
@@ -405,6 +442,7 @@ async fn provider_load_auth_rejection_is_typed_without_session_new() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -425,6 +463,7 @@ async fn provider_load_auth_rejection_is_typed_without_session_new() {
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
     assert_eq!(
         route.presence(&target).await.expect("provider presence"),
@@ -475,9 +514,8 @@ async fn provider_load_auth_rejection_is_typed_without_session_new() {
     assert!(!load_marker.exists());
     assert!(matches!(
         loaded_only_evidence.0.lock().await.as_slice(),
-        [RouteEffectEvidence::ProviderAcp(before), RouteEffectEvidence::ProviderAcp(after)]
-            if before.submission == SubmissionEffect::Dispatching
-                && after.submission == SubmissionEffect::NotDispatched
+        [RouteEffectEvidence::ProviderAcp(after)]
+            if after.submission == SubmissionEffect::NotDispatched
     ));
 
     let evidence = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()));
@@ -498,8 +536,8 @@ async fn provider_load_auth_rejection_is_typed_without_session_new() {
         "session/load"
     );
     assert!(matches!(evidence.0.lock().await.as_slice(),
-        [RouteEffectEvidence::ProviderAcp(before), RouteEffectEvidence::ProviderAcp(after)]
-        if before.submission == SubmissionEffect::Dispatching && after.submission == SubmissionEffect::NotDispatched));
+        [RouteEffectEvidence::ProviderAcp(after)]
+        if after.submission == SubmissionEffect::NotDispatched));
     route.shutdown_queue().await;
     supervisor.shutdown().await.expect("shutdown");
 }
@@ -534,6 +572,7 @@ async fn unadvertised_load_settles_not_submitted_without_sending_load() {
             created_by: (target.clone()).into(),
             approver: (target.clone()).into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await
         .expect("session record");
@@ -554,6 +593,7 @@ async fn unadvertised_load_settles_not_submitted_without_sending_load() {
         Arc::clone(&supervisor),
         store,
         Arc::new(NoLivePeer),
+        std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     assert!(matches!(
         route.presence(&target).await.expect("provider presence"),
@@ -595,21 +635,21 @@ async fn coded_provider_load_errors_keep_correlations_and_do_not_expose_acp_text
             -32002,
             "rejected",
             Some("providerSessionNotFound"),
-            "this session never started a turn and did not survive the provider restart; create a new conversation",
+            "the provider no longer knows this session, so start a new session with the same setup",
             "provider code",
         ),
         (
             -32600,
             "rejected",
             Some("providerRejected"),
-            "provider rejected the ACP operation",
+            "the provider refused to restore this session, so check the provider before retrying",
             "provider code",
         ),
         (
             -32000,
             "rejected",
             Some("providerRejected"),
-            "provider rejected the ACP operation",
+            "the provider refused to restore this session, so check the provider before retrying",
             "provider code",
         ),
         (
@@ -662,6 +702,7 @@ async fn coded_provider_load_errors_keep_correlations_and_do_not_expose_acp_text
                 created_by: (target.clone()).into(),
                 approver: (target.clone()).into(),
                 updated_at_ms: 1,
+                resume: Default::default(),
             })
             .await
             .expect("session record");
@@ -680,13 +721,14 @@ async fn coded_provider_load_errors_keep_correlations_and_do_not_expose_acp_text
             std::iter::once(target.endpoint.clone()).collect(),
             available_directory(&target, &binding),
             Arc::clone(&supervisor),
-            store,
+            Arc::clone(&store),
             Arc::new(NoLivePeer),
+            std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
         );
         let evidence = RecordedEvidence(tokio::sync::Mutex::new(Vec::new()));
 
         let receipt = route
-            .deliver(request(target, "empty restart session"), &evidence)
+            .deliver(request(target.clone(), "empty restart session"), &evidence)
             .await
             .expect("load refusal")
             .into_receipt();
@@ -704,7 +746,7 @@ async fn coded_provider_load_errors_keep_correlations_and_do_not_expose_acp_text
             );
             assert_uuid_v7_provider_reference(detail, code_label, error_code);
         } else {
-            assert_eq!(outcome["retryable"], true);
+            assert_eq!(outcome["retryable"], false);
             let reason = outcome["reason"].as_str().expect("not-submitted reason");
             assert!(reason.starts_with(expected_explanation), "{reason}");
             assert!(
@@ -720,8 +762,66 @@ async fn coded_provider_load_errors_keep_correlations_and_do_not_expose_acp_text
             "session/load"
         );
         assert!(matches!(evidence.0.lock().await.as_slice(),
-            [RouteEffectEvidence::ProviderAcp(before), RouteEffectEvidence::ProviderAcp(after)]
-            if before.submission == SubmissionEffect::Dispatching && after.submission == SubmissionEffect::NotDispatched));
+            [RouteEffectEvidence::ProviderAcp(after)]
+            if after.submission == SubmissionEffect::NotDispatched));
+
+        let expected_explicit_failure = match error_code {
+            -32601 => Some((
+                ConversationOperationFailureKind::UnsupportedCapability,
+                ProviderOperationEffect::None,
+                "check the provider's restore support before retrying",
+            )),
+            -32602 => Some((
+                ConversationOperationFailureKind::InvalidRequest,
+                ProviderOperationEffect::None,
+                "check the session setup before retrying",
+            )),
+            -32800 => Some((
+                ConversationOperationFailureKind::ProviderRejected,
+                ProviderOperationEffect::Unknown,
+                "retry the restore when ready",
+            )),
+            _ => None,
+        };
+        if let Some((kind, effect, next_step)) = expected_explicit_failure {
+            let id = OperationId::generate();
+            supervisor
+                .load(ConversationLoadRequest {
+                    operation_id: id.clone(),
+                    target: target.clone(),
+                    generation: None,
+                    working_directory: ProviderWorkingDirectory::try_from("/tmp".to_owned())
+                        .expect("cwd"),
+                    requested_by: target.clone().into(),
+                    approver: target.into(),
+                    requested_policy: ProviderRequestedPolicy {
+                        access: RouterAccess::WriteRestricted,
+                    },
+                })
+                .await
+                .expect("explicit load admitted");
+            let failure = supervisor
+                .wait(ConversationOperationWaitRequest {
+                    operation_id: id.clone(),
+                    timeout_seconds: PositiveSeconds::try_from(5).expect("wait budget"),
+                })
+                .await
+                .expect_err("explicit load refused");
+            assert_eq!(failure.kind, kind);
+            assert_eq!(failure.effect, effect);
+            let message = String::from(failure.message);
+            assert!(message.contains(next_step), "{message}");
+            assert_uuid_v7_provider_reference(&message, "ACP code", error_code);
+            let stored = store
+                .lock()
+                .await
+                .inspect(&id)
+                .await
+                .expect("read explicit load")
+                .expect("stored explicit load");
+            assert_eq!(stored.stage, ProviderOperationStage::Terminal);
+            assert_eq!(stored.effect, effect);
+        }
         route.shutdown_queue().await;
         supervisor.shutdown().await.expect("shutdown");
     }

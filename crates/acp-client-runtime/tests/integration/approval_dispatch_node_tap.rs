@@ -10,15 +10,17 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::{
-    AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
-    HistoryReplayFuture, InteractionFuture, InteractionPort, ProviderPersistenceTarget,
-    RefusedApprovalOffer, SessionEventSink,
+    ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch, HistoryReplayFuture,
+    InteractionFuture, InteractionPort, ProviderPersistenceTarget, RefusedApprovalOffer,
+    SessionEventSink,
 };
 use codex_router_test_support::node_taps::{
     CatalogRowExpectation, EdgeParty, MessageFamily, NodeStateSnapshot, ProtocolNode, RecordLayer,
     TapCase,
 };
+use provider_session_machines::{SessionGeneration, session_turn_machine::TurnId};
 use session_event_model::{ApprovalRequest, SessionEvent};
 use tokio_util::sync::CancellationToken;
 
@@ -33,23 +35,34 @@ const PERMISSION_FIXTURE: &str = concat!(
 const BROKER: EdgeParty = EdgeParty::Node(ProtocolNode::N7ApprovalsBroker);
 const AGENT: EdgeParty = EdgeParty::AcpAgent;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ApprovalContext {
+    operation: u64,
+    scope: Option<(SessionGeneration, TurnId)>,
+}
+
 #[derive(Default)]
 struct BrokerStandIn {
     accepted: Mutex<Vec<ApprovalRequest>>,
+    approval_contexts: Mutex<Vec<ApprovalContext>>,
     refused: Mutex<Option<RefusedApprovalOffer>>,
     /// Every decision the stand-in handed back, whole.
     decisions: Mutex<Vec<ApprovalPortOutcome>>,
 }
 
 impl InteractionPort for BrokerStandIn {
-    type Context = ();
+    type Context = ApprovalContext;
     type OperationId = u64;
 
-    fn operation_id(_context: &Self::Context) -> Self::OperationId {
-        1
+    fn operation_id(context: &Self::Context) -> Self::OperationId {
+        context.operation
     }
     fn binding_retirement(_context: &Self::Context) -> CancellationToken {
         CancellationToken::new()
+    }
+
+    fn bind_owner_scope(context: &mut Self::Context, generation: SessionGeneration, turn: TurnId) {
+        context.scope = Some((generation, turn));
     }
 
     #[expect(
@@ -58,12 +71,16 @@ impl InteractionPort for BrokerStandIn {
     )]
     fn request_approval(
         &self,
-        _context: Self::Context,
+        context: Self::Context,
         request: ApprovalRequest,
         _turn_cancellation: CancellationToken,
         _agent_cancellation: CancellationToken,
     ) -> InteractionFuture<'_, ApprovalPortOutcome> {
         Box::pin(async move {
+            self.approval_contexts
+                .lock()
+                .expect("approval routing records")
+                .push(context);
             self.accepted.lock().expect("capture lock").push(request);
             let decision = ApprovalPortOutcome::Selected {
                 option_id: "allow-always".to_owned(),
@@ -108,10 +125,6 @@ impl InteractionPort for BrokerStandIn {
     ) -> InteractionFuture<'_, ()> {
         Box::pin(async {})
     }
-
-    fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
 }
 
 struct DiscardingEventSink;
@@ -138,7 +151,10 @@ impl SessionEventSink for DiscardingEventSink {
     clippy::expect_used,
     reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
 )]
-async fn run_permission_fixture(mode: &str) -> (Arc<BrokerStandIn>, Vec<CapturedFrame>) {
+async fn run_permission_fixture(
+    mode: &str,
+    operations: &[u64],
+) -> (Arc<BrokerStandIn>, Vec<CapturedFrame>) {
     let root = tempfile::tempdir().expect("fixture root");
     let receipt = root.path().join("wire.jsonl");
     let port = Arc::new(BrokerStandIn::default());
@@ -163,22 +179,27 @@ async fn run_permission_fixture(mode: &str) -> (Arc<BrokerStandIn>, Vec<Captured
         .create_session(root.path().to_path_buf())
         .await
         .expect("session opens");
-    let result = client
-        .submit_with_approval_dispatch_for_input(
-            "fixture-session".to_owned(),
-            session_event_model::InputId::generate(),
-            acp_client_runtime::ProviderTurnInput::Prompt(
-                session_event_model::ProviderSubmission::plain(vec![
-                    session_event_model::PromptContent::text("Run it".to_owned())
-                        .expect("text prompt"),
-                ]),
-            ),
-            (),
-            None,
-        )
-        .await;
+    for &operation in operations {
+        let result = client
+            .submit_with_approval_dispatch_for_input(
+                "fixture-session".to_owned(),
+                session_event_model::InputId::generate(),
+                acp_client_runtime::ProviderTurnInput::Prompt(
+                    session_event_model::ProviderSubmission::plain(vec![
+                        session_event_model::PromptContent::text("Run it".to_owned())
+                            .expect("text prompt"),
+                    ]),
+                ),
+                ApprovalContext {
+                    operation,
+                    scope: None,
+                },
+                None,
+            )
+            .await;
+        assert!(result.is_ok(), "prompt result: {result:?}");
+    }
     client.shutdown().await;
-    assert!(result.is_ok(), "prompt result: {result:?}");
     (port, read_capture(&receipt))
 }
 
@@ -193,6 +214,89 @@ fn permission_outcome_kind(answer: &serde_json::Value) -> String {
         Some(other) => format!("session/request_permission:{other}"),
         None => "session/request_permission:malformed".to_owned(),
     }
+}
+
+#[tokio::test]
+async fn duplicate_callback_in_a_batch_gets_one_reply_and_keeps_its_valid_sibling() {
+    let (port, capture) = run_permission_fixture("duplicate-batch", &[1]).await;
+    let received: Vec<_> = capture
+        .iter()
+        .filter(|frame| frame.agent_side == AgentSide::Received)
+        .map(|captured| &captured.frame)
+        .collect();
+    let batch = received
+        .iter()
+        .find_map(|frame| frame.as_array())
+        .expect("provider received a batch reply");
+    let batch_ids: Vec<_> = batch.iter().map(|reply| &reply["id"]).collect();
+    assert_eq!(
+        batch_ids,
+        [&serde_json::json!(91), &serde_json::json!(92)],
+        "the duplicate gets no batch response slot: {batch:?}"
+    );
+    for reply in batch {
+        assert_eq!(
+            permission_outcome_kind(reply),
+            "session/request_permission:selected(allow-always)"
+        );
+        assert!(reply.get("error").is_none(), "no internal error: {reply}");
+    }
+    let reused: Vec<_> = received.iter().filter(|reply| reply["id"] == 91).collect();
+    assert_eq!(
+        reused.len(),
+        1,
+        "a flushed ID may be reused on the next request"
+    );
+    assert_eq!(
+        permission_outcome_kind(reused[0]),
+        "session/request_permission:selected(allow-always)"
+    );
+    assert_eq!(port.accepted.lock().expect("broker calls").len(), 3);
+}
+
+#[tokio::test]
+async fn identical_callback_after_flush_reaches_the_second_turn_once() {
+    let (port, capture) = run_permission_fixture("two-turns", &[41, 42]).await;
+    let reused_requests: Vec<_> = capture
+        .iter()
+        .filter(|record| {
+            record.agent_side == AgentSide::Sent
+                && record.frame["id"] == 91
+                && record.frame["method"] == "session/request_permission"
+        })
+        .map(|record| &record.frame)
+        .collect();
+    assert!(
+        matches!(reused_requests.as_slice(), [first, second] if first == second),
+        "the provider must send the identical request in each turn"
+    );
+    let replies: Vec<_> = capture
+        .iter()
+        .filter(|record| record.agent_side == AgentSide::Received && record.frame["id"] == 91)
+        .map(|record| permission_outcome_kind(&record.frame))
+        .collect();
+    assert_eq!(
+        replies,
+        ["session/request_permission:selected(allow-always)"; 2]
+    );
+    let contexts = port
+        .approval_contexts
+        .lock()
+        .expect("approval routing records");
+    assert_eq!(
+        contexts
+            .iter()
+            .map(|context| context.operation)
+            .collect::<Vec<_>>(),
+        [41, 42],
+        "each callback must reach its own turn exactly once"
+    );
+    assert!(
+        matches!(contexts.as_slice(), [ApprovalContext { scope: Some((first_run, first_turn)), .. },
+        ApprovalContext { scope: Some((second_run, second_turn)), .. }]
+        if first_run == second_run && first_turn != second_turn),
+        "both approvals must be bound to distinct turns in the same run: {contexts:?}"
+    );
 }
 
 /// Records what the permission request caused inside the Router, at its place in the capture:
@@ -243,7 +347,7 @@ async fn node_tap_permission_request_and_selected_option_round_trip() {
         "N7 section and S3: N6 permission request -> N7 broker; N7 selected option -> N6 -> ACP outcome",
     );
     case.state_before(NodeStateSnapshot::new().field("pending_requests_at_broker", "none"));
-    let (port, capture) = run_permission_fixture("persistent").await;
+    let (port, capture) = run_permission_fixture("persistent", &[1]).await;
     // The whole JSON-RPC request the agent sent, and the whole response it received.
     assert_eq!(
         frames_of(&capture, AgentSide::Sent, "session/request_permission"),

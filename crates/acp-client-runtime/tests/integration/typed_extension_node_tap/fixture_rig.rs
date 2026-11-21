@@ -12,13 +12,16 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::{
-    AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
-    HistoryReplayFuture, InteractionFuture, InteractionPort, ModelMetadataSource, ModelReasoning,
-    ModelReasoningEntry, ModelReasoningMetadata, ModelReasoningUnknown, ProviderBehavior,
+    ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch, HistoryReplayFuture,
+    InteractionFuture, InteractionPort, ModelMetadataSource, ProviderBehavior,
     ProviderPersistenceTarget, ProviderSessionActivity, RefusedApprovalOffer, SessionEventSink,
 };
 use codex_router_test_support::node_taps::stable;
+use provider_session_machines::{
+    ModelReasoning, ModelReasoningEntry, ModelReasoningMetadata, ModelReasoningUnknown,
+};
 use session_event_model::{
     ApprovalRequest, PromptContent, ProviderSubmission, SessionEvent, SessionItemKind,
 };
@@ -75,9 +78,6 @@ impl InteractionPort for NoopInteractionPort {
     ) -> InteractionFuture<'_, ()> {
         Box::pin(async {})
     }
-    fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
 }
 
 struct CaptureEventSink(tokio::sync::mpsc::UnboundedSender<SessionEvent>);
@@ -115,7 +115,7 @@ impl ProviderBehavior for DiscoveryBehavior {
     }
     fn can_reuse_setting_confirmation(
         &self,
-        kind: acp_client_runtime::ProviderSettingKind,
+        kind: provider_session_machines::ProviderSettingKind,
     ) -> bool {
         crate::test_behavior::TestProviderBehavior.can_reuse_setting_confirmation(kind)
     }
@@ -219,10 +219,17 @@ impl Wire {
             .create_session(self.root.path().to_path_buf())
             .await
             .expect("session opens");
-        assert!(matches!(
-            self.events.recv().await,
-            Some(SessionEvent::SettingsChanged { .. })
-        ));
+        let mut settings = false;
+        loop {
+            match self.events.recv().await.expect("session activation event") {
+                SessionEvent::SettingsChanged { .. } => settings = true,
+                SessionEvent::StateChanged {
+                    state: session_event_model::SessionState::Idle,
+                } => break,
+                _ => {}
+            }
+        }
+        assert!(settings, "settings must be observed before Idle");
     }
 
     /// The fixture's complete wire capture, every line both ways in order. Read once the client

@@ -56,7 +56,7 @@ async fn assert_uncertainty_admission(targetless: bool, previous_generation: boo
             .record_terminal(
                 &operation_id,
                 ProviderOperationEffect::Unknown,
-                ProviderReconciliationState::NotReconcilable,
+                ProviderReconciliationState::Unresolved,
                 None,
                 4,
             )
@@ -82,6 +82,7 @@ async fn assert_uncertainty_admission(targetless: bool, previous_generation: boo
     // Act: exercise the owning admission boundary with the actual live identity.
     let admitted = backend
         .prepare_operation(
+            backend.admission_deadline(),
             requested_id.clone(),
             ProviderOperationKind::ConversationPrompt,
             live_binding,
@@ -92,6 +93,7 @@ async fn assert_uncertainty_admission(targetless: bool, previous_generation: boo
     let accepted = match admitted {
         Ok(PreparedOperation::Admitted { live, .. }) => {
             // This fixture tests admission only, so settle its unstarted local task.
+            live.finish_write(CustodyEnd::NoWrite);
             *live.result.lock().await = Some(Err(unavailable_failure(requested_id.clone(), None)));
             true
         }

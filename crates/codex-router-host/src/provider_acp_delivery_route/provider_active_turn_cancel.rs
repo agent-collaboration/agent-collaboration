@@ -37,14 +37,11 @@ impl ProviderAcpDeliveryRoute {
             .await
             .map_err(|_| ProviderCancelActiveTurnError::Unavailable)?
             .ok_or(ProviderCancelActiveTurnError::SessionNotFound)?;
-        let runtime = self
+        let target_operation_id = self
             .supervisor
-            .runtime_for(&target.endpoint)
-            .ok_or(ProviderCancelActiveTurnError::Unavailable)?;
-        let target_operation_id = runtime
-            .active_prompt_operation(String::from(target.session_id.clone()))
-            .await
-            .map_err(|_| ProviderCancelActiveTurnError::Unavailable)?
+            .owner_session_snapshot(&target)
+            .and_then(|snapshot| snapshot.foreground)
+            .and_then(|input| OperationId::try_from(input.operation.to_string()).ok())
             .ok_or(ProviderCancelActiveTurnError::NoActiveTurn)?;
         let binding = self
             .supervisor

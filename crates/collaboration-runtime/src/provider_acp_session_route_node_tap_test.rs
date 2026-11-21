@@ -164,6 +164,7 @@ impl RouteHarness {
                 created_by: owner.clone(),
                 approver: owner,
                 updated_at_ms: 1,
+                resume: Default::default(),
             })
             .await
             .expect("inventory");
@@ -193,6 +194,7 @@ impl RouteHarness {
             session.endpoint.clone(),
             Arc::clone(&commands) as Arc<dyn SessionCommandPort>,
             Arc::clone(&hub) as Arc<dyn SessionEventHub>,
+            Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
         );
         tokio::spawn(Box::new(route).run(
             router,
@@ -320,7 +322,11 @@ fn create_command(harness: &RouteHarness) -> Value {
     whole_command(&CreateSessionCommand {
         endpoint: harness.session.endpoint.clone(),
         working_directory: "/tmp".into(),
-        settings: collaboration_contracts::SessionSettingsCommand::default(),
+        // D1 R1: a mode-less ACP session/new asks for the Router's auto by name.
+        settings: collaboration_contracts::SessionSettingsCommand {
+            mode: Some("auto".into()),
+            ..collaboration_contracts::SessionSettingsCommand::default()
+        },
         actor: literal_actor(),
     })
 }

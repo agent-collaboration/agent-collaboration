@@ -157,6 +157,7 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
                 created_by: actor.clone().into(),
                 approver: actor.clone().into(),
                 updated_at_ms: 1,
+                resume: Default::default(),
             })
             .await
             .expect("record unloaded provider session");

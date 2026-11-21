@@ -10,8 +10,8 @@ export const rows: InventoryRow[] = [
       "self-approver refusal: every offered option is recorded as a RefusedApprovalOption with providerKind set to the literal selfApprover (121-125), a refusal cause written into the field that otherwise carries the provider's option kind (Debug text of the ACP PermissionOptionKind, acp-client-runtime external_permission_options.rs:34, copied unchanged at :310); the refusal reason already says set a different approver (127). Not an approval decision/scope table",
     usedBy: [{ part: "N7" }],
     duplicateGroup: null,
-    disposition: "malformed",
-    fixedBy: "D2",
+    disposition: "retired",
+    removedIn: "9d01bb6bb",
   },
   {
     file: "crates/codex-router-host/src/acp_interaction_port.rs",
@@ -22,8 +22,8 @@ export const rows: InventoryRow[] = [
       "cancel reasons eventPublicationFailed (144,245), turnCancelled, providerRetired, agentCancelled, timedOut (152-164, 253-261) passed as string literals to cancel_typed_approval and cancel_question, and turnCancelled/providerRetired/agentCancelled chosen as a literal for record_cancelled_question (205-213), instead of the typed InteractionCancelReason (session-event-model session_event.rs:32)",
     usedBy: [{ part: "N7" }],
     duplicateGroup: null,
-    disposition: "duplicate",
-    fixedBy: "D2",
+    disposition: "retired",
+    removedIn: "9d01bb6bb",
   },
   {
     file: "crates/codex-router-host/src/acp_interaction_port.rs",
@@ -33,8 +33,8 @@ export const rows: InventoryRow[] = [
     defines: "protocol SessionRef to board SessionRef by serde_json to_value then from_value",
     usedBy: [{ part: "N7" }],
     duplicateGroup: "session-ref-conversion",
-    disposition: "duplicate",
-    fixedBy: "D2",
+    disposition: "retired",
+    removedIn: "9d01bb6bb",
   },
   {
     file: "crates/codex-router-host/src/auth_file_reload/native_auth_reload.rs",
@@ -131,11 +131,11 @@ export const rows: InventoryRow[] = [
   },
   {
     file: "crates/codex-router-host/src/collaboration_runtime/startup_composition.rs",
-    line: 681,
+    line: 374,
     owner: "router-vocabulary",
     kind: "session-ref-conversion",
     defines:
-      "endpoint-only conversion collaboration_protocol EndpointRef to message_board SessionEndpointRef by String round trip of service_id and endpoint_id (681-690)",
+      "endpoint-only conversion collaboration_protocol EndpointRef to message_board SessionEndpointRef by String round trip of service_id and endpoint_id",
     usedBy: [{ crate: "codex-router-host" }],
     duplicateGroup: "session-ref-conversion",
     disposition: "duplicate",
@@ -257,8 +257,8 @@ export const rows: InventoryRow[] = [
       "ProviderDispatchRefusal and ProviderError to ConversationOperationFailureKind with fixed messages, a second copy of the ProviderError rows of runtime_failure (provider_operation_failure.rs:180-190)",
     usedBy: [{ part: "N4" }],
     duplicateGroup: "operation-failure-mapping",
-    disposition: "duplicate",
-    fixedBy: "D2",
+    disposition: "retired",
+    removedIn: "9c6fb389c",
   },
   {
     file: "crates/codex-router-host/src/external_provider_supervisor/provider_session_inspection.rs",

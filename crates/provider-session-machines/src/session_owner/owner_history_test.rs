@@ -1,0 +1,677 @@
+use super::*;
+
+fn observe_plan_in_live_run(state: &mut SessionOwnerState, generation: SessionGeneration) {
+    apply(
+        state,
+        OwnerEvent::Stream {
+            run: generation,
+            expected_turn: None,
+            event: session_event_model::SessionEvent::SettingsChanged {
+                settings: session_event_model::SessionSettings {
+                    mode: Some("plan".to_owned()),
+                    ..Default::default()
+                },
+            },
+        },
+    );
+    assert_eq!(
+        state
+            .snapshot()
+            .projection
+            .settings
+            .expect("successor settings")
+            .mode
+            .as_deref(),
+        Some("plan")
+    );
+}
+
+#[test]
+fn an_ended_runs_live_settings_update_changes_nothing_of_the_newer_run() {
+    let mut state = fresh();
+    let ended = restore_live(&mut state, 1);
+    apply(&mut state, OwnerEvent::RunLost(ended.generation));
+    let newer = restore_live(&mut state, 2);
+    observe_plan_in_live_run(&mut state, newer.generation);
+    let current = state.snapshot();
+
+    assert_late(
+        &state,
+        OwnerEvent::Stream {
+            run: ended.generation,
+            expected_turn: None,
+            event: session_event_model::SessionEvent::SettingsChanged {
+                settings: session_event_model::SessionSettings {
+                    mode: Some("auto".to_owned()),
+                    ..Default::default()
+                },
+            },
+        },
+    );
+    assert_eq!(state.snapshot(), current);
+}
+
+#[test]
+fn an_ended_runs_returned_catalog_never_replaces_the_newer_runs() {
+    let mut state = fresh();
+    let ended = restore_live(&mut state, 1);
+    let setting = OwnerSetting {
+        change: RunAttempt {
+            generation: ended.generation,
+            attempt: SettingApplication(uuid(2)),
+        },
+        kind: ProviderSettingKind::Mode,
+    };
+    let authorization = setting_authorized(&mut state, setting, 2);
+    apply(&mut state, OwnerEvent::RunLost(ended.generation));
+    let newer = restore_live(&mut state, 3);
+    observe_plan_in_live_run(&mut state, newer.generation);
+    let current = state.snapshot();
+
+    let effects = apply(
+        &mut state,
+        OwnerEvent::Dispatch(DispatchResult::SettingFinished {
+            authorization,
+            observation: SettingObservation::Applied(SettingValueId("default".to_owned())),
+        }),
+    );
+    assert!(
+        effects.is_empty(),
+        "a retired setting reply has no remaining effects"
+    );
+    assert_eq!(state.snapshot(), current);
+}
+
+#[test]
+fn queued_explicit_settings_wait_for_confirmed_storage_and_cancel_known_unsent() {
+    let mut state = fresh();
+    let run = restore_live(&mut state, 1);
+    let mode = |number| OwnerSetting {
+        change: RunAttempt {
+            generation: run.generation,
+            attempt: SettingApplication(uuid(number)),
+        },
+        kind: ProviderSettingKind::Mode,
+    };
+    let (first, cancelled, successor) = (mode(2), mode(3), mode(4));
+    let active = setting_authorized(&mut state, first, 20);
+    for (setting, number) in [(cancelled, 30), (successor, 40)] {
+        let effects = command(&mut state, setting_command(setting, number));
+        assert_eq!(
+            effects,
+            vec![OwnerEffect::SettingQueued {
+                input: input(run.generation, number).input,
+                setting,
+            }]
+        );
+    }
+    let removed = command(
+        &mut state,
+        SessionOwnerCommand::CancelSetting {
+            input: input(run.generation, 30).input,
+            setting: cancelled,
+        },
+    );
+    assert_eq!(
+        removed,
+        vec![OwnerEffect::Reply(SessionOwnerReply::SettingFinished {
+            setting: cancelled,
+            remote: RemoteEffect::None,
+            saved: false,
+        })]
+    );
+    let confirmed = apply(
+        &mut state,
+        OwnerEvent::Dispatch(DispatchResult::SettingFinished {
+            authorization: active,
+            observation: SettingObservation::Applied(SettingValueId("off".into())),
+        }),
+    );
+    assert!(confirmed.iter().any(|effect| matches!(effect,
+        OwnerEffect::Store(SessionStoreRequest::RecordConfirmedSetting { setting, .. }) if *setting == first
+    )));
+    assert!(
+        !confirmed
+            .iter()
+            .any(|effect| matches!(effect, OwnerEffect::Authorize { .. }))
+    );
+
+    let saved = apply(
+        &mut state,
+        OwnerEvent::Store(SessionStoreResult::ConfirmedSetting {
+            setting: first,
+            outcome: EffectOutcome::Applied,
+        }),
+    );
+    let terminal = saved.iter().position(|effect| matches!(effect,
+        OwnerEffect::Reply(SessionOwnerReply::SettingFinished { setting, saved: true, .. }) if *setting == first
+    )).expect("the first write settles");
+    let next = saved.iter().position(|effect| matches!(effect,
+        OwnerEffect::Authorize { work: AuthorizedWork::Setting { setting, .. }, .. } if *setting == successor
+    )).expect("the next live setting gets its turn");
+    assert!(terminal < next);
+}
+
+#[test]
+fn setting_deadline_releases_a_waiter_without_passing_an_unanswered_same_kind_fence() {
+    let mut state = fresh();
+    let run = restore_live(&mut state, 1);
+    let first = OwnerSetting {
+        change: RunAttempt {
+            generation: run.generation,
+            attempt: SettingApplication(uuid(2)),
+        },
+        kind: ProviderSettingKind::Mode,
+    };
+    let second = OwnerSetting {
+        change: RunAttempt {
+            attempt: SettingApplication(uuid(3)),
+            ..first.change
+        },
+        ..first
+    };
+    setting_authorized(&mut state, first, 20);
+    let queued = command(&mut state, setting_command(second, 30));
+    assert_eq!(
+        queued,
+        vec![OwnerEffect::SettingQueued {
+            input: input(run.generation, 30).input,
+            setting: second,
+        }]
+    );
+
+    let expired = deadline(&mut state, OwnerDeadline::SettingWire(first));
+    assert!(
+        expired.contains(&OwnerEffect::Reply(SessionOwnerReply::SettingFinished {
+            setting: first,
+            remote: RemoteEffect::Unknown,
+            saved: false,
+        }))
+    );
+    assert!(
+        expired.contains(&OwnerEffect::Reply(SessionOwnerReply::SettingFinished {
+            setting: second,
+            remote: RemoteEffect::None,
+            saved: false,
+        }))
+    );
+    assert!(!expired.iter().any(|effect| matches!(
+        effect,
+        OwnerEffect::Authorize { .. } | OwnerEffect::Store(_)
+    )));
+}
+
+fn retired(state: &SessionOwnerState, generation: SessionGeneration) {
+    assert_eq!(
+        state.snapshot().lifecycle,
+        SessionLifecycle::NotLoaded { last: generation }
+    );
+}
+
+fn failed_prepare(run: RunAttempt<LoadAttempt>) -> OwnerEvent {
+    OwnerEvent::Prepare(RestorePreparation::Failed {
+        run,
+        stage: PreparationStage::HostSetup,
+    })
+}
+
+fn failed_restore(effects: &[OwnerEffect], run: RunAttempt<LoadAttempt>, remote: RemoteEffect) {
+    assert!(effects.iter().any(|effect| matches!(effect,
+        OwnerEffect::Reply(SessionOwnerReply::RestoreFinished(RestoreResult {
+            attempt, phase: RestorePhase::Attempted, disposition: RestoreDisposition::Retired { remote: actual, .. }, ..
+        })) if *attempt == run && *actual == remote
+    )));
+}
+
+#[test]
+fn cold_auto_input_waiting_on_a_silent_restore_is_never_sent_after_reload() {
+    let mut state = fresh();
+    let first = open_wire(&mut state, 1);
+    let old = input(first.generation, 2);
+    enqueue_prompt(&mut state, &old);
+
+    let effects = deadline(&mut state, OwnerDeadline::RestoreWire(first));
+    failed_restore(&effects, first, RemoteEffect::Unknown);
+    assert!(
+        effects.contains(&OwnerEffect::Reply(SessionOwnerReply::InputUnsent {
+            input: old.clone(),
+            reason: RevokeReason::RestoreDidNotActivate,
+        }))
+    );
+    let next = restore_live(&mut state, 3);
+    assert_ne!(first.generation, next.generation);
+    assert_late(&state, mark_prompt(&old));
+}
+
+#[test]
+fn unanswered_restore_retires_its_provisional_tool_observation() {
+    let mut state = fresh();
+    let first = open_wire(&mut state, 1);
+    let observed = apply(
+        &mut state,
+        tool_update(first.generation, ToolObservation::Announcement),
+    );
+    assert!(!tool_forwarded(&observed, first.generation));
+
+    deadline(&mut state, OwnerDeadline::RestoreWire(first));
+    assert_eq!(
+        state.tools.get("provider-tool-id"),
+        Some(&ToolOwnership::Retired {
+            generation: first.generation
+        })
+    );
+    let next = restore_live(&mut state, 2);
+    let prompt = input(next.generation, 3);
+    send_prompt(&mut state, &prompt);
+    assert!(!tool_forwarded(
+        &apply(&mut state, callback(next.generation, prompt.turn)),
+        next.generation
+    ));
+}
+
+#[test]
+fn retired_replay_id_does_not_fall_back_to_a_subsequent_live_turn() {
+    let mut state = fresh();
+    let run = open_wire(&mut state, 1);
+    apply(
+        &mut state,
+        tool_update(run.generation, ToolObservation::Announcement),
+    );
+    apply(&mut state, restore_reply(run));
+    finish_preparation(&mut state, run);
+    let first = input(run.generation, 2);
+    let key = send_prompt(&mut state, &first);
+    assert!(tool_forwarded(
+        &apply(&mut state, callback(run.generation, first.turn)),
+        run.generation
+    ));
+
+    end_turn(&mut state, key);
+    let second = input(run.generation, 3);
+    send_prompt(&mut state, &second);
+    assert!(!tool_forwarded(
+        &apply(&mut state, callback(run.generation, second.turn)),
+        run.generation
+    ));
+    let unseen = OwnerEvent::RoutedTool(RoutedTool::Exact {
+        run: run.generation,
+        turn: second.turn,
+        tool_id: "unobserved-id".to_owned(),
+    });
+    assert!(
+        apply(&mut state, unseen).contains(&OwnerEffect::ForwardTool {
+            run: run.generation,
+            turn: Some(second.turn),
+            tool_id: "unobserved-id".to_owned(),
+        })
+    );
+}
+
+#[test]
+fn a_retired_tool_update_cannot_project_into_a_newer_idle_session() {
+    let mut state = fresh();
+    let previous = restore_live(&mut state, 1);
+    apply(
+        &mut state,
+        tool_update(previous.generation, ToolObservation::Announcement),
+    );
+    let close = start_close(&mut state, previous.generation, 2);
+    apply(&mut state, close_reply(close, WireOutcome::Confirmed(())));
+    let newer = restore_live(&mut state, 3);
+
+    assert_late(
+        &state,
+        tool_update(previous.generation, ToolObservation::Continuation),
+    );
+    let continued = apply(
+        &mut state,
+        tool_update(newer.generation, ToolObservation::Continuation),
+    );
+    assert!(!tool_forwarded(&continued, newer.generation));
+}
+
+#[test]
+fn refreshed_replay_ownership_survives_a_late_end_for_the_older_tombstone() {
+    let mut state = fresh();
+    let old = open_wire(&mut state, 1);
+    apply(
+        &mut state,
+        tool_update(old.generation, ToolObservation::Announcement),
+    );
+    deadline(&mut state, OwnerDeadline::RestoreWire(old));
+    let new = open_wire(&mut state, 2);
+    apply(
+        &mut state,
+        tool_update(new.generation, ToolObservation::Announcement),
+    );
+
+    assert_late(
+        &state,
+        OwnerEvent::Deadline(OwnerDeadline::RestoreWire(old)),
+    );
+    apply(&mut state, restore_reply(new));
+    finish_preparation(&mut state, new);
+    let prompt = input(new.generation, 3);
+    send_prompt(&mut state, &prompt);
+    assert!(tool_forwarded(
+        &apply(&mut state, callback(new.generation, prompt.turn)),
+        new.generation
+    ));
+}
+
+#[test]
+fn post_wire_prerequisite_failure_reports_the_remote_restore_and_ends_cold_auto() {
+    let mut state = fresh();
+    let run = open_wire(&mut state, 1);
+    let old = input(run.generation, 2);
+    enqueue_prompt(&mut state, &old);
+    apply(&mut state, restore_reply(run));
+
+    let effects = apply(&mut state, failed_prepare(run));
+    failed_restore(&effects, run, RemoteEffect::Applied);
+    assert!(
+        effects.contains(&OwnerEffect::Reply(SessionOwnerReply::InputUnsent {
+            input: old.clone(),
+            reason: RevokeReason::RestoreDidNotActivate,
+        }))
+    );
+    restore_live(&mut state, 3);
+    assert_late(&state, mark_prompt(&old));
+}
+
+#[test]
+fn failed_host_preparation_retires_exact_route_without_an_activation_batch() {
+    let mut state = fresh();
+    let run = open_wire(&mut state, 1);
+    apply(&mut state, restore_reply(run));
+
+    let failed = apply(&mut state, failed_prepare(run));
+    retired(&state, run.generation);
+    assert!(failed.contains(&OwnerEffect::RetireRoute(run.generation)));
+    assert!(publication_for(run.generation, &failed).is_none());
+    let replacement = restore_live(&mut state, 2);
+    assert_late(&state, failed_prepare(run));
+    assert_eq!(
+        state.snapshot().lifecycle,
+        SessionLifecycle::Live {
+            generation: replacement.generation
+        }
+    );
+}
+
+#[test]
+fn a_refused_close_cannot_reopen_a_restore_it_has_already_displaced() {
+    let mut state = fresh();
+    let restoring = open_wire(&mut state, 1);
+    let close = start_close(&mut state, restoring.generation, 2);
+    assert_late(&state, failed_prepare(restoring));
+
+    let effects = apply(&mut state, close_reply(close, WireOutcome::Refused));
+    retired(&state, restoring.generation);
+    assert!(
+        effects.contains(&OwnerEffect::Reply(SessionOwnerReply::CloseFinished {
+            run: close,
+            outcome: CloseOutcome::RefusedLoading
+        }))
+    );
+    let retry = restore_live(&mut state, 3);
+    send_prompt(&mut state, &input(retry.generation, 4));
+}
+
+#[test]
+fn input_waits_for_owner_commit_and_failed_preparation_never_waits_for_a_turn() {
+    let mut state = fresh();
+    let run = open_wire(&mut state, 1);
+    let waiting = input(run.generation, 2);
+    assert_eq!(
+        enqueue_prompt(&mut state, &waiting),
+        [OwnerEffect::InputQueued(waiting.clone())]
+    );
+    let prepared = apply(&mut state, restore_reply(run));
+    assert!(prepared.contains(&OwnerEffect::PrepareHost {
+        run,
+        catalogue: Arc::default(),
+    }));
+    assert!(!prepared.contains(&OwnerEffect::Store(
+        SessionStoreRequest::MarkQueuedDispatch(waiting.clone())
+    )));
+
+    let failed = apply(&mut state, failed_prepare(run));
+    retired(&state, run.generation);
+    assert!(
+        failed.contains(&OwnerEffect::Reply(SessionOwnerReply::InputUnsent {
+            input: waiting,
+            reason: RevokeReason::RestoreDidNotActivate,
+        }))
+    );
+}
+
+#[test]
+fn definite_fast_retry_without_readback_preserves_the_previous_unknown_write() {
+    let mut state = fresh();
+    let run = restore_live(&mut state, 1);
+    let fast = |number| OwnerSetting {
+        change: RunAttempt {
+            generation: run.generation,
+            attempt: SettingApplication(uuid(number)),
+        },
+        kind: ProviderSettingKind::Fast,
+    };
+    let first = setting_authorized(&mut state, fast(2), 20);
+    apply(
+        &mut state,
+        OwnerEvent::Dispatch(DispatchResult::SettingFinished {
+            authorization: first,
+            observation: SettingObservation::Unknown,
+        }),
+    );
+    let retry = setting_authorized(&mut state, fast(3), 30);
+    apply(
+        &mut state,
+        OwnerEvent::Dispatch(DispatchResult::SettingFinished {
+            authorization: retry,
+            observation: SettingObservation::Refused {
+                current: None,
+                catalogue: None,
+            },
+        }),
+    );
+
+    let blocked = decide(
+        &state,
+        OwnerEvent::Command(SessionOwnerCommand::Prompt {
+            input: input(run.generation, 4),
+            admission: PromptAdmission::Direct,
+        }),
+    );
+    assert!(matches!(
+        blocked,
+        Err(SessionOwnerRejection::Refused(
+            SessionOwnerRefusal::SettingsUnresolved
+        ))
+    ));
+    assert!(matches!(
+        decide(
+            &state,
+            OwnerEvent::Command(SessionOwnerCommand::AcceptSettings {
+                generation: run.generation
+            })
+        ),
+        Err(SessionOwnerRejection::Refused(_))
+    ));
+    let confirmed = setting_authorized(&mut state, fast(5), 50);
+    apply(
+        &mut state,
+        OwnerEvent::Dispatch(DispatchResult::SettingFinished {
+            authorization: confirmed,
+            observation: SettingObservation::Applied(SettingValueId("off".to_owned())),
+        }),
+    );
+    apply(
+        &mut state,
+        OwnerEvent::Store(SessionStoreResult::ConfirmedSetting {
+            setting: fast(5),
+            outcome: EffectOutcome::Applied,
+        }),
+    );
+    send_prompt(&mut state, &input(run.generation, 6));
+}
+
+#[test]
+fn an_auto_input_admitted_on_a_cannot_send_its_late_dispatch_mark_on_b() {
+    let mut state = fresh();
+    let first = open_wire(&mut state, 1);
+    let waiting = input(first.generation, 2);
+    enqueue_prompt(&mut state, &waiting);
+    apply(&mut state, restore_reply(first));
+    assert!(
+        finish_preparation(&mut state, first).contains(&OwnerEffect::Store(
+            SessionStoreRequest::MarkQueuedDispatch(waiting.clone())
+        ))
+    );
+    let close = start_close(&mut state, first.generation, 3);
+    apply(&mut state, close_reply(close, WireOutcome::Confirmed(())));
+    let second = restore_live(&mut state, 4);
+
+    assert_late(&state, mark_prompt(&waiting));
+    assert_eq!(
+        state.snapshot().lifecycle,
+        SessionLifecycle::Live {
+            generation: second.generation
+        }
+    );
+    assert_eq!(state.snapshot().turn, SessionTurn::Idle);
+}
+
+#[test]
+fn unanswered_competing_close_ends_locally_and_allows_a_new_restore() {
+    let mut state = fresh();
+    let restoring = open_wire(&mut state, 1);
+    let close = start_close(&mut state, restoring.generation, 2);
+    assert_late(&state, restore_reply(restoring));
+
+    let expired = deadline(&mut state, OwnerDeadline::Close(close));
+    retired(&state, restoring.generation);
+    assert!(
+        expired.contains(&OwnerEffect::Reply(SessionOwnerReply::CloseFinished {
+            run: close,
+            outcome: CloseOutcome::OutcomeUnknown
+        }))
+    );
+    let replacement = restore_live(&mut state, 3);
+    assert_late(&state, close_reply(close, WireOutcome::Confirmed(())));
+    assert_eq!(
+        state.snapshot().lifecycle,
+        SessionLifecycle::Live {
+            generation: replacement.generation
+        }
+    );
+}
+
+#[test]
+fn close_winning_before_restore_commit_releases_no_idle_publication() {
+    let mut state = fresh();
+    let restoring = open_wire(&mut state, 1);
+    apply(&mut state, restore_reply(restoring));
+    apply(
+        &mut state,
+        OwnerEvent::Prepare(RestorePreparation::RouteReady(restoring)),
+    );
+    let close = start_close(&mut state, restoring.generation, 2);
+
+    assert_late(&state, host_ready(restoring));
+    let effects = apply(&mut state, close_reply(close, WireOutcome::Confirmed(())));
+    assert!(publication_for(restoring.generation, &effects).is_none());
+    retired(&state, restoring.generation);
+}
+
+#[test]
+fn stalled_host_work_expires_and_unapplied_committed_history_rebases_without_retirement() {
+    let mut state = fresh();
+    let first = open_wire(&mut state, 1);
+    apply(&mut state, restore_reply(first));
+    let expired = deadline(&mut state, OwnerDeadline::HostPrepare(first));
+    failed_restore(&expired, first, RemoteEffect::Applied);
+    retired(&state, first.generation);
+    assert_late(&state, host_ready(first));
+
+    let newer = open_wire(&mut state, 2);
+    apply(&mut state, restore_reply(newer));
+    let commit = finish_preparation(&mut state, newer);
+    let batch = publication_for(newer.generation, &commit).expect("commit batch");
+    let expired = deadline(&mut state, OwnerDeadline::Publication(batch));
+    assert_eq!(
+        state.snapshot().lifecycle,
+        SessionLifecycle::Live {
+            generation: newer.generation
+        }
+    );
+    assert!(expired.iter().any(|effect| matches!(effect, OwnerEffect::Arm { deadline: OwnerDeadline::Rebase(id), .. } if *id == batch)));
+    let rebase = deadline(&mut state, OwnerDeadline::Rebase(batch));
+    assert!(rebase.iter().any(|effect| matches!(effect, OwnerEffect::Publish(PublicationBatch::Rebase { baseline, .. }) if baseline.lifecycle == state.snapshot().lifecycle)));
+}
+
+#[test]
+fn a_direct_prompt_names_the_input_waiting_for_its_dispatch_mark() {
+    let mut state = fresh();
+    let run = restore_live(&mut state, 1);
+    let first = input(run.generation, 2);
+    let effects = enqueue_prompt(&mut state, &first);
+    assert!(
+        effects.contains(&OwnerEffect::Store(SessionStoreRequest::MarkDispatch(
+            first
+        )))
+    );
+    assert_eq!(state.snapshot().turn, SessionTurn::Idle);
+
+    let result = decide(
+        &state,
+        OwnerEvent::Command(SessionOwnerCommand::Prompt {
+            input: input(run.generation, 3),
+            admission: PromptAdmission::Direct,
+        }),
+    );
+    let Err(SessionOwnerRejection::Refused(SessionOwnerRefusal::EffectInProgress(effect))) = result
+    else {
+        panic!("the prompt must refuse with the effect that holds admission");
+    };
+    assert_eq!(effect, EffectInProgress::PromptDispatch);
+    assert_eq!(
+        crate::session_refusal_answers::effect_in_progress_answer(effect, &state.snapshot()),
+        "the Router is preparing a prompt. Wait for it before sending again",
+    );
+}
+
+#[test]
+fn setting_cannot_overtake_an_input_waiting_for_its_dispatch_mark() {
+    let mut state = fresh();
+    let run = restore_live(&mut state, 1);
+    let prompt = input(run.generation, 2);
+    let effects = enqueue_prompt(&mut state, &prompt);
+    assert!(
+        effects.contains(&OwnerEffect::Store(SessionStoreRequest::MarkDispatch(
+            prompt.clone()
+        )))
+    );
+    let setting = OwnerSetting {
+        change: RunAttempt {
+            generation: run.generation,
+            attempt: SettingApplication(uuid(3)),
+        },
+        kind: ProviderSettingKind::Fast,
+    };
+
+    assert!(matches!(
+        decide(&state, OwnerEvent::Command(setting_command(setting, 3))),
+        Err(SessionOwnerRejection::Refused(
+            SessionOwnerRefusal::SettingEffectInProgress(SettingEffectInProgress::PromptInProgress)
+        ))
+    ));
+    let key = authorization(&apply(&mut state, mark_prompt(&prompt)));
+    apply(
+        &mut state,
+        OwnerEvent::Dispatch(DispatchResult::Taken(key.clone())),
+    );
+    end_turn(&mut state, key);
+    setting_authorized(&mut state, setting, 3);
+}

@@ -9,7 +9,7 @@ const input: RuntimeLaunch = {
     "/signed/router",
     "serve",
     "--state-db",
-    "/owned/debug-root/state.sqlite",
+    "/owned/debug-root/provider-proxy.sqlite",
     "--port",
     "28871",
   ],
@@ -17,7 +17,7 @@ const input: RuntimeLaunch = {
   stderr: "/evidence/router.stderr",
 };
 
-test("current-layout proxy launch changes only the exact database argument", (): void => {
+test("current-layout proxy launch preserves the canonical database argument", (): void => {
   const adapted = adaptRuntimeLaunch({ input, plan, socketDirectory: "/private/socket" });
   assert.deepEqual(adapted.command, [
     "/signed/router",
@@ -27,7 +27,7 @@ test("current-layout proxy launch changes only the exact database argument", ():
     "--port",
     "28871",
   ]);
-  assert.equal(input.command[3], "/owned/debug-root/state.sqlite");
+  assert.equal(input.command[3], "/owned/debug-root/provider-proxy.sqlite");
   assert.equal(adapted.stdout, input.stdout);
   assert.equal(adapted.stderr, input.stderr);
   assert.throws(
@@ -47,14 +47,7 @@ test("current-layout proxy launch changes only the exact database argument", ():
 test("Host adaptation uses qualified stock Claude and short private socket without changing saved files", (): void => {
   const host = {
     ...input,
-    command: [
-      "/signed/router",
-      "host",
-      "--claude-acp-executable",
-      "/qualified/claude-agent-acp",
-      "--claude-acp-arguments",
-      plan.claude_adapter,
-    ],
+    command: ["/signed/router", "host", "--claude-acp-executable", plan.claude_adapter],
     environment: {
       CODEX_HOME: "/normal/codex",
       CODEX_ROUTER_DEBUG_APP_SERVER_SOCKET: "/too/long/socket",
@@ -66,7 +59,7 @@ test("Host adaptation uses qualified stock Claude and short private socket witho
     "/signed/router",
     "host",
     "--claude-acp-executable",
-    "/qualified/claude-agent-acp",
+    plan.claude_adapter,
   ]);
   assert.equal(
     adapted.environment?.["CODEX_ROUTER_DEBUG_APP_SERVER_SOCKET"],

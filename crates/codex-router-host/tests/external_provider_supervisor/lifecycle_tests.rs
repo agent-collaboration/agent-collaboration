@@ -15,7 +15,11 @@ async fn supplied_id_is_admitted_once_and_cancelled_prompt_settles_after_detach(
     let requester = actor(endpoint.clone(), "requester")?;
     let operation_id = OperationId::generate();
     let create_request = ConversationCreateRequest {
-        settings: None,
+        work_roots: Vec::new(),
+        settings: Some(collaboration_protocol::ProviderRequestedSettings {
+            mode: Some("auto".into()),
+            ..collaboration_protocol::ProviderRequestedSettings::default()
+        }),
         operation_id: operation_id.clone(),
         endpoint: endpoint.clone(),
         generation: Some(generation()?),
@@ -50,6 +54,7 @@ async fn supplied_id_is_admitted_once_and_cancelled_prompt_settles_after_detach(
     let prompt = operation(
         backend
             .prompt(ConversationPromptRequest {
+                delivery: collaboration_protocol::MessageDelivery::Auto,
                 input_id: None,
                 operation_id: prompt_operation_id.clone(),
                 target: target.clone(),
@@ -138,7 +143,11 @@ async fn supervisor_shutdown_joins_runtime_and_settles_held_work() -> TestResult
     operation(
         backend
             .create(ConversationCreateRequest {
-                settings: None,
+                settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    ..Default::default()
+                }),
+                work_roots: Vec::new(),
                 operation_id: create_id.clone(),
                 endpoint: provider_endpoint,
                 generation: Some(generation()?),
@@ -161,6 +170,7 @@ async fn supervisor_shutdown_joins_runtime_and_settles_held_work() -> TestResult
         backend
             .prompt(ConversationPromptRequest {
                 input_id: None,
+                delivery: collaboration_protocol::MessageDelivery::Auto,
                 operation_id: prompt_id.clone(),
                 target,
                 generation: Some(generation()?),
@@ -221,20 +231,7 @@ async fn supervisor_shutdown_drains_saturated_load_completions_and_preserves_unk
         )?;
         operation_ids.push(operation_id);
     }
-    tokio::time::timeout(std::time::Duration::from_secs(2), async {
-        loop {
-            if std::fs::read_to_string(&admission_log)
-                .unwrap_or_default()
-                .lines()
-                .count()
-                == 40
-            {
-                break;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await?;
+    wait_for_fixture_loads(&admission_log, 40).await;
     backend
         .shutdown()
         .await
@@ -245,7 +242,7 @@ async fn supervisor_shutdown_drains_saturated_load_completions_and_preserves_unk
             .expect_err("shutdown-held load cannot succeed");
         ensure_eq!(failure.effect, ProviderOperationEffect::Unknown);
     }
-    assert_process_reaped(&process_id_path).await?;
+    assert_process_reaped(&process_id_path)?;
     Ok(())
 }
 
@@ -398,7 +395,7 @@ async fn resume_and_close_are_durable_operations_and_resume_requires_advertiseme
     let closed = operation(wait(&backend, close_id).await)?;
     ensure!(
         matches!(closed.output, ConversationOperationWaitOutput::Available {
-        settlement: ConversationOperationSettlement::Closed { target: closed_target }
+        settlement: ConversationOperationSettlement::Closed { target: closed_target, router_closed: false }
     } if closed_target == target)
     );
     backend.shutdown().await?;
@@ -421,7 +418,11 @@ async fn response_loss_is_unknown_and_reconciliation_never_replays() -> TestResu
     operation(
         backend
             .create(ConversationCreateRequest {
-                settings: None,
+                work_roots: Vec::new(),
+                settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    ..collaboration_protocol::ProviderRequestedSettings::default()
+                }),
                 operation_id: operation_id.clone(),
                 endpoint,
                 generation: Some(generation()?),
@@ -460,8 +461,16 @@ async fn authentication_required_is_no_effect_and_does_not_poison_fresh_create()
         std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
     )
     .await?;
-    let classification = classification_runtime
-        .create_session(PathBuf::from("/tmp"))
+    let classification_supervisor = supervisor(
+        &root,
+        vec![(
+            binding(provider_endpoint.clone(), "cursor")?,
+            classification_runtime,
+        )],
+    )
+    .await?;
+    let classification = classification_supervisor
+        .open_provider_fixture(&provider_endpoint, PathBuf::from("/tmp"))
         .await;
     if !matches!(
         classification,
@@ -474,7 +483,7 @@ async fn authentication_required_is_no_effect_and_does_not_poison_fresh_create()
     ) {
         return Err(format!("unexpected authentication classification: {classification:?}").into());
     }
-    classification_runtime.shutdown().await;
+    classification_supervisor.shutdown().await?;
     let runtime = ExternalProviderRuntime::initialize(
         authentication_then_create_fixture(),
         std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
@@ -489,7 +498,11 @@ async fn authentication_required_is_no_effect_and_does_not_poison_fresh_create()
     operation(
         backend
             .create(ConversationCreateRequest {
-                settings: None,
+                work_roots: Vec::new(),
+                settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    ..collaboration_protocol::ProviderRequestedSettings::default()
+                }),
                 operation_id: first_id.clone(),
                 endpoint: provider_endpoint.clone(),
                 generation: Some(generation()?),
@@ -511,7 +524,11 @@ async fn authentication_required_is_no_effect_and_does_not_poison_fresh_create()
     let duplicate = operation(
         backend
             .create(ConversationCreateRequest {
-                settings: None,
+                work_roots: Vec::new(),
+                settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    ..collaboration_protocol::ProviderRequestedSettings::default()
+                }),
                 operation_id: first_id,
                 endpoint: provider_endpoint.clone(),
                 generation: Some(generation()?),
@@ -527,7 +544,11 @@ async fn authentication_required_is_no_effect_and_does_not_poison_fresh_create()
     operation(
         backend
             .create(ConversationCreateRequest {
-                settings: None,
+                work_roots: Vec::new(),
+                settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    ..collaboration_protocol::ProviderRequestedSettings::default()
+                }),
                 operation_id: second_id.clone(),
                 endpoint: provider_endpoint,
                 generation: Some(generation()?),
@@ -573,7 +594,11 @@ async fn prompt_authentication_required_is_no_effect_and_fresh_prompt_retains_fi
     operation(
         backend
             .create(ConversationCreateRequest {
-                settings: None,
+                work_roots: Vec::new(),
+                settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    ..collaboration_protocol::ProviderRequestedSettings::default()
+                }),
                 operation_id: create_id.clone(),
                 endpoint: provider_endpoint,
                 generation: Some(generation()?),
@@ -594,6 +619,7 @@ async fn prompt_authentication_required_is_no_effect_and_fresh_prompt_retains_fi
 
     let first_id = OperationId::generate();
     let prompt_request = |operation_id: OperationId| ConversationPromptRequest {
+        delivery: collaboration_protocol::MessageDelivery::Auto,
         input_id: None,
         operation_id,
         target: target.clone(),
@@ -656,7 +682,11 @@ async fn provider_prompt_error_text_cannot_become_a_local_no_effect_rejection() 
     operation(
         backend
             .create(ConversationCreateRequest {
-                settings: None,
+                work_roots: Vec::new(),
+                settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    ..collaboration_protocol::ProviderRequestedSettings::default()
+                }),
                 operation_id: create_id.clone(),
                 endpoint: provider_endpoint,
                 generation: Some(generation()?),
@@ -678,6 +708,7 @@ async fn provider_prompt_error_text_cannot_become_a_local_no_effect_rejection() 
     operation(
         backend
             .prompt(ConversationPromptRequest {
+                delivery: collaboration_protocol::MessageDelivery::Auto,
                 input_id: None,
                 operation_id: prompt_id.clone(),
                 target,

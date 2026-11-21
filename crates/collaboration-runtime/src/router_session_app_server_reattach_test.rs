@@ -197,7 +197,12 @@ impl SessionEventHub for ObservedConcreteHub {
 )]
 async fn concrete_hub_epoch_resync_reattaches_same_tui_socket()
 -> Result<(), Box<dyn std::error::Error>> {
+    use crate::owner_inbox::{
+        HubHistoryAvailability, HubPublication, HubPublicationBaseline, HubPublicationFact,
+        HubPublicationStamp,
+    };
     use collaboration_protocol::{ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess};
+    use std::num::NonZeroUsize;
     use tokio::{
         sync::Mutex,
         time::{Duration, timeout},
@@ -226,18 +231,37 @@ async fn concrete_hub_epoch_resync_reattaches_same_tui_socket()
             created_by: owner.clone(),
             approver: owner,
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await?;
     let hub = Arc::new(crate::ProviderSessionEventHub::new(Arc::new(Mutex::new(
         store,
     ))));
-    hub.publish(
-        backend.session.clone(),
-        SessionEvent::StateChanged {
-            state: session_event_model::SessionState::Idle,
-        },
-    )
-    .await?;
+    let incarnation = uuid::Uuid::now_v7();
+    let (inbox, publication) = hub.owner_inbox(backend.session.clone(), NonZeroUsize::MIN);
+    inbox.install_incarnation(None, incarnation)?;
+    let stop_publication = tokio_util::sync::CancellationToken::new();
+    let publisher = tokio::spawn(
+        publication
+            .expect("start the owner publication task")
+            .run(stop_publication.clone()),
+    );
+    inbox
+        .try_offer(HubPublication::Rebase {
+            stamp: HubPublicationStamp {
+                incarnation,
+                sequence: 1,
+            },
+            baseline: Box::new(HubPublicationBaseline {
+                state: session_event_model::SessionState::Idle,
+                turn_running: false,
+                capabilities: None,
+                settings: None,
+                skills: session_event_model::SkillView::Unknown,
+                history: HubHistoryAvailability::Available,
+            }),
+        })?
+        .await??;
     let observed = Arc::new(ObservedConcreteHub {
         inner: Arc::clone(&hub),
         attachment_count: std::sync::atomic::AtomicUsize::new(0),
@@ -275,8 +299,16 @@ async fn concrete_hub_epoch_resync_reattaches_same_tui_socket()
     )?;
     assert_eq!(resumed["id"], 1);
     observed.attachment_created.notified().await;
-    hub.begin_history_unavailable(backend.session.clone())
-        .await?;
+    inbox
+        .try_offer(HubPublication::Commit {
+            stamp: HubPublicationStamp {
+                incarnation,
+                sequence: 2,
+            },
+            facts: vec![HubPublicationFact::HistoryUnavailable],
+            observed_at_seconds: 0,
+        })?
+        .await??;
     timeout(
         Duration::from_secs(2),
         observed.attachment_created.notified(),
@@ -309,6 +341,8 @@ async fn concrete_hub_epoch_resync_reattaches_same_tui_socket()
     );
     client.close(None).await?;
     server.await?;
+    stop_publication.cancel();
+    publisher.await?;
     Ok(())
 }
 

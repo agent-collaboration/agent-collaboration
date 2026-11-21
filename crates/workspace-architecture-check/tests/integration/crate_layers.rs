@@ -12,7 +12,7 @@ mod test_support_policy;
 #[path = "workspace_boundaries.rs"]
 mod workspace_boundaries;
 
-const LAYER_POLICY: [(&str, &[&str]); 36] = [
+const LAYER_POLICY: [(&str, &[&str]); 38] = [
     ("workspace-ids", &[]),
     (
         "workspace-model",
@@ -37,7 +37,12 @@ const LAYER_POLICY: [(&str, &[&str]); 36] = [
         ],
     ),
     ("central-storage", &[]),
-    ("central-engine-model", &["central-storage"]),
+    ("state-machine-core", &[]),
+    ("provider-session-machines", &["state-machine-core"]),
+    (
+        "central-engine-model",
+        &["central-storage", "state-machine-core"],
+    ),
     (
         "collaboration-central-core",
         &[
@@ -153,10 +158,22 @@ const LAYER_POLICY: [(&str, &[&str]); 36] = [
     ),
     ("collaboration-contracts", &[]),
     ("vendor-protocol", &[]),
-    ("acp-client-runtime", &["vendor-protocol"]),
     (
         "acp-provider-adapters",
-        &["acp-client-runtime", "vendor-protocol"],
+        &[
+            "acp-client-runtime",
+            "provider-session-machines",
+            "vendor-protocol",
+        ],
+    ),
+    (
+        "acp-client-runtime",
+        &[
+            "vendor-protocol",
+            "state-machine-core",
+            "provider-session-machines",
+            "router-clock",
+        ],
     ),
     (
         "collaboration-runtime",
@@ -211,6 +228,8 @@ const LAYER_POLICY: [(&str, &[&str]); 36] = [
             "acp-client-runtime",
             "acp-provider-adapters",
             "router-clock",
+            "state-machine-core",
+            "provider-session-machines",
             "collaboration-contracts",
             "collaboration-runtime",
             "collaboration-service",

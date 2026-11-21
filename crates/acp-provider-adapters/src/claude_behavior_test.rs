@@ -188,3 +188,53 @@ fn malformed_annotation_containers_report_errors_without_hiding_valid_rows() {
         );
     }
 }
+
+/// Oracle: D1 R18 and V33, "Claude's settings carry the roots and the hook"
+/// (wrong build: "the hook missing"): a session with work roots and a hook
+/// command gets per-session settings naming every root as an additional
+/// directory and the hook on every write and the shell; with no hook command
+/// it gets none.
+#[test]
+fn work_roots_become_claude_session_settings_with_the_hook() {
+    // Arrange
+    let behavior = ClaudeAcpBehavior::new(ClaudeSkillSource::Unavailable(
+        SkillSourceError::UnestablishedClassification,
+    ));
+    let work_roots = acp_client_runtime::SessionWorkRoots {
+        roots: vec![
+            std::path::PathBuf::from("/scratch/s"),
+            std::path::PathBuf::from("/tmp/agents"),
+        ],
+        ask_outside_command: Some("'/node' '/hook.ts' '[\"/scratch/s\"]'".to_owned()),
+        router_auto: true,
+    };
+    let auto_without_hook = acp_client_runtime::SessionWorkRoots {
+        router_auto: true,
+        ..acp_client_runtime::SessionWorkRoots::default()
+    };
+
+    // Act
+    let meta = behavior.session_new_meta(&work_roots);
+    let none = behavior.session_new_meta(&acp_client_runtime::SessionWorkRoots::default());
+    let marked = behavior.session_new_meta(&auto_without_hook);
+
+    // Assert
+    let settings = &meta.expect("Claude session settings")["codexRouter"]["workRootSettings"];
+    assert_eq!(
+        settings["permissions"]["additionalDirectories"],
+        serde_json::json!(["/scratch/s", "/tmp/agents"])
+    );
+    let hook = &settings["hooks"]["PreToolUse"][0];
+    assert_eq!(hook["matcher"], "Write|Edit|MultiEdit|NotebookEdit|Bash");
+    assert_eq!(hook["hooks"][0]["type"], "command");
+    assert_eq!(
+        hook["hooks"][0]["command"],
+        "'/node' '/hook.ts' '[\"/scratch/s\"]'"
+    );
+    assert!(none.is_none(), "a named-mode start carries nothing");
+    assert_eq!(
+        marked.map(serde_json::Value::Object),
+        Some(json!({"codexRouter": {"startMode": "auto"}})),
+        "an auto start without its hook still says auto, so the entry refuses it"
+    );
+}

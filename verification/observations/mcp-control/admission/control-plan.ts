@@ -4,7 +4,7 @@
 // nothing, so it has zero Host, provider or model effects.
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, sep } from "node:path";
 import { z } from "zod";
@@ -41,6 +41,21 @@ const actorSchema = z.discriminatedUnion("kind", [
   }),
   z.strictObject({ kind: z.literal("session"), session: sessionRefSchema }),
 ]);
+const sessionControlCases = z.enum([
+  "savedModeRestart",
+  "unansweredReopen",
+  "unansweredClose",
+  "unconfirmedCancel",
+  "cancelRestart",
+  "cancelQueued",
+  "refusedSteer",
+  "inFolderAllowance",
+  "hostAdmissionSmoke",
+  "liveQueue",
+  "liveSteer",
+  "liveOtherSession",
+  "liveQueueClose",
+]);
 export const controlCaseSchema = z.enum([
   "lifecycle",
   "callerLoss",
@@ -51,13 +66,19 @@ export const controlCaseSchema = z.enum([
   // The two-lifetime continuation profile: one lone case per lifetime (continuation-record.ts).
   "continuationRetain",
   "continuationReload",
+  ...sessionControlCases.options,
 ]);
 // Which normal Host artifact serves the run: the automation acceptance Host, or the Router's
 // own foreground Host, each the manifest entry of that name. Never inferred from a path.
-const hostKindSchema = z.enum(["automationDebugHost", "foregroundRouterHost"]);
+const hostKindSchema = z.enum([
+  "automationDebugHost",
+  "foregroundRouterHost",
+  "providerOnlyFixtureHost",
+]);
 const MANIFEST_ENTRY: Readonly<Record<z.infer<typeof hostKindSchema>, string>> = {
   automationDebugHost: "automation-debug-host",
   foregroundRouterHost: "codex-router",
+  providerOnlyFixtureHost: "provider-only-debug-host",
 };
 // The continuation phase this lifetime runs: retain writes the exclusive record inside its own
 // fresh evidence; reload consumes the kept record, bound by its exact digest.
@@ -99,6 +120,7 @@ export const controlPlanSchema = z.strictObject({
       releaseSocket: absolutePath,
     }),
     z.strictObject({ kind: z.literal("provider"), selection: declaredProviderSelectionSchema }),
+    z.strictObject({ kind: z.literal("sessionControlFixture") }),
   ]),
   cases: z.array(controlCaseSchema).min(1),
   // The harmless prompt each case submits. The controlled peer answers any text but "hold",
@@ -113,6 +135,30 @@ export const controlPlanSchema = z.strictObject({
   evidence: absolutePath,
   schemaSource: absolutePath.nullable(),
   continuation: continuationSchema.nullable(),
+  sessionControl: z
+    .strictObject({
+      gateDirectory: absolutePath,
+      restore: z.enum(["load", "resume"]),
+      savedMode: z.string().min(1),
+      closePrimer: z.literal(false).optional(),
+      observeSilentRestorePrompt: z.literal(true).optional(),
+      cursorCancelLoad: z.enum(["firstPrompt", "afterPrimer"]).optional(),
+      primedCancelGuidance: z.literal(true).optional(),
+      restoreReapply: z.enum(["named", "auto", "unconfirmed"]).optional(),
+      allowanceJourney: z.enum(["autoSeed", "autoReopen", "autoProbe", "default"]).optional(),
+      observeRestoredDelete: z.literal(true).optional(),
+      restart: z
+        .discriminatedUnion("phase", [
+          z.strictObject({ phase: z.literal("seed"), record: absolutePath }),
+          z.strictObject({
+            phase: z.literal("reopen"),
+            record: absolutePath,
+            sha256: z.string().regex(/^[0-9a-f]{64}$/),
+          }),
+        ])
+        .optional(),
+    })
+    .optional(),
 });
 export type ControlPlan = z.infer<typeof controlPlanSchema>;
 export type ControlCase = z.infer<typeof controlCaseSchema>;
@@ -131,6 +177,20 @@ const CASE_EFFECTS: Readonly<
   continuationRetain: { sessions: 1, prompts: 1 },
   // No new Session: one load of the kept Session and one prompt.
   continuationReload: { sessions: 0, prompts: 1 },
+  savedModeRestart: { sessions: 1, prompts: 1 }, // Each lifetime is admitted separately.
+  unansweredReopen: { sessions: 2, prompts: 2 },
+  unansweredClose: { sessions: 1, prompts: 2 },
+  // Reserve the refusal probe too. A wrong build could dispatch it.
+  unconfirmedCancel: { sessions: 1, prompts: 3 },
+  cancelRestart: { sessions: 1, prompts: 2 },
+  cancelQueued: { sessions: 1, prompts: 2 },
+  refusedSteer: { sessions: 1, prompts: 2 },
+  inFolderAllowance: { sessions: 1, prompts: 2 },
+  hostAdmissionSmoke: { sessions: 2, prompts: 4 },
+  liveQueue: { sessions: 1, prompts: 3 },
+  liveSteer: { sessions: 1, prompts: 2 },
+  liveOtherSession: { sessions: 2, prompts: 2 },
+  liveQueueClose: { sessions: 1, prompts: 2 },
 };
 const CONTINUATION_CASE = { retain: "continuationRetain", reload: "continuationReload" } as const;
 const OWNER_LOOKUP_COMMAND = "/usr/bin/id"; // collaboration-client owner_identity_resolution.rs:8
@@ -145,6 +205,7 @@ const sha256File = (path: string): string =>
 
 /** Every declared identity, checked without contacting the Host. Throws on the first mismatch. */
 export function checkControlPlan(plan: ControlPlan, now: Date): CheckedTarget {
+  checkSessionControlDeclaration(plan);
   checkSource(plan);
   checkContinuationDeclaration(plan);
   for (const artifact of [plan.host, plan.router])
@@ -324,6 +385,211 @@ function checkSource(plan: ControlPlan): void {
     throw new Error("the repository has uncommitted changes");
 }
 
+function checkSessionControlDeclaration(plan: ControlPlan): void {
+  const selected = plan.cases.filter((name) => sessionControlCases.safeParse(name).success);
+  const control = plan.sessionControl;
+  const fixture = plan.peer.kind === "sessionControlFixture";
+  if (fixture !== (plan.host.kind === "providerOnlyFixtureHost"))
+    throw new Error("the provider-only Host is reserved for the scripted session-control peer");
+  if (control === undefined) {
+    if (fixture || selected.length > 0) throw new Error("session-control declaration required");
+    return;
+  }
+  if (
+    selected.length !== 1 ||
+    plan.cases.length !== 1 ||
+    plan.continuation !== null ||
+    plan.peer.kind === "controlled" ||
+    (!fixture &&
+      plan.host.kind !== "foregroundRouterHost" &&
+      plan.host.kind !== "automationDebugHost")
+  )
+    throw new Error("declare one session-control case on its own gated Host connection");
+  if (
+    (control.restart !== undefined) !==
+    (selected[0] === "savedModeRestart" ||
+      selected[0] === "cancelRestart" ||
+      selected[0] === "hostAdmissionSmoke" ||
+      control.allowanceJourney === "autoSeed" ||
+      control.allowanceJourney === "autoReopen")
+  )
+    throw new Error("only the restart cases declare seed and reopen lifetimes");
+  if (selected[0] === "hostAdmissionSmoke") checkHostAdmissionSmoke(plan, control);
+  if (control.closePrimer === false && selected[0] !== "unansweredClose")
+    throw new Error("only the unanswered-close case declares a metadata-only seed");
+  checkCursorCancelDeclaration(plan, selected[0], control.cursorCancelLoad);
+  checkReapplyDeclaration(plan, selected[0], control.restoreReapply);
+  checkAllowanceDeclaration(plan, selected[0], control.allowanceJourney);
+  if (
+    control.observeRestoredDelete &&
+    (plan.endpointId !== "cursor-local" ||
+      (control.allowanceJourney !== "autoSeed" && control.allowanceJourney !== "autoReopen"))
+  )
+    throw new Error("the restored delete requires the two Cursor allowance lifetimes");
+  if (
+    control.primedCancelGuidance &&
+    (selected[0] !== "unconfirmedCancel" ||
+      control.cursorCancelLoad !== undefined ||
+      plan.peer.kind !== "provider" ||
+      plan.endpointId !== "claude-local")
+  )
+    throw new Error("the primed guidance observation requires a commissioned Claude cancel");
+  if (
+    control.observeSilentRestorePrompt &&
+    (selected[0] !== "savedModeRestart" ||
+      control.restart?.phase !== "reopen" ||
+      plan.peer.kind !== "provider" ||
+      plan.endpointId !== "cursor-local")
+  )
+    throw new Error("the silence observation requires the reopened Cursor saved-mode case");
+  checkAutomationContext(plan);
+  if (
+    control.restart?.phase === "seed" &&
+    (dirname(control.restart.record) !== plan.evidence || existsSync(control.restart.record))
+  )
+    throw new Error("the fresh saved-mode record belongs in seed evidence");
+  if (
+    control.restart?.phase === "reopen" &&
+    sha256File(control.restart.record) !== control.restart.sha256
+  )
+    throw new Error("the saved-mode record differs from its declared digest");
+  checkPrivateSessionControlPaths([
+    dirname(plan.serviceDirectory),
+    plan.serviceDirectory,
+    control.gateDirectory,
+  ]);
+  if (fixture) {
+    const binding = z
+      .looseObject({
+        kind: z.literal("providerOnlyHostReady"),
+        hostPid: z.number().int().positive(),
+        serviceDirectory: absolutePath,
+        serviceId: z.uuid(),
+        serviceEpoch: z.uuid(),
+      })
+      .parse(JSON.parse(readFileSync(join(control.gateDirectory, "fixture-binding.json"), "utf8")));
+    if (
+      plan.endpointId !== "claude-local" ||
+      binding.hostPid !== plan.host.pid ||
+      binding.serviceDirectory !== plan.serviceDirectory ||
+      binding.serviceId !== plan.expectedServiceId ||
+      binding.serviceEpoch !== plan.expectedServiceEpoch
+    )
+      throw new Error("scripted mode requires this Host's isolated fixture launch receipt");
+  }
+}
+
+function checkAutomationContext(plan: ControlPlan): void {
+  if (plan.host.kind === "automationDebugHost") {
+    if (plan.hostContext === null)
+      throw new Error("the automation Host needs its prepared context");
+    const prepared = z
+      .looseObject({
+        kind: z.literal("debugHostPrepared"),
+        runDirectory: absolutePath,
+        serviceDirectory: absolutePath,
+        hostPid: z.number().int().positive(),
+      })
+      .parse(JSON.parse(readFileSync(plan.hostContext, "utf8")));
+    if (
+      prepared.hostPid !== plan.host.pid ||
+      prepared.serviceDirectory !== plan.serviceDirectory ||
+      join(prepared.runDirectory, "agent-communication") !== plan.serviceDirectory
+    )
+      throw new Error(
+        "the automation Host did not publish a private run-local collaboration store",
+      );
+  }
+}
+
+function checkHostAdmissionSmoke(
+  plan: ControlPlan,
+  control: NonNullable<ControlPlan["sessionControl"]>,
+): void {
+  if (
+    plan.endpointId !== "claude-local" ||
+    plan.host.kind !== "automationDebugHost" ||
+    plan.peer.kind !== "provider" ||
+    control.savedMode !== "plan" ||
+    control.restore !== "load"
+  )
+    throw new Error("the admission smoke requires the private Claude Plan route");
+}
+
+function checkAllowanceDeclaration(
+  plan: ControlPlan,
+  selected: ControlCase | undefined,
+  variant: NonNullable<ControlPlan["sessionControl"]>["allowanceJourney"],
+): void {
+  if ((variant !== undefined) !== (selected === "inFolderAllowance"))
+    throw new Error("the private allowance journey needs its declared phase");
+  if (variant === undefined) return;
+  const expected = variant === "default" ? "default" : "auto";
+  if (
+    plan.peer.kind !== "provider" ||
+    plan.host.kind !== "automationDebugHost" ||
+    plan.sessionControl?.savedMode !== expected ||
+    (variant === "autoSeed" && plan.sessionControl.restart?.phase !== "seed") ||
+    (variant === "autoReopen" && plan.sessionControl.restart?.phase !== "reopen")
+  )
+    throw new Error(
+      "the allowance probe needs the declared real provider, mode and private Host lifetime",
+    );
+}
+
+function checkReapplyDeclaration(
+  plan: ControlPlan,
+  selected: ControlCase | undefined,
+  variant: NonNullable<ControlPlan["sessionControl"]>["restoreReapply"],
+): void {
+  if (
+    variant !== undefined &&
+    (selected !== "savedModeRestart" ||
+      plan.sessionControl?.restore !== "load" ||
+      plan.peer.kind !== "provider" ||
+      (variant !== "named" && plan.endpointId !== "claude-local"))
+  )
+    throw new Error("restore reapply requires the commissioned real saved-mode load");
+}
+
+function checkCursorCancelDeclaration(
+  plan: ControlPlan,
+  selected: ControlCase | undefined,
+  variant: NonNullable<ControlPlan["sessionControl"]>["cursorCancelLoad"],
+): void {
+  if (
+    variant !== undefined &&
+    (selected !== "unconfirmedCancel" ||
+      plan.peer.kind !== "provider" ||
+      plan.endpointId !== "cursor-local" ||
+      plan.sessionControl?.restore !== "load")
+  )
+    throw new Error("the lost-session observation requires a real Cursor cancel and load");
+}
+
+function checkPrivateSessionControlPaths(paths: readonly string[]): void {
+  const uid = process.getuid?.();
+  const sharedDebug = join(homedir(), ".codex-router-debug");
+  for (const path of paths) {
+    const stat = lstatSync(path);
+    if (
+      realpathSync(path) !== path ||
+      !stat.isDirectory() ||
+      stat.uid !== uid ||
+      (stat.mode & 0o777) !== 0o700
+    )
+      throw new Error(
+        "session control requires canonical owner-private runtime and gate directories",
+      );
+    if (
+      isProductionRouterPath(path, homedir()) ||
+      path === sharedDebug ||
+      path.startsWith(sharedDebug + sep)
+    )
+      throw new Error("session control requires a private root outside the shared Router homes");
+  }
+}
+
 function checkActor(plan: ControlPlan): void {
   for (const identity of [plan.actor, plan.approver]) {
     if (identity.kind !== "human") continue;
@@ -333,11 +599,39 @@ function checkActor(plan: ControlPlan): void {
   }
 }
 
+function casePromptBudget(plan: ControlPlan, name: ControlCase): number {
+  if (name === "hostAdmissionSmoke" && plan.sessionControl?.restart?.phase === "reopen") return 1;
+  if (name === "liveQueue" && plan.endpointId === "cursor-local") return 2;
+  if (
+    name === "inFolderAllowance" &&
+    plan.sessionControl?.observeRestoredDelete &&
+    plan.sessionControl.allowanceJourney === "autoSeed"
+  )
+    return 1;
+  if (name === "inFolderAllowance" && plan.sessionControl?.allowanceJourney === "autoProbe")
+    return 3;
+  if (name === "inFolderAllowance" && plan.sessionControl?.allowanceJourney === "default") return 1;
+  if (name === "unansweredClose" && plan.sessionControl?.closePrimer === false) return 1;
+  if (name === "unconfirmedCancel") {
+    const variant = plan.sessionControl?.cursorCancelLoad;
+    if (variant === "firstPrompt") return 2;
+    if (variant === "afterPrimer" || plan.sessionControl?.primedCancelGuidance) return 4;
+  }
+  return CASE_EFFECTS[name].prompts;
+}
+
 function checkEffectsAndTime(plan: ControlPlan, now: Date): void {
   const needed = plan.cases.reduce(
     (total, name) => ({
-      sessions: total.sessions + CASE_EFFECTS[name].sessions,
-      prompts: total.prompts + CASE_EFFECTS[name].prompts,
+      sessions:
+        total.sessions +
+        (name === "hostAdmissionSmoke" && plan.sessionControl?.restart?.phase === "reopen"
+          ? 0
+          : CASE_EFFECTS[name].sessions),
+      prompts:
+        total.prompts +
+        casePromptBudget(plan, name) +
+        (name === "savedModeRestart" && plan.sessionControl?.observeSilentRestorePrompt ? 1 : 0),
     }),
     { sessions: 0, prompts: 0 },
   );

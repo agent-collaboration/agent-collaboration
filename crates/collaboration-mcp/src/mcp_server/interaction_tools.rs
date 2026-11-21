@@ -8,7 +8,7 @@ use super::{
 
 #[tool_router(router = provider_control_tool_router, vis = "pub(super)")]
 impl CollaborationMcpServer {
-    #[tool(name = "conversation_settings_set", description = "Sets one advertised provider Session mode, model, or effort as its creator or Approver. An ambiguous provider response leaves settings gated.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<ProviderSettingsResult>>())]
+    #[tool(name = "conversation_settings_set", description = "Sets one advertised provider Session mode, model, or effort, or fast (off or auto), as its creator or Approver. An ambiguous provider response leaves settings gated.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<ProviderSettingsResult>>())]
     pub(super) async fn conversation_settings_set(
         &self,
         Parameters(request): Parameters<ProviderSettingsSetRequest>,

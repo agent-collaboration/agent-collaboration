@@ -143,9 +143,21 @@ pub enum ProviderOperationAdmissionResult {
     Existing(ProviderOperationRecord),
 }
 
+#[path = "provider_uncertain_operations.rs"]
+mod uncertain_operations;
+pub use uncertain_operations::StoredUncertainOperation;
+
 pub struct ProviderOperationStore {
     pub(crate) connection: SqliteConnection,
     commits: CommitSignal,
+    /// Test support (StoreFault, design note §11.8): the next terminal write
+    /// of this operation fails without touching its row.
+    #[cfg(any(test, feature = "test-support"))]
+    terminal_write_fault: Option<OperationId>,
+    #[cfg(any(test, feature = "test-support"))]
+    dispatch_mark_fault: Option<OperationId>,
+    #[cfg(any(test, feature = "test-support"))]
+    dispatch_mark_receipt_fault: Option<OperationId>,
 }
 
 /// Runs one write statement as a one-statement transaction through
@@ -210,6 +222,12 @@ impl ProviderOperationStore {
         Ok(Self {
             connection,
             commits: CommitSignal::new(),
+            #[cfg(any(test, feature = "test-support"))]
+            terminal_write_fault: None,
+            #[cfg(any(test, feature = "test-support"))]
+            dispatch_mark_fault: None,
+            #[cfg(any(test, feature = "test-support"))]
+            dispatch_mark_receipt_fault: None,
         })
     }
 
@@ -273,8 +291,91 @@ impl ProviderOperationStore {
         }
     }
 
+    /// A queued prompt first acquires a durable row when its dispatch mark
+    /// is written. The target and mark take effect in the same statement.
+    pub async fn admit_queued_prompt_at_dispatch(
+        &mut self,
+        admission: ProviderOperationAdmission,
+        target: &SessionRef,
+        dispatched_at_ms: i64,
+    ) -> Result<ProviderOperationRecord, ProviderOperationStoreError> {
+        if admission.operation_kind != ProviderOperationKind::ConversationPrompt {
+            return Err(ProviderOperationStoreError::InvalidRecord);
+        }
+        match self
+            .admit_with_target(admission, Some(target), Some(dispatched_at_ms), || true)
+            .await?
+        {
+            Some(ProviderOperationAdmissionResult::Admitted(record)) => Ok(record),
+            _ => Err(ProviderOperationStoreError::TransitionConflict),
+        }
+    }
+
+    /// Records Host admission, its target and its optional dispatch mark as one
+    /// transaction. `None` means the admission guard revoked it before COMMIT.
+    pub async fn admit_with_target(
+        &mut self,
+        admission: ProviderOperationAdmission,
+        target: Option<&SessionRef>,
+        dispatched_at_ms: Option<i64>,
+        may_commit: impl FnOnce() -> bool + Send,
+    ) -> Result<Option<ProviderOperationAdmissionResult>, ProviderOperationStoreError> {
+        let dispatched_at_ms = dispatched_at_ms.map(|stamp| stamp.max(admission.admitted_at_ms));
+        let (stage, effect) = if dispatched_at_ms.is_some() {
+            (
+                ProviderOperationStage::MayHaveDispatched,
+                ProviderOperationEffect::Unknown,
+            )
+        } else {
+            (
+                ProviderOperationStage::Admitted,
+                ProviderOperationEffect::None,
+            )
+        };
+        let mut transaction = self.transaction(TransactionStart::Immediate).await?;
+        let result = sqlx::query!(
+            "INSERT OR IGNORE INTO provider_operations (
+                operation_id,operation_kind,binding_json,
+                target_service_id,target_endpoint_id,target_session_id,
+                stage,effect,reconciliation_state,admitted_at_ms,dispatched_at_ms,updated_at_ms
+             ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            admission.operation_id.as_str(),
+            encode_enum(admission.operation_kind)?,
+            encode_closed(&admission.binding)?,
+            target.map(|target| String::from(target.endpoint.service_id.clone())),
+            target.map(|target| String::from(target.endpoint.endpoint_id.clone())),
+            target.map(|target| String::from(target.session_id.clone())),
+            encode_enum(stage)?,
+            encode_enum(effect)?,
+            encode_enum(ProviderReconciliationState::Unresolved)?,
+            admission.admitted_at_ms,
+            dispatched_at_ms,
+            dispatched_at_ms.unwrap_or(admission.admitted_at_ms),
+        )
+        .execute(&mut *transaction)
+        .await?;
+        let record = Self::read_operation(&mut transaction, &admission.operation_id)
+            .await?
+            .ok_or(ProviderOperationStoreError::InvalidRecord)?;
+        if !transaction.commit_if(may_commit).await? {
+            return Ok(None);
+        }
+        Ok(Some(if result.rows_affected() == 1 {
+            ProviderOperationAdmissionResult::Admitted(record)
+        } else {
+            ProviderOperationAdmissionResult::Existing(record)
+        }))
+    }
+
     pub async fn inspect(
         &mut self,
+        operation_id: &OperationId,
+    ) -> Result<Option<ProviderOperationRecord>, ProviderOperationStoreError> {
+        Self::read_operation(&mut self.connection, operation_id).await
+    }
+
+    async fn read_operation(
+        connection: &mut SqliteConnection,
         operation_id: &OperationId,
     ) -> Result<Option<ProviderOperationRecord>, ProviderOperationStoreError> {
         sqlx::query_as!(
@@ -286,10 +387,41 @@ impl ProviderOperationStore {
              FROM provider_operations WHERE operation_id=?",
             operation_id.as_str(),
         )
-        .fetch_optional(&mut self.connection)
+        .fetch_optional(connection)
         .await?
         .map(decode_record)
         .transpose()
+    }
+
+    #[cfg(feature = "test-support")]
+    pub fn pause_next_admission_after_commit_for_test(
+        &self,
+    ) -> sqlite_storage_maintenance::CommitPause {
+        self.commits
+            .pause_next_commit_at(sqlite_storage_maintenance::CommitPoint::AfterCommitReturned)
+    }
+
+    #[cfg(feature = "test-support")]
+    pub fn pause_next_write_before_commit_for_test(
+        &self,
+    ) -> sqlite_storage_maintenance::CommitPause {
+        self.commits
+            .pause_next_commit_at(sqlite_storage_maintenance::CommitPoint::BeforeCommitInvoked)
+    }
+
+    /// Unacknowledged unknown operations for this binding, excluding completed
+    /// restore attempts whose local owner is already retired.
+    pub async fn unknown_operations(
+        &mut self,
+        binding: &ProviderBindingIdentity,
+    ) -> Result<Vec<(OperationId, Option<SessionRef>)>, ProviderOperationStoreError> {
+        Ok(self
+            .stored_uncertain_operations(binding)
+            .await?
+            .into_iter()
+            .filter(|row| row.stage != ProviderOperationStage::Terminal || !row.kind.is_restore())
+            .map(|row| (row.operation, row.target))
+            .collect())
     }
 
     pub async fn blocking_uncertain_operation_ids(
@@ -297,52 +429,13 @@ impl ProviderOperationStore {
         binding: &ProviderBindingIdentity,
         target: Option<&SessionRef>,
     ) -> Result<Vec<OperationId>, ProviderOperationStoreError> {
-        let unknown = encode_enum(ProviderOperationEffect::Unknown)?;
-        let candidates = sqlx::query!(
-            "SELECT operation_id,binding_json,target_service_id,target_endpoint_id,target_session_id
-             FROM provider_operations WHERE effect=? ORDER BY operation_id",
-            unknown,
-        )
-        .fetch_all(&mut self.connection)
-        .await?;
-        let mut blocking = Vec::new();
-        for candidate in candidates {
-            let stored_binding = decode_binding(&candidate.binding_json)?;
-            let same_scope = match stored_binding {
-                ConversationBindingIdentity::ExternalProvider { binding: stored } => {
-                    // A future in-serve process replacement must bump generation.
-                    stored.endpoint == binding.endpoint
-                        && stored.runtime.provider == binding.runtime.provider
-                        && stored.generation == binding.generation
-                }
-                ConversationBindingIdentity::CodexAcp { .. } => false,
-            };
-            if !same_scope {
-                continue;
-            }
-            let blocks = match (
-                target,
-                candidate.target_service_id,
-                candidate.target_endpoint_id,
-                candidate.target_session_id,
-            ) {
-                (_, None, None, None) => true,
-                (Some(target), Some(service_id), Some(endpoint_id), Some(session_id)) => {
-                    service_id == String::from(target.endpoint.service_id.clone())
-                        && endpoint_id == String::from(target.endpoint.endpoint_id.clone())
-                        && session_id == String::from(target.session_id.clone())
-                }
-                (None, Some(_), Some(_), Some(_)) => false,
-                _ => return Err(ProviderOperationStoreError::InvalidRecord),
-            };
-            if blocks {
-                blocking.push(
-                    OperationId::try_from(candidate.operation_id)
-                        .map_err(|_| ProviderOperationStoreError::InvalidRecord)?,
-                );
-            }
-        }
-        Ok(blocking)
+        Ok(self
+            .unknown_operations(binding)
+            .await?
+            .into_iter()
+            .filter(|(_, held_target)| held_target.is_none() || held_target.as_ref() == target)
+            .map(|(operation, _)| operation)
+            .collect())
     }
 
     pub async fn mark_may_have_dispatched(
@@ -350,6 +443,25 @@ impl ProviderOperationStore {
         operation_id: &OperationId,
         dispatched_at_ms: i64,
     ) -> Result<ProviderOperationRecord, ProviderOperationStoreError> {
+        self.mark_may_have_dispatched_if(operation_id, dispatched_at_ms, || true)
+            .await?
+            .ok_or(ProviderOperationStoreError::TransitionConflict)
+    }
+
+    /// Return the dispatch mark only after the guarded transaction commits.
+    /// The record is read in the transaction so no fallible read follows COMMIT.
+    pub async fn mark_may_have_dispatched_if(
+        &mut self,
+        operation_id: &OperationId,
+        dispatched_at_ms: i64,
+        may_commit: impl FnOnce() -> bool + Send,
+    ) -> Result<Option<ProviderOperationRecord>, ProviderOperationStoreError> {
+        #[cfg(any(test, feature = "test-support"))]
+        if self.dispatch_mark_fault.as_ref() == Some(operation_id) {
+            self.dispatch_mark_fault = None;
+            return Err(ProviderOperationStoreError::TransitionConflict);
+        }
+        let mut transaction = self.transaction(TransactionStart::Immediate).await?;
         let result = sqlx::query!(
             "UPDATE provider_operations
              SET stage=?,effect=?,dispatched_at_ms=MAX(admitted_at_ms,?),updated_at_ms=MAX(updated_at_ms,admitted_at_ms,?)
@@ -359,11 +471,51 @@ impl ProviderOperationStore {
              dispatched_at_ms, operation_id.as_str(),
              encode_enum(ProviderOperationStage::Admitted)?,
         )
+        .execute(&mut *transaction)
+        .await?;
+        let record = Self::read_operation(&mut transaction, operation_id)
+            .await?
+            .ok_or(ProviderOperationStoreError::NotFound)?;
+        if result.rows_affected() == 0
+            && (record.stage != ProviderOperationStage::MayHaveDispatched
+                || record.dispatched_at_ms.is_none())
+        {
+            return Err(ProviderOperationStoreError::TransitionConflict);
+        }
+        let committed = transaction.commit_if(may_commit).await?;
+        #[cfg(any(test, feature = "test-support"))]
+        if committed && self.dispatch_mark_receipt_fault.as_ref() == Some(operation_id) {
+            self.dispatch_mark_receipt_fault = None;
+            return Err(ProviderOperationStoreError::Database(
+                sqlx::Error::Protocol("injected dispatch mark receipt failure".to_owned()),
+            ));
+        }
+        Ok(committed.then_some(record))
+    }
+
+    /// Returns a row marked for dispatch to Admitted with no effect when the
+    /// send was refused before anything reached the agent: a steer the agent
+    /// answered promptRequired, or a prompt the runtime refused because a
+    /// turn was running (D1 R12, R14). Never for a send that may have left.
+    pub async fn unmark_undispatched(
+        &mut self,
+        operation_id: &OperationId,
+        updated_at_ms: i64,
+    ) -> Result<ProviderOperationRecord, ProviderOperationStoreError> {
+        let result = sqlx::query!(
+            "UPDATE provider_operations
+             SET stage=?,effect=?,dispatched_at_ms=NULL,updated_at_ms=MAX(updated_at_ms,admitted_at_ms,?)
+             WHERE operation_id=? AND stage=?",
+             encode_enum(ProviderOperationStage::Admitted)?,
+             encode_enum(ProviderOperationEffect::None)?, updated_at_ms,
+             operation_id.as_str(), encode_enum(ProviderOperationStage::MayHaveDispatched)?,
+        )
         .execute_as_transaction(self)
         .await?;
         self.transition_result(operation_id, result.rows_affected(), |record| {
-            record.stage == ProviderOperationStage::MayHaveDispatched
-                && record.dispatched_at_ms.is_some()
+            record.stage == ProviderOperationStage::Admitted
+                && record.effect == ProviderOperationEffect::None
+                && record.dispatched_at_ms.is_none()
         })
         .await
     }
@@ -404,6 +556,13 @@ impl ProviderOperationStore {
         terminal_stop_reason: Option<ProviderPromptStopReason>,
         terminal_at_ms: i64,
     ) -> Result<ProviderOperationRecord, ProviderOperationStoreError> {
+        #[cfg(any(test, feature = "test-support"))]
+        if self.terminal_write_fault.as_ref() == Some(operation_id) {
+            self.terminal_write_fault = None;
+            return Err(ProviderOperationStoreError::Database(
+                sqlx::Error::Protocol("injected terminal write failure".to_owned()),
+            ));
+        }
         let encoded_stop_reason = terminal_stop_reason.as_ref().map(encode_enum).transpose()?;
         let result = sqlx::query!(
             "UPDATE provider_operations
@@ -716,6 +875,25 @@ async fn validate_schema(
         Ok(())
     } else {
         Err(ProviderOperationStoreError::InvalidRecord)
+    }
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl ProviderOperationStore {
+    /// StoreFault (design note §11.8): the next terminal write of
+    /// `operation_id` fails and leaves its row as it was.
+    pub fn fail_next_terminal_write_of(&mut self, operation_id: &OperationId) {
+        self.terminal_write_fault = Some(operation_id.clone());
+    }
+
+    /// Fail the next dispatch mark of this operation before its transaction.
+    pub fn fail_next_dispatch_mark_of(&mut self, operation_id: &OperationId) {
+        self.dispatch_mark_fault = Some(operation_id.clone());
+    }
+
+    /// Fail the receipt after the next dispatch mark of this operation commits.
+    pub fn fail_next_dispatch_mark_receipt_of(&mut self, operation_id: &OperationId) {
+        self.dispatch_mark_receipt_fault = Some(operation_id.clone());
     }
 }
 

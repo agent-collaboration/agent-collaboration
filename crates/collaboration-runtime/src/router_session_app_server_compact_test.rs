@@ -193,11 +193,19 @@ async fn supported_compact_keeps_the_existing_ack_and_has_no_refusal_notificatio
 )]
 async fn other_compact_failures_keep_rpc_errors_and_emit_no_control_notification() -> TestResult<()>
 {
-    for (failure, code) in [
-        (CommandFailure::UnauthorizedActor, -32000),
-        (CommandFailure::ProviderFailure, -32000),
-        (CommandFailure::Busy, -32600),
-        (CommandFailure::SessionNotFound, -32002),
+    let recovery = "the Router could not publish the replay, so retry this session";
+    for (failure, code, message) in [
+        (CommandFailure::UnauthorizedActor, -32000, None),
+        (CommandFailure::ProviderFailure, -32000, None),
+        (CommandFailure::Busy, -32600, None),
+        (CommandFailure::SessionNotFound, -32002, None),
+        (
+            CommandFailure::RestoreFailed {
+                reason: recovery.to_owned(),
+            },
+            -32000,
+            Some(recovery),
+        ),
     ] {
         let backend = ScriptedSessionBackend::new()?;
         *backend.compact_failure.lock().expect("test lock") = Some(failure);
@@ -213,6 +221,14 @@ async fn other_compact_failures_keep_rpc_errors_and_emit_no_control_notification
         let response = frame(&mut client).await?;
         assert_eq!(response["id"], 2);
         assert_eq!(response["error"]["code"], code);
+        if let Some(message) = message {
+            assert_eq!(
+                response
+                    .pointer("/error/message")
+                    .and_then(serde_json::Value::as_str),
+                Some(message)
+            );
+        }
         assert!(response.get("result").is_none());
         assert_eq!(history(&mut client, &thread).await?, json!([]));
         assert!(backend.history.lock().expect("test lock").is_empty());

@@ -119,7 +119,7 @@ const FLEET_WASM_TARGET: &str = "wasm32-unknown-unknown";
 // Chrono's wasm support reaches these runtime-independent helpers via js-sys.
 const FLEET_WASM_SUPPORT_PACKAGES: &[&str] = &["futures-core", "futures-task", "futures-util"];
 
-const PURE_CRATES: [(&str, &[&str]); 7] = [
+const PURE_CRATES: [(&str, &[&str]); 8] = [
     ("workspace-ids", &[]),
     (
         "workspace-model",
@@ -136,7 +136,11 @@ const PURE_CRATES: [(&str, &[&str]); 7] = [
         &["workspace-ids", "workspace-model"],
     ),
     ("central-storage", &[]),
-    ("central-engine-model", &["central-storage"]),
+    ("state-machine-core", &[]),
+    (
+        "central-engine-model",
+        &["central-storage", "state-machine-core"],
+    ),
     ("workspace-rules", &["workspace-model", "central-storage"]),
     ("vendor-protocol", &[]),
 ];

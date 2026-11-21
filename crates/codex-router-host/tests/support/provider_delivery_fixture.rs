@@ -43,6 +43,10 @@ pub(super) struct RecordedEvidence(
 );
 
 impl AttemptEvidenceSink for RecordedEvidence {
+    fn retain_queued_dispatch(&self) -> Option<std::sync::Arc<dyn AttemptEvidenceSink>> {
+        collaboration_contracts::UnstoredAttemptEvidenceSink.retain_queued_dispatch()
+    }
+
     fn record(
         &self,
         evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,

@@ -19,13 +19,17 @@ pub use codex_conversation_operation_recorder::{
 };
 mod provider_session_event_hub;
 mod provider_session_record;
+pub use provider_operation_store::StoredUncertainOperation;
 pub use provider_operation_store::{
     PROVIDER_OPERATION_RETENTION_MONTHS, ProviderOperationAdmission,
     ProviderOperationAdmissionResult, ProviderOperationRecord, ProviderOperationStore,
     ProviderOperationStoreError, provider_operation_retention_cutoff_ms,
 };
+#[cfg(any(test, feature = "test-support"))]
+pub use provider_session_event_hub::HeldSessionHistory;
+pub use provider_session_event_hub::owner_inbox;
 pub use provider_session_event_hub::{HubReceiveError, ProviderSessionEventHub, receive_hub_event};
-pub use provider_session_record::ProviderSessionRecord;
+pub use provider_session_record::{ProviderSessionRecord, ProviderSessionResumeInputs};
 mod app_server_event_forwarding;
 mod app_server_item_metadata;
 mod app_server_item_translation;
@@ -43,6 +47,10 @@ mod app_server_item_translation_tests;
 mod native_skill_reference;
 mod provider_acp_content_translation;
 mod provider_acp_event_projection;
+/// The Router-level mode every agent accepts for "work on your own"; doors
+/// whose protocol carries no mode ask for it by name (D1 spec R1).
+pub(crate) const AUTO_SESSION_MODE: &str = "auto";
+mod provider_acp_busy_prompt;
 mod provider_acp_session_route;
 mod router_session_app_server;
 pub use app_server_model_catalog::{

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { setTimeout } from "node:timers/promises";
 import { field } from "../exact-json.ts";
 import { requireArgument } from "./acp-stdio.ts";
 import { AcpExchange } from "./acp-exchange.ts";
@@ -79,8 +78,14 @@ if (scenario === "mcp") {
   } else {
     agent.endTurn(prompt);
     if (scenario === "successor") {
-      const second = await agent.read();
-      await setTimeout(150);
+      const second = await agent.read("session/prompt");
+      // The packed exchange sends both prompts and closes stdin.
+      const controlSocket = process.argv[3];
+      if (controlSocket !== undefined)
+        await agent.socketSignal(
+          controlSocket,
+          (line) => new Error(`unexpected provider input while the successor was held: ${line}`),
+        );
       agent.endTurn(second);
     }
   }

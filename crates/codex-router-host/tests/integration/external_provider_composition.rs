@@ -84,12 +84,13 @@ async fn collaboration_api_reaches_host_owned_provider_and_reuses_target() {
             )
         });
     // R7: the endpoint list says how this agent's auto mode treats outside
-    // actions, from the binding's own behaviour (Claude: asks first, D1).
+    // actions, from the binding's own behaviour (Claude's own auto: not
+    // established, D1 Change 1).
     assert!(
         provider_endpoint.channels.iter().any(|channel| matches!(
             channel,
             ChannelDescription::ExternalProvider {
-                auto_realization: Some(collaboration_protocol::ProviderAutoRealization::AsksFirst),
+                auto_realization: Some(collaboration_protocol::ProviderAutoRealization::Unknown),
                 ..
             }
         )),
@@ -111,7 +112,11 @@ async fn collaboration_api_reaches_host_owned_provider_and_reuses_target() {
     submit_provider_create(
         &client,
         ConversationCreateRequest {
-            settings: None,
+            work_roots: Vec::new(),
+            settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                mode: Some("auto".into()),
+                ..collaboration_protocol::ProviderRequestedSettings::default()
+            }),
             operation_id: create_operation.clone(),
             endpoint: provider_endpoint.endpoint.clone(),
             generation: Some(generation.clone()),
@@ -146,6 +151,7 @@ async fn collaboration_api_reaches_host_owned_provider_and_reuses_target() {
     submit_provider_prompt(
         &client,
         ConversationPromptRequest {
+            delivery: collaboration_protocol::MessageDelivery::Auto,
             input_id: None,
             operation_id: prompt_operation.clone(),
             target: target.clone(),
@@ -286,7 +292,11 @@ async fn provider_process_exit_retires_advertisement_and_rejects_new_admission()
     let failure = submit_provider_create(
         &client,
         ConversationCreateRequest {
-            settings: None,
+            work_roots: Vec::new(),
+            settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                mode: Some("auto".into()),
+                ..collaboration_protocol::ProviderRequestedSettings::default()
+            }),
             operation_id: OperationId::generate(),
             endpoint: provider_endpoint.endpoint,
             generation: Some(CodexGeneration {

@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use crate::served_api;
+use crate::{provider_history::ResumePublicationFixture, served_api};
 use collaboration_client::CollaborationClient;
 use collaboration_protocol::{
     BoundedObservationRequest, EndpointDescription, ObservationEndReason, ProviderRequestedPolicy,
@@ -54,6 +54,7 @@ async fn provider_fixture() -> Result<ProviderFixture, Box<dyn std::error::Error
             created_by: owner.clone().into(),
             approver: owner.into(),
             updated_at_ms: 1,
+            resume: Default::default(),
         })
         .await?;
     let hub = Arc::new(ProviderSessionEventHub::with_capacity(store, 2));
@@ -239,6 +240,9 @@ async fn a_stale_epoch_answers_its_resync_marker_even_when_the_budget_cannot_hol
 async fn a_reset_during_an_open_call_streams_its_resync_marker_without_a_cursor() {
     // Arrange: an open call that has streamed the retained event.
     let fixture = provider_fixture().await.expect("provider fixture");
+    let resume = ResumePublicationFixture::start(&fixture.hub, &fixture.board_target)
+        .await
+        .expect("fixture owner publisher");
     let served = served_api::ServedApi::start(fixture.identity).expect("serve the API");
     let client = served
         .client("reset-observer")
@@ -258,17 +262,12 @@ async fn a_reset_during_an_open_call_streams_its_resync_marker_without_a_cursor(
             .observe_provider_session_streaming(request, Some(observed))
             .await
     });
-    let retained = tokio::time::timeout(std::time::Duration::from_secs(5), streamed.recv())
-        .await
-        .expect("the retained event streamed while the call was open")
-        .expect("streamed event");
+    let retained = streamed.recv().await.expect("the retained event streamed");
+    let baseline = streamed.recv().await.expect("the owner baseline streamed");
+    assert_eq!(baseline.event["sequence"], 2);
 
     // Act: the Session's history is invalidated while the call is open.
-    fixture
-        .hub
-        .begin_history_unavailable(fixture.board_target.clone())
-        .await
-        .expect("history reset");
+    resume.resume(None).await.expect("history reset");
     let result = call
         .await
         .expect("call joins")
@@ -285,6 +284,7 @@ async fn a_reset_during_an_open_call_streams_its_resync_marker_without_a_cursor(
     assert_eq!(marker.cursor, None, "{marker:?}");
     assert_eq!(result.events.last(), Some(&marker.event));
     assert_eq!(result.end_reason, ObservationEndReason::ResyncRequired);
+    resume.stop().await.expect("publisher stops");
     served.stop().await.expect("API stops");
 }
 

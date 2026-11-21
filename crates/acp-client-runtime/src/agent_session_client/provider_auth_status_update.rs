@@ -1,37 +1,30 @@
 //! Capture the connection-scoped Claude auth update without private fields.
 
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use agent_client_protocol::{Agent, ConnectionTo, Dispatch, Error, HandleDispatchFrom, Handled};
+use session_event_model::ProviderAuthStatus;
 use session_event_model::session_profile_codec::decode_connection_auth_status;
-use session_event_model::{ProviderAuthStatus, SessionEvent};
 use tokio::sync::RwLock;
-use tokio_util::sync::CancellationToken;
 
-use crate::{ProviderCapabilityReport, SessionEventSink};
+use crate::{SessionEventSink, owner_wire::OwnerAcpWire};
 
 pub(super) struct ProviderAuthStatusHandler {
     auth_status: Arc<RwLock<ProviderAuthStatus>>,
-    session_capabilities: Arc<RwLock<HashMap<String, ProviderCapabilityReport>>>,
+    wire: Arc<OwnerAcpWire>,
     event_sink: Arc<dyn SessionEventSink>,
-    shutdown: CancellationToken,
-    sink_closed: CancellationToken,
 }
 
 impl ProviderAuthStatusHandler {
     pub(super) fn new(
         auth_status: Arc<RwLock<ProviderAuthStatus>>,
-        session_capabilities: Arc<RwLock<HashMap<String, ProviderCapabilityReport>>>,
+        wire: Arc<OwnerAcpWire>,
         event_sink: Arc<dyn SessionEventSink>,
-        shutdown: CancellationToken,
-        sink_closed: CancellationToken,
     ) -> Self {
         Self {
             auth_status,
-            session_capabilities,
+            wire,
             event_sink,
-            shutdown,
-            sink_closed,
         }
     }
 }
@@ -62,28 +55,15 @@ impl HandleDispatchFrom<Agent> for ProviderAuthStatusHandler {
             }
         };
         *self.auth_status.write().await = status.clone();
-        let reports = {
-            let mut capabilities = self.session_capabilities.write().await;
-            capabilities
-                .iter_mut()
-                .map(|(session_id, report)| {
-                    report.auth_status = status.clone();
-                    (session_id.clone(), report.to_session_model())
-                })
-                .collect::<Vec<_>>()
-        };
-        for (session_id, capabilities) in reports {
+        // Connection-wide: the agent's auth status belongs to the connection,
+        // so it reaches every session's report, whatever its run.
+        for session_id in self.wire.routed_sessions() {
             if self
                 .event_sink
-                .publish(
-                    &session_id,
-                    SessionEvent::CapabilitiesChanged { capabilities },
-                )
+                .publish_connection_auth(&session_id, status.clone())
                 .is_err()
             {
-                self.sink_closed.cancel();
-                self.shutdown.cancel();
-                return Ok(Handled::Yes);
+                tracing::debug!("a session did not accept its auth status update");
             }
         }
         Ok(Handled::Yes)

@@ -1,3 +1,4 @@
+use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::*;
 use session_event_model::*;
 use std::{
@@ -42,9 +43,6 @@ impl InteractionPort for NoopInteractions {
     fn cancel_all(&self, _: u64, _: &'static str) -> InteractionFuture<'_, ()> {
         Box::pin(async {})
     }
-    fn cancel_retired(&self) -> InteractionFuture<'_, ()> {
-        Box::pin(async {})
-    }
 }
 
 struct CapturedSink {
@@ -82,7 +80,7 @@ impl ProviderBehavior for ScriptedBehavior {
     }
     fn can_reuse_setting_confirmation(
         &self,
-        _kind: acp_client_runtime::ProviderSettingKind,
+        _kind: provider_session_machines::ProviderSettingKind,
     ) -> bool {
         false
     }
@@ -92,9 +90,9 @@ impl ProviderBehavior for ScriptedBehavior {
     fn decode_model_metadata(
         &self,
         _value: &serde_json::Value,
-    ) -> acp_client_runtime::ModelReasoningMetadata {
-        acp_client_runtime::ModelReasoningMetadata::Unknown(
-            acp_client_runtime::ModelReasoningUnknown::UnsupportedSource,
+    ) -> provider_session_machines::ModelReasoningMetadata {
+        provider_session_machines::ModelReasoningMetadata::Unknown(
+            provider_session_machines::ModelReasoningUnknown::UnsupportedSource,
         )
     }
     fn auto_permission_mode(&self) -> acp_client_runtime::AutoPermissionMode {
@@ -527,12 +525,14 @@ async fn busy_compact_reports_closed_refusal_before_any_second_prompt() {
     fixture.close().await.expect("owned shutdown");
     assert!(matches!(
         compact,
-        Err(ExternalProviderRuntimeError::LocalBusy)
+        Err(ExternalProviderRuntimeError::LocalBusy { .. })
     ));
     assert_eq!(
         report,
         Ok(ProviderPromptDispatchObservation::Refused(
-            ProviderDispatchRefusal::Busy
+            ProviderDispatchRefusal::Busy {
+                answer: "a turn is running; queue the message or cancel the turn".to_owned()
+            }
         ))
     );
     assert_eq!(requests, 1);

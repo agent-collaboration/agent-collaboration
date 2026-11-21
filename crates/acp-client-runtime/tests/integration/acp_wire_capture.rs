@@ -82,6 +82,19 @@ pub(crate) fn read_capture(path: &Path) -> Vec<CapturedFrame> {
         .collect()
 }
 
+pub(crate) fn release_fixture(receipt: &Path, suffix: &str) -> std::io::Result<()> {
+    use std::io::Write as _;
+    let mut release = receipt.as_os_str().to_owned();
+    release.push(suffix);
+    std::fs::write(release, [])?;
+    let mut doorbell = receipt.as_os_str().to_owned();
+    doorbell.push(".doorbell");
+    std::fs::OpenOptions::new()
+        .append(true)
+        .open(doorbell)?
+        .write_all(b"x")
+}
+
 /// The frames of `method` the agent received or sent on `side`, whole.
 pub(crate) fn frames_of<'a>(
     frames: &'a [CapturedFrame],

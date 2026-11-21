@@ -12,7 +12,7 @@ use collaboration_protocol::{
 };
 use serde_json::json;
 use sha2::{Digest as _, Sha256};
-use std::{os::unix::fs::PermissionsExt as _, path::Path};
+use std::{os::unix::fs::PermissionsExt as _, path::Path, sync::Arc};
 
 #[expect(
     clippy::expect_used,
@@ -113,19 +113,25 @@ pub(super) fn provider_fixture(path: &Path) {
     .expect("provider fixture");
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct RouteEvidence(
-    tokio::sync::Mutex<
-        Vec<
-            agent_automation::RouteEffectEvidence<
-                SessionRef,
-                collaboration_protocol::CodexGeneration,
+    Arc<
+        tokio::sync::Mutex<
+            Vec<
+                agent_automation::RouteEffectEvidence<
+                    SessionRef,
+                    collaboration_protocol::CodexGeneration,
+                >,
             >,
         >,
     >,
 );
 
 impl AttemptEvidenceSink for RouteEvidence {
+    fn retain_queued_dispatch(&self) -> Option<Arc<dyn AttemptEvidenceSink>> {
+        Some(Arc::new(self.clone()))
+    }
+
     fn record(
         &self,
         evidence: agent_automation::RouteEffectEvidence<
@@ -140,15 +146,23 @@ impl AttemptEvidenceSink for RouteEvidence {
     }
 }
 
-#[expect(clippy::expect_used, reason = "Fail malformed fixed route fixtures.")]
 pub(crate) async fn deliver(
     runtime: &codex_router_host::CollaborationRuntime,
     target: SessionRef,
 ) -> collaboration_protocol::DeliveryReceipt {
+    deliver_text(runtime, target, "routed message").await
+}
+
+#[expect(clippy::expect_used, reason = "Fail malformed fixed route fixtures.")]
+pub(crate) async fn deliver_text(
+    runtime: &codex_router_host::CollaborationRuntime,
+    target: SessionRef,
+    text: &str,
+) -> collaboration_protocol::DeliveryReceipt {
     let evidence = RouteEvidence::default();
     let item = uuid::Uuid::now_v7().to_string();
     let line = format!(
-        "✉️ sender · \"routed message\" · router://{}/push/{item}",
+        "✉️ sender · \"{text}\" · router://{}/push/{item}",
         String::from(target.endpoint.service_id.clone()),
     );
     let load_policy = if String::from(target.endpoint.endpoint_id.clone()) == "codex-local" {
@@ -248,7 +262,11 @@ pub(super) async fn create_provider_target(
     submit_provider_create(
         client,
         ConversationCreateRequest {
-            settings: None,
+            work_roots: Vec::new(),
+            settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                mode: Some("auto".into()),
+                ..collaboration_protocol::ProviderRequestedSettings::default()
+            }),
             operation_id: operation_id.clone(),
             endpoint,
             generation: Some(collaboration_protocol::CodexGeneration {

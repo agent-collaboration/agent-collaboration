@@ -382,56 +382,64 @@ async fn stdout_eof_after_initialize_retires_live_provider() {
     .expect("retired provider process must be reaped");
 }
 
-/// Blocks until the fixture has recorded its process id, bounded in real time.
 #[cfg(unix)]
-fn wait_for_recorded_process_id(process_id_path: &std::path::Path) -> bool {
-    let real_deadline = std::time::Instant::now() + Duration::from_secs(10);
-    while std::time::Instant::now() < real_deadline {
-        if std::fs::read_to_string(process_id_path)
-            .is_ok_and(|value| value.trim().parse::<i32>().is_ok())
-        {
-            return true;
-        }
-        std::thread::sleep(Duration::from_millis(1));
-    }
-    false
+async fn initialize_admission_with_clock(
+    root: &std::path::Path,
+    fixture: ExternalProviderLaunch,
+    clock: Arc<router_clock::ManualClock>,
+) -> Result<ExternalProviderRuntime, ExternalProviderRuntimeError> {
+    let store = Arc::new(tokio::sync::Mutex::new(
+        collaboration_runtime::ProviderOperationStore::open(&root.join("operations.sqlite"))
+            .await
+            .expect("isolated operation store"),
+    ));
+    let endpoint = serde_json::from_value(serde_json::json!({
+        "serviceId":"019f0000-0000-7000-8000-000000000001",
+        "endpointId":"cursor-local",
+    }))
+    .expect("fixture endpoint");
+    ExternalProviderRuntime::initialize_with_fixture_clock(
+        fixture,
+        Arc::new(acp_provider_adapters::StandardAcpBehavior),
+        Arc::new(collaboration_runtime::ProviderSessionEventHub::new(store)),
+        endpoint,
+        clock,
+    )
+    .await
 }
 
 #[cfg(unix)]
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn held_initialize_times_out_and_reaps_owned_process() {
     let fixture_root = tempfile::tempdir().expect("fixture root");
     let process_id_path = fixture_root.path().join("provider.pid");
+    let observed_path = fixture_root.path().join("init.sock");
+    let observed = tokio::net::UnixListener::bind(&observed_path).expect("initialize witness");
     let fixture = acp_scripted_fixture::launch_fixture_agent(
         "host-failing-initialization-agent.ts",
         vec![
             "held".to_owned(),
             process_id_path.to_string_lossy().into_owned(),
+            observed_path.to_string_lossy().into_owned(),
         ],
     );
-    // The timeout must not start running until the fixture is provably alive and
-    // holding initialize. A cold Node start can outlast a short timeout, and a
-    // fixture killed before it records its pid leaves nothing to prove reaped.
-    // A running blocking task stops the paused clock from auto-advancing, so the
-    // simulated timeout elapses only after the pid file exists.
-    let fixture_recorded_process_id = tokio::task::spawn_blocking({
-        let process_id_path = process_id_path.clone();
-        move || wait_for_recorded_process_id(&process_id_path)
-    });
-    let error = ExternalProviderRuntime::initialize_with_timeout(
-        fixture,
-        Duration::from_millis(100),
-        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
-    )
-    .await
-    .expect_err("held initialize must time out");
+    let clock = Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
+    let initialization =
+        initialize_admission_with_clock(fixture_root.path(), fixture, clock.clone());
+    tokio::pin!(initialization);
+    // The child sends this only after reading initialize and withholding its reply.
+    tokio::select! {
+        biased;
+        result = observed.accept() => { result.expect("provider is holding initialize"); }
+        result = &mut initialization => panic!("initialization ended before the held point: {result:?}"),
+    }
+    clock
+        .advance(Duration::from_secs(15))
+        .expect("expire the initialization deadline");
+    let error = initialization
+        .await
+        .expect_err("held initialize must time out");
 
-    assert!(
-        fixture_recorded_process_id
-            .await
-            .expect("process id watcher finished"),
-        "fixture recorded its process id before the timeout"
-    );
     assert!(matches!(
         error,
         ExternalProviderRuntimeError::InitializeTimeout
@@ -440,80 +448,43 @@ async fn held_initialize_times_out_and_reaps_owned_process() {
 }
 
 #[cfg(unix)]
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn oversized_initialize_frame_is_rejected_and_reaps_owned_process() {
     let fixture_root = tempfile::tempdir().expect("fixture root");
     let process_id_path = fixture_root.path().join("provider.pid");
-    let frame_written_path = fixture_root.path().join("frame-written.pid");
+    let observed_path = fixture_root.path().join("init.sock");
+    let observed = tokio::net::UnixListener::bind(&observed_path).expect("oversize witness");
     let fixture = acp_scripted_fixture::launch_fixture_agent(
         "host-failing-initialization-agent.ts",
         vec![
             "oversized".to_owned(),
             process_id_path.to_string_lossy().into_owned(),
+            observed_path.to_string_lossy().into_owned(),
             MAX_ACP_FRAME_BYTES.to_string(),
-            frame_written_path.to_string_lossy().into_owned(),
         ],
     );
-    // Reaping can beat the write callback, so either marker or child exit releases
-    // the clock. The codec-owned counter below proves why initialization failed.
-    let fixture_wrote_frame_or_exited = tokio::task::spawn_blocking({
-        let frame_written_path = frame_written_path.clone();
-        let process_id_path = process_id_path.clone();
-        move || wait_for_frame_marker_or_child_exit(&frame_written_path, &process_id_path)
-    });
-    let frame_limit_count_before =
-        acp_client_runtime::provider_frame_limit_exceeded_count_for_test();
-    let error = ExternalProviderRuntime::initialize_with_timeout(
-        fixture,
-        Duration::from_secs(2),
-        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
-    )
-    .await
-    .expect_err("oversized frame must fail initialization");
-
-    assert!(
-        fixture_wrote_frame_or_exited
-            .await
-            .expect("frame or child-exit watcher finished"),
-        "fixture recorded its frame-written marker or exited before the timeout"
-    );
+    let clock = Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
+    let before = acp_client_runtime::provider_frame_limit_exceeded_count_for_test();
+    let initialization = initialize_admission_with_clock(fixture_root.path(), fixture, clock);
+    tokio::pin!(initialization);
+    tokio::select! {
+        biased;
+        result = observed.accept() => { result.expect("provider read initialize before writing the frame"); }
+        result = &mut initialization => panic!("initialization ended before the frame witness: {result:?}"),
+    }
+    let error = initialization
+        .await
+        .expect_err("oversized frame must fail initialization");
     assert!(
         matches!(error, ExternalProviderRuntimeError::Initialize(_)),
         "expected oversized frame rejection, got {error:?}"
     );
     assert_eq!(
         acp_client_runtime::provider_frame_limit_exceeded_count_for_test(),
-        frame_limit_count_before + 1,
+        before + 1,
         "the incoming codec rejected exactly one oversized frame"
     );
     assert_process_reaped(&process_id_path).await;
-}
-
-#[cfg(unix)]
-fn wait_for_frame_marker_or_child_exit(
-    frame_written_path: &std::path::Path,
-    process_id_path: &std::path::Path,
-) -> bool {
-    let real_deadline = std::time::Instant::now() + Duration::from_secs(10);
-    while std::time::Instant::now() < real_deadline {
-        if std::fs::read_to_string(frame_written_path)
-            .is_ok_and(|value| value.trim().parse::<i32>().is_ok())
-        {
-            return true;
-        }
-        if let Ok(value) = std::fs::read_to_string(process_id_path)
-            && let Ok(raw) = value.trim().parse::<i32>()
-            && let Some(process_id) = rustix::process::Pid::from_raw(raw)
-            && matches!(
-                rustix::process::test_kill_process(process_id),
-                Err(rustix::io::Errno::SRCH)
-            )
-        {
-            return true;
-        }
-        std::thread::sleep(Duration::from_millis(1));
-    }
-    false
 }
 
 #[cfg(unix)]
@@ -589,12 +560,18 @@ async fn explicit_cancel_remains_responsive_while_prompt_is_active() {
         .expect("session created");
 
     {
-        let prompt = runtime.prompt("fixture-session".to_owned(), "hold".to_owned());
+        let (dispatch, taken) = tokio::sync::oneshot::channel();
+        let prompt = runtime.prompt_for_operation(
+            "fixture-session".to_owned(),
+            None,
+            "hold".to_owned(),
+            Some(dispatch),
+        );
         tokio::pin!(prompt);
         tokio::select! {
             biased;
             result = &mut prompt => panic!("prompt settled before cancellation: {result:?}"),
-            () = tokio::time::sleep(Duration::from_millis(25)) => {}
+            observed = taken => assert_eq!(observed.expect("prompt dispatch observation"), ProviderPromptDispatchObservation::Submitted),
         }
         runtime
             .cancel_active_prompt("fixture-session".to_owned())

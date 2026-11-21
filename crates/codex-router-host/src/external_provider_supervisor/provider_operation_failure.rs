@@ -32,7 +32,7 @@ struct CorrelatedProviderFailureProps {
 pub(super) fn invalid_setting_failure(
     operation_id: OperationId,
     target: Option<SessionRef>,
-    setting: acp_client_runtime::ProviderSettingKind,
+    setting: provider_session_machines::ProviderSettingKind,
     value: String,
     advertised: Vec<String>,
     disposition: acp_client_runtime::InvalidSettingSessionDisposition,
@@ -163,6 +163,27 @@ pub(super) fn admission_failure(
     )
 }
 
+pub(super) fn restore_operation_failure(
+    operation_id: OperationId,
+    target: SessionRef,
+    error: acp_client_runtime::RestoreFailure,
+) -> ConversationOperationFailure {
+    let reason = (error.phase == acp_client_runtime::RestorePhase::Attempted).then(|| {
+        use crate::provider_acp_session_loading::{closed_restore_reason, load_error_reason};
+        match error.error() {
+            ExternalProviderRuntimeError::SessionReleased => {
+                closed_restore_reason(error.phase).to_owned()
+            }
+            _ => load_error_reason(&error),
+        }
+    });
+    let mut result = runtime_failure(operation_id, Some(target), error.into_error());
+    if let Some(message) = reason.and_then(|reason| NonEmptyText::try_from(reason).ok()) {
+        result.message = message;
+    }
+    result
+}
+
 pub(super) fn runtime_failure(
     operation_id: OperationId,
     target: Option<SessionRef>,
@@ -205,19 +226,40 @@ pub(super) fn runtime_failure(
             operation_id,
             target,
         ),
-        ExternalProviderRuntimeError::LocalBusy => failure(
+        // The session's answer names its state and the valid next steps (D1 M8).
+        ExternalProviderRuntimeError::LocalBusy { answer } => failure(
             ConversationOperationFailureKind::Busy,
             ConversationOperationFailureStage::Validation,
             ProviderOperationEffect::None,
-            "provider conversation already has active work",
+            &answer,
             operation_id,
             target,
         ),
-        ExternalProviderRuntimeError::SettingsUnresolved => failure(
+        ExternalProviderRuntimeError::SettingsUnresolved { answer } => failure(
             ConversationOperationFailureKind::SettingsUnresolved,
             ConversationOperationFailureStage::Validation,
             ProviderOperationEffect::None,
-            "provider Session settings are unresolved; set a value or accept current settings before work",
+            &answer,
+            operation_id,
+            target,
+        ),
+        // The session's state refused the request: its own answer names the
+        // state and the valid next steps (D1 M8).
+        ExternalProviderRuntimeError::SessionStateRefused { answer } => failure(
+            ConversationOperationFailureKind::InvalidRequest,
+            ConversationOperationFailureStage::Validation,
+            ProviderOperationEffect::None,
+            &answer,
+            operation_id,
+            target,
+        ),
+        // The Router closed the session while a load or resume was in
+        // flight; the same refusal as one checked before it (D1 R14).
+        ExternalProviderRuntimeError::SessionReleased => failure(
+            ConversationOperationFailureKind::InvalidRequest,
+            ConversationOperationFailureStage::Validation,
+            ProviderOperationEffect::None,
+            "the session is closed",
             operation_id,
             target,
         ),
@@ -252,7 +294,7 @@ pub(super) fn runtime_failure(
             kind: ConversationOperationFailureKind::ProviderSessionNotFound,
             stage: ConversationOperationFailureStage::Binding,
             effect: ProviderOperationEffect::None,
-            explanation: "this session never started a turn and did not survive the provider restart; create a new conversation",
+            explanation: "the provider no longer knows this session, so start a new session with the same setup",
             operation_id,
             target,
             provider_error: ProviderErrorReference {
@@ -268,6 +310,45 @@ pub(super) fn runtime_failure(
             stage: ConversationOperationFailureStage::Binding,
             effect: ProviderOperationEffect::None,
             explanation: "provider resource was not found",
+            operation_id,
+            target,
+            provider_error: ProviderErrorReference {
+                provider_code: code,
+                correlation_id,
+            },
+        }),
+        error @ (ExternalProviderRuntimeError::RestoreNoAnswer
+        | ExternalProviderRuntimeError::RestoreDisconnected) => failure(
+            ConversationOperationFailureKind::OutcomeUnknown,
+            ConversationOperationFailureStage::Settlement,
+            ProviderOperationEffect::Unknown,
+            &error.to_string(),
+            operation_id,
+            target,
+        ),
+        ExternalProviderRuntimeError::RestoreFailed {
+            code,
+            correlation_id,
+        } => correlated_provider_failure(CorrelatedProviderFailureProps {
+            kind: ConversationOperationFailureKind::OutcomeUnknown,
+            stage: ConversationOperationFailureStage::Settlement,
+            effect: ProviderOperationEffect::Unknown,
+            explanation: "the provider failed while restoring this session, so retry it",
+            operation_id,
+            target,
+            provider_error: ProviderErrorReference {
+                provider_code: code,
+                correlation_id,
+            },
+        }),
+        ExternalProviderRuntimeError::RestoreRefused {
+            code,
+            correlation_id,
+        } => correlated_provider_failure(CorrelatedProviderFailureProps {
+            kind: ConversationOperationFailureKind::ProviderRejected,
+            stage: ConversationOperationFailureStage::Settlement,
+            effect: ProviderOperationEffect::Unknown,
+            explanation: "the provider refused to restore this session, so check the provider before retrying",
             operation_id,
             target,
             provider_error: ProviderErrorReference {

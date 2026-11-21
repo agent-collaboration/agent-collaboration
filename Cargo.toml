@@ -8,6 +8,8 @@ members = [
     "crates/workspace-rules",
     "crates/central-storage",
     "crates/central-engine-model",
+    "crates/state-machine-core",
+    "crates/provider-session-machines",
     "crates/fleet-runtime-ports",
     "crates/fleet-runtime",
     "crates/fleet-engine",
@@ -76,7 +78,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.156"
+version = "0.1.157"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 publish = false
@@ -87,6 +89,8 @@ workspace-ids = { path = "crates/workspace-ids", version = "0.1.149" }
 workspace-model = { path = "crates/workspace-model", version = "0.1.149" }
 central-storage = { path = "crates/central-storage", version = "0.1.149" }
 central-engine-model = { path = "crates/central-engine-model", version = "0.1.153" }
+state-machine-core = { path = "crates/state-machine-core", version = "0.1.154" }
+provider-session-machines = { path = "crates/provider-session-machines", version = "0.1.157" }
 fleet-runtime-ports = { path = "crates/fleet-runtime-ports", version = "0.1.156" }
 fleet-runtime-test-support = { path = "crates/fleet-runtime-test-support", version = "0.1.156" }
 fleet-contracts = { path = "crates/fleet-contracts", version = "0.1.156" }

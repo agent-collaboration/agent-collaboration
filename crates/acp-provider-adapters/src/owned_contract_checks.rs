@@ -18,9 +18,9 @@
 //!   has no encoder, so a value it accepts conforms unchanged and one it calls malformed is a
 //!   violation.
 
-use acp_client_runtime::{
+use acp_client_runtime::{ProviderBehavior, ProviderCommand, ProviderUpdate};
+use provider_session_machines::{
     ModelReasoning, ModelReasoningEntry, ModelReasoningMetadata, ModelReasoningUnknown,
-    ProviderBehavior, ProviderCommand, ProviderUpdate,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};

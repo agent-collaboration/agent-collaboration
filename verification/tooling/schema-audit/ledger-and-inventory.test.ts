@@ -66,13 +66,21 @@ test("every send site names an existing file and its coverage", () => {
 test("every inventory row names an existing file and a line; every defect row names who fixes it", () => {
   assert.ok(DEFINITION_INVENTORY.length > 0);
   for (const row of DEFINITION_INVENTORY) {
-    assert.ok(existsSync(join(repositoryRoot, row.file)), `${row.file} is gone`);
     assert.ok(row.line > 0, `${row.file} has no line`);
+    assert.ok(row.defines.trim().length > 0, `${row.file}:${row.line} defines nothing`);
+    if (row.disposition === "retired") {
+      assert.match(
+        row.removedIn,
+        /^[0-9a-f]{9,40}$/,
+        `${row.file}:${row.line} names no removal commit`,
+      );
+      continue;
+    }
+    assert.ok(existsSync(join(repositoryRoot, row.file)), `${row.file} is gone`);
     if (row.disposition !== "boundary-encoding")
       assert.ok(
         typeof row.fixedBy === "string" || row.fixedBy.external.trim().length > 0,
         `${row.file}:${row.line} names no fixer`,
       );
-    assert.ok(row.defines.trim().length > 0, `${row.file}:${row.line} defines nothing`);
   }
 });

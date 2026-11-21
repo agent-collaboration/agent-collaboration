@@ -4,8 +4,9 @@ use codex_router_host::{
     ExternalProviderStartup,
 };
 use futures_util::{SinkExt, StreamExt};
+use router_clock::{ClockInstant, ManualClock};
 use serde_json::{Value, json};
-use std::{os::unix::fs::PermissionsExt, path::PathBuf, time::Duration};
+use std::{os::unix::fs::PermissionsExt, path::PathBuf, sync::Arc, time::Duration};
 use tokio::net::UnixStream;
 use tokio_tungstenite::{WebSocketStream, client_async, tungstenite::Message};
 
@@ -22,33 +23,27 @@ async fn rpc(
                 .into(),
         ))
         .await?;
-    tokio::time::timeout(Duration::from_secs(5), async {
-        loop {
-            let frame = client.next().await.ok_or("closed native socket")??;
-            let value: Value = serde_json::from_str(frame.to_text()?)?;
-            if value.get("id") == Some(&json!(id)) {
-                return Ok(value);
-            }
+    loop {
+        let frame = client.next().await.ok_or("closed native socket")??;
+        let value: Value = serde_json::from_str(frame.to_text()?)?;
+        if value.get("id") == Some(&json!(id)) {
+            return Ok(value);
         }
-    })
-    .await?
+    }
 }
 async fn wait_terminal(
     client: &mut WebSocketStream<UnixStream>,
     turn_id: &Value,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    tokio::time::timeout(Duration::from_secs(5), async {
-        loop {
-            let frame = client.next().await.ok_or("missing terminal")??;
-            let value: Value = serde_json::from_str(frame.to_text()?)?;
-            if value.get("method") == Some(&json!("turn/completed"))
-                && value.pointer("/params/turn/id") == Some(turn_id)
-            {
-                return Ok(());
-            }
+    loop {
+        let frame = client.next().await.ok_or("missing terminal")??;
+        let value: Value = serde_json::from_str(frame.to_text()?)?;
+        if value.get("method") == Some(&json!("turn/completed"))
+            && value.pointer("/params/turn/id") == Some(turn_id)
+        {
+            return Ok(());
         }
-    })
-    .await?
+    }
 }
 
 async fn start_model_fixture(
@@ -56,34 +51,46 @@ async fn start_model_fixture(
     receipt: &std::path::Path,
     scenario: &str,
 ) -> Result<CollaborationRuntime, Box<dyn std::error::Error>> {
-    let runtime = CollaborationRuntime::start_with_external_providers(
-        CollaborationRuntimeInputs {
-            owner_human_id: Some(message_board::HumanId::try_from("model-owner".to_owned())?),
-            directory: root.into(),
-            codex_home: root.into(),
-            backend_socket: root.join("backend.sock"),
-            mcp_bind: ([127, 0, 0, 1], 0).into(),
-            native_schema: None,
-            peer_registry_directory: None,
-            remote_control_server_name: None,
-        },
-        vec![ExternalProviderStartup::Launch(
-            ExternalProviderLaunchBinding::cursor(
-                PathBuf::from("node"),
-                vec![
-                    concat!(
-                        env!("CARGO_MANIFEST_DIR"),
-                        "/../acp-client-runtime/tests/support/behavior-agent.ts"
-                    )
-                    .into(),
-                    receipt.display().to_string(),
-                    scenario.into(),
-                    "cursor_login".into(),
-                ],
-            )?,
-        )],
-    )
-    .await?;
+    start_model_fixture_on_clock(root, receipt, scenario, None).await
+}
+
+async fn start_model_fixture_on_clock(
+    root: &std::path::Path,
+    receipt: &std::path::Path,
+    scenario: &str,
+    clock: Option<Arc<ManualClock>>,
+) -> Result<CollaborationRuntime, Box<dyn std::error::Error>> {
+    let inputs = CollaborationRuntimeInputs {
+        owner_human_id: Some(message_board::HumanId::try_from("model-owner".to_owned())?),
+        directory: root.into(),
+        codex_home: root.into(),
+        backend_socket: root.join("backend.sock"),
+        mcp_bind: ([127, 0, 0, 1], 0).into(),
+        native_schema: None,
+        peer_registry_directory: None,
+        remote_control_server_name: None,
+    };
+    let providers = vec![ExternalProviderStartup::Launch(
+        ExternalProviderLaunchBinding::cursor(
+            PathBuf::from("node"),
+            vec![
+                concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../acp-client-runtime/tests/support/behavior-agent.ts"
+                )
+                .into(),
+                receipt.display().to_string(),
+                scenario.into(),
+                "cursor_login".into(),
+            ],
+        )?,
+    )];
+    let runtime = if let Some(clock) = clock {
+        CollaborationRuntime::runtime_test_start_with_provider_clock(inputs, providers, clock)
+            .await?
+    } else {
+        CollaborationRuntime::start_with_external_providers(inputs, providers).await?
+    };
     Ok(runtime)
 }
 
@@ -153,11 +160,35 @@ async fn unanswered_optional_model_discovery_falls_back_once_and_preserves_sessi
     let root = tempfile::tempdir()?;
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))?;
     let receipt = root.path().join("held-models.jsonl");
-    let runtime = tokio::time::timeout(
-        Duration::from_secs(5),
-        start_model_fixture(root.path(), &receipt, "held-model-catalog"),
-    )
-    .await??;
+    let clock = Arc::new(ManualClock::new(chrono::DateTime::UNIX_EPOCH));
+    let startup = start_model_fixture_on_clock(
+        root.path(),
+        &receipt,
+        "held-model-catalog",
+        Some(clock.clone()),
+    );
+    tokio::pin!(startup);
+    let optional_query = async {
+        while !std::fs::read_to_string(&receipt).ok().is_some_and(|wire| {
+            wire.lines()
+                .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+                .any(|request| request["method"] == "cursor/list_available_models")
+        }) {
+            tokio::task::yield_now().await;
+        }
+        clock
+            .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(2)))
+            .await;
+    };
+    tokio::select! {
+        result = &mut startup => {
+            result?.shutdown().await?;
+            return Err("startup returned before its unanswered optional model discovery timed out".into());
+        }
+        () = optional_query => {}
+    }
+    clock.advance(Duration::from_secs(2))?;
+    let runtime = startup.await?;
     let (mut client, _) = client_async(
         "ws://localhost/rpc",
         UnixStream::connect(root.path().join("router-sessions/cursor-local.sock")).await?,
@@ -215,7 +246,7 @@ async fn unanswered_optional_model_discovery_falls_back_once_and_preserves_sessi
         "no hidden discovery Session"
     );
     client.close(None).await?;
-    tokio::time::timeout(Duration::from_secs(5), runtime.shutdown()).await??;
+    runtime.shutdown().await?;
     Ok(())
 }
 

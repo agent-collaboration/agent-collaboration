@@ -52,20 +52,16 @@ async fn start_and_show_report_requested_and_actual_mode_with_the_reason() {
     )
     .unwrap();
     for (requested, actual, reason) in [
-        (
-            None,
-            "acceptEdits",
-            Some(ProviderModeReason::EscalationUnproven),
-        ),
+        (Some("auto"), "auto", None::<ProviderModeReason>),
         (Some("plan"), "plan", None),
     ] {
         let operation_id = OperationId::generate();
         backend
             .create(ConversationCreateRequest {
+                work_roots: Vec::new(),
                 settings: requested.map(|mode: &str| ProviderRequestedSettings {
                     mode: Some(mode.to_owned()),
-                    model: None,
-                    effort: None,
+                    ..ProviderRequestedSettings::default()
                 }),
                 operation_id: operation_id.clone(),
                 endpoint: binding.endpoint.clone(),

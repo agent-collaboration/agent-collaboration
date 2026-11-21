@@ -74,21 +74,7 @@ impl RequestedPermissionMode {
     }
 }
 
-/// Why the actual mode differs from the one asked for.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PermissionModeReason {
-    /// The agent does not offer its auto mode, so its ask-first mode is used.
-    AutoNotOffered,
-    /// The agent accepted auto but put the session in its ask-first mode.
-    AgentFellBack,
-    /// The Router has no auto realization for this agent; its mode is unchanged.
-    AutoNotRealized,
-    /// The agent's own auto refuses outside actions without asking, and its
-    /// escalation is not proven, so its ask-first mode stands in (R6).
-    EscalationUnproven,
-    /// Setting the auto realization failed; the agent stays in its own mode.
-    AutoNotApplied,
-}
+pub use provider_session_machines::session_owner::PermissionModeReason;
 
 /// The mode to apply after the agent advertised its modes.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -177,6 +163,17 @@ pub struct PermissionModeReport {
     pub requested: Option<String>,
     pub actual: Option<String>,
     pub reason: Option<PermissionModeReason>,
+}
+
+/// Why the optional mode portion of a restore differs from its saved setup.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RestoredModeDifference {
+    NotOffered,
+    Refused,
+    NoAnswer,
+    EarlierWriteUnanswered,
+    DifferentReply,
+    UnconfirmedReply,
 }
 
 #[cfg(test)]

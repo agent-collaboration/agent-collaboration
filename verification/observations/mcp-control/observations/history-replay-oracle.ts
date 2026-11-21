@@ -2,7 +2,7 @@
 // conversation as historical turns: each opens with turnStarted (a fresh turn ID and generated
 // input ID), carries the replayed user and agent items and ends `stop_reason: {unknown:
 // "replayed"}` (acp-client-runtime provider_session_restore.rs:116-216). Resume replays nothing
-// (provider_session_event_hub.rs begin_history_unavailable). A settled snapshot cannot decide
+// (the ordered HistoryUnavailable publication). A settled snapshot cannot decide
 // either; only the events can. The recorded exchanges are the driver's own earlier observations.
 import type { NumberedEvent } from "./observation-ledger.ts";
 import { agentReplyText, reconstructTurns, type ObservedTurn } from "./observation-turns.ts";

@@ -77,7 +77,11 @@ pub(super) fn spawn_external_approval_dispatch<P: InteractionPort>(
     let request_id = serde_json::to_string(&(request.session_id.0.as_ref(), responder.id()))
         .map_err(|_| Error::internal_error())?;
     let request_cancellation = responder.cancellation();
-    let response_guard = context.as_ref().map(|context| context.responses.track());
+    let response_guard = context.as_ref().map(|context| {
+        context
+            .responses
+            .track("session/request_permission", responder.id())
+    });
     connection.spawn(async move {
         if let (Some(context), Some(refusal)) =
             (context.as_ref(), state.interaction_port.managed_refusal())
@@ -101,11 +105,7 @@ pub(super) fn spawn_external_approval_dispatch<P: InteractionPort>(
             drop(response_guard);
             context
                 .clone()
-                .cancel_after_refusal(
-                    Arc::clone(&state.interaction_port),
-                    provider_session_id,
-                    refusal,
-                )
+                .cancel_after_refusal(Arc::clone(&state.interaction_port), refusal)
                 .await;
             return queued;
         }

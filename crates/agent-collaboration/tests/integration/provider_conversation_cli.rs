@@ -840,11 +840,17 @@ fn conversation_create_help_explains_codex_and_provider_setting_rules() {
         .unwrap();
     assert!(output.status.success());
     let help = String::from_utf8_lossy(&output.stdout);
-    assert!(help.contains("required for Codex endpoints"), "{help}");
+    let words = help.split_whitespace().collect::<Vec<_>>().join(" ");
     assert!(
-        help.contains("provider endpoints accept advertised"),
+        words.contains("--model and --effort are required for Codex endpoints"),
         "{help}"
     );
+    assert!(words.contains("Claude and Cursor require --mode"), "{help}");
+    assert!(
+        words.contains("accept advertised --model and --effort values"),
+        "{help}"
+    );
+    assert!(help.contains("--fast <FAST>"), "{help}");
     assert!(help.contains("--mode <MODE>"), "{help}");
     assert!(help.contains("--model <MODEL>"), "{help}");
     assert!(help.contains("--effort <EFFORT>"), "{help}");

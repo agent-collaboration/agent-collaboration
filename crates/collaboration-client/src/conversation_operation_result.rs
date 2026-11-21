@@ -27,6 +27,14 @@ pub enum ConversationOperationResult {
         operation_id: OperationId,
         target: SessionRef,
     },
+    /// Waiting in the session's line for its running turn to end (D1 R12);
+    /// waiting on the operation again gives its completion. The follow-up
+    /// says why it waits and how to wait on it, cancel it or interrupt.
+    Queued {
+        operation_id: OperationId,
+        target: SessionRef,
+        follow_up: String,
+    },
     /// The caller detached from a Codex turn that remains active.
     Running {
         target: SessionRef,
@@ -37,6 +45,21 @@ pub enum ConversationOperationResult {
 }
 
 impl ConversationOperationResult {
+    /// A prompt waiting in its session's line, with the follow-up R12 names.
+    #[must_use]
+    pub fn queued(operation_id: OperationId, target: SessionRef) -> Self {
+        let target_json = serde_json::to_string(&target).unwrap_or_default();
+        let operation = operation_id.as_str();
+        let follow_up = format!(
+            "Queued: the session is in a turn, so this message waits in its line and starts a turn when the running one ends. Wait for it: agent-collaboration conversation operation wait --operation-id {operation}; cancel it: agent-collaboration conversation cancel --target '{target_json}' --target-operation-id {operation}; or interrupt the running turn: agent-collaboration conversation cancel --target '{target_json}' --target-operation-id <the running turn's operation ID>"
+        );
+        Self::Queued {
+            operation_id,
+            target,
+            follow_up,
+        }
+    }
+
     #[must_use]
     pub fn running_codex_turn(target: SessionRef) -> Self {
         let endpoint = String::from(target.endpoint.endpoint_id.clone());
@@ -120,6 +143,12 @@ pub enum ConversationSettlementDetail {
     },
     ProviderLoad {
         output: ProviderLoadOutput,
+    },
+    /// Accepted into the running turn (D1 R12); the reply belongs to that
+    /// turn. Names the turn's approver when it differs from the one asked.
+    ProviderSteered {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        turn_approver: Option<collaboration_protocol::ProviderIdentity>,
     },
 }
 

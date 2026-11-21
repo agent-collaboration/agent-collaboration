@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::provider_history::ResumePublicationFixture;
 use collaboration_contracts::SessionEventHub;
 use collaboration_protocol::{ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess};
 use collaboration_runtime::HubReceiveError;
@@ -389,9 +390,10 @@ async fn sessions_use_durable_inventory_with_live_state_overlay() -> TestResult 
             created_by: stored_target.clone().into(),
             approver: stored_target.into(),
             updated_at_ms: 3_000,
+            resume: Default::default(),
         })
         .await?;
-    let hub = ProviderSessionEventHub::new(Arc::new(Mutex::new(store)));
+    let hub = Arc::new(ProviderSessionEventHub::new(Arc::new(Mutex::new(store))));
     let cold = hub.sessions(target.endpoint.clone()).await?;
     ensure_eq!(cold.len(), 1);
     ensure_eq!(cold[0].updated_at_seconds, 3);
@@ -426,18 +428,19 @@ async fn sessions_use_durable_inventory_with_live_state_overlay() -> TestResult 
     let created = hub.sessions(target.endpoint.clone()).await?;
     ensure_eq!(created[0].model.as_deref(), Some("model-a"));
     ensure_eq!(created[0].mode.as_deref(), Some("default"));
+    let current_settings = SessionSettings {
+        mode: Some("ask".into()),
+        model: Some("model-b".into()),
+        effort: Some("high".into()),
+        config: vec![ConfigValue {
+            id: "thinking".into(),
+            value: ConfigValueState::Boolean(true),
+        }],
+    };
     hub.publish(
         target.clone(),
         SessionEvent::SettingsChanged {
-            settings: SessionSettings {
-                mode: Some("ask".into()),
-                model: Some("model-b".into()),
-                effort: Some("high".into()),
-                config: vec![ConfigValue {
-                    id: "thinking".into(),
-                    value: ConfigValueState::Boolean(true),
-                }],
-            },
+            settings: current_settings.clone(),
         },
     )
     .await?;
@@ -470,10 +473,12 @@ async fn sessions_use_durable_inventory_with_live_state_overlay() -> TestResult 
             session: target.clone()
         }
     );
-    hub.begin_history_unavailable(target.clone()).await?;
+    let resume = ResumePublicationFixture::start(&hub, &target).await?;
+    resume.resume(Some(current_settings)).await?;
     let resumed = hub.sessions(target.endpoint.clone()).await?;
     ensure_eq!(resumed[0].model.as_deref(), Some("model-b"));
     ensure_eq!(resumed[0].mode.as_deref(), Some("ask"));
+    resume.stop().await?;
     drop(hub);
     let restarted_store =
         ProviderOperationStore::open(&root.path().join("operations.sqlite")).await?;
@@ -510,6 +515,7 @@ async fn sessions_inventory_preserves_human_approver_after_restart() -> TestResu
             created_by: human.clone(),
             approver: human,
             updated_at_ms: 3_000,
+            resume: Default::default(),
         })
         .await?;
     store.close().await?;
@@ -607,18 +613,30 @@ async fn replay_reset_replaces_lost_history_and_resyncs_old_subscribers() -> Tes
 #[tokio::test]
 async fn resume_without_replay_invalidates_old_history_and_subscribers() -> TestResult {
     let (_root, hub) = hub(8).await?;
+    let hub = Arc::new(hub);
     let target = session()?;
+    let resume = ResumePublicationFixture::start(&hub, &target).await?;
     hub.publish(target.clone(), user_item("old-message"))
         .await?;
     let mut stale = hub.attach(target.clone()).await?;
 
-    ensure_eq!(hub.begin_history_unavailable(target.clone()).await?, 1);
+    resume.resume(None).await?;
     ensure_eq!(
         receive_hub_event(&mut stale.receiver).await,
         Err(HubReceiveError::ResyncRequired)
     );
     let current = hub.attach(target.clone()).await?;
-    ensure!(current.snapshot.is_empty());
+    ensure_eq!(current.epoch, stale.epoch + 1);
+    ensure_eq!(
+        current.snapshot,
+        vec![collaboration_contracts::HubEvent {
+            sequence: 1,
+            event: SessionEvent::StateChanged {
+                state: SessionState::Idle
+            },
+        }]
+    );
     ensure_eq!(hub.state(target).await?, SessionState::Idle);
+    resume.stop().await?;
     Ok(())
 }

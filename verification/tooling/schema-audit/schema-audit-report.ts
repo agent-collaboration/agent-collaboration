@@ -704,7 +704,7 @@ function pinFindings(): Finding[] {
  */
 export function inventoryFindings(rows: readonly InventoryRow[]): Finding[] {
   return rows.flatMap((row): Finding[] => {
-    if (row.disposition === "boundary-encoding") return [];
+    if (row.disposition === "boundary-encoding" || row.disposition === "retired") return [];
     const kind: Finding["kind"] =
       row.disposition === "duplicate"
         ? "duplicate"
