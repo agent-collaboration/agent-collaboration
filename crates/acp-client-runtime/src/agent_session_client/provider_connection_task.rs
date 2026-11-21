@@ -225,8 +225,8 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                 })
                             }).cloned()
                         });
+                        // A scoped grant can answer without sending the request to a person.
                         if context.is_some()
-                            && callback_interaction_port.managed_refusal().is_none()
                             && let Some(option) = permission_callbacks.in_folder_grant(request.session_id.0.as_ref()).and_then(|grant| {
                                 grant.allow_once(&request.tool_call, &request.options, &|action, title| {
                                     permission_behavior.stated_permission_target(action, title)

@@ -1,5 +1,5 @@
-//! Which in-folder grant a start or a restore leaves behind, read from the grant map the
-//! permission path uses (D1 spec R2, R4).
+//! In-folder grants after start and restore, including how they answer ACP permission
+//! requests when the interaction port refuses human approvals (D1 spec R2, R4).
 
 #![expect(
     clippy::expect_used,
@@ -8,7 +8,8 @@
 
 use crate::acp_owner_fixture::FixtureClient as AgentSessionClient;
 use acp_client_runtime::{
-    ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch, ExternalProviderRuntimeError,
+    ApprovalPortOutcome, EventSinkClosed, ExternalProviderApprovalRefusalReason,
+    ExternalProviderLaunch, ExternalProviderPromptOutcome, ExternalProviderRuntimeError,
     FastObserved, FastRequest, HistoryReplayFuture, InteractionFuture, InteractionPort,
     InvalidSettingSessionDisposition, ProviderPersistenceTarget, RefusedApprovalOffer,
     RequestedProviderSettings, SessionEventSink, SessionRestoreSetup, SessionWorkRoots,
@@ -19,8 +20,11 @@ use provider_session_machines::{
     session_owner::{ObservationCause, RestoreResult},
 };
 use serde_json::{Value, json};
-use session_event_model::{ApprovalRequest, InputId, SessionEvent};
-use std::path::PathBuf;
+use session_event_model::{
+    ApprovalRequest, InputId, SessionEvent, StopReason,
+    managed_interaction_refusal::ManagedInteractionRefusal,
+};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
@@ -29,19 +33,32 @@ const PERMISSION_MODE_AGENT: &str = concat!(
     "/../../verification/fixtures/permission-mode-agent.ts"
 );
 
-struct CancellingApprovals;
+#[derive(Clone)]
+struct PromptApprovalContext {
+    input: InputId,
+    binding_retirement: CancellationToken,
+    managed_cancellation: CancellationToken,
+}
+
+struct CancellingApprovals(Option<ManagedInteractionRefusal>);
 impl InteractionPort for CancellingApprovals {
-    type Context = ();
-    type OperationId = u64;
-    fn operation_id(_context: &Self::Context) -> Self::OperationId {
-        1
+    type Context = PromptApprovalContext;
+    type OperationId = InputId;
+    fn operation_id(context: &Self::Context) -> Self::OperationId {
+        context.input.clone()
     }
-    fn binding_retirement(_context: &Self::Context) -> CancellationToken {
-        CancellationToken::new()
+    fn binding_retirement(context: &Self::Context) -> CancellationToken {
+        context.binding_retirement.clone()
+    }
+    fn managed_refusal(&self) -> Option<ManagedInteractionRefusal> {
+        self.0
+    }
+    fn cancel_after_managed_refusal(&self, context: Self::Context) -> InteractionFuture<'_, ()> {
+        Box::pin(async move { context.managed_cancellation.cancel() })
     }
     fn request_approval(
         &self,
-        _context: (),
+        _context: Self::Context,
         _request: ApprovalRequest,
         _turn: CancellationToken,
         _agent: CancellationToken,
@@ -50,7 +67,7 @@ impl InteractionPort for CancellingApprovals {
     }
     fn request_question(
         &self,
-        _context: (),
+        _context: Self::Context,
         _request: session_event_model::QuestionRequest,
         _turn: CancellationToken,
         _agent: CancellationToken,
@@ -59,12 +76,16 @@ impl InteractionPort for CancellingApprovals {
     }
     fn record_refusal(
         &self,
-        _context: (),
+        _context: Self::Context,
         _refusal: RefusedApprovalOffer,
     ) -> InteractionFuture<'_, ()> {
         Box::pin(async {})
     }
-    fn cancel_all(&self, _context: (), _reason: &'static str) -> InteractionFuture<'_, ()> {
+    fn cancel_all(
+        &self,
+        _context: Self::Context,
+        _reason: &'static str,
+    ) -> InteractionFuture<'_, ()> {
         Box::pin(async {})
     }
 }
@@ -100,6 +121,23 @@ impl Fixture {
     }
 
     async fn start_in_profile(profile: &str, behaviours: &[&str]) -> Self {
+        Self::start_with_approval_policy(profile, behaviours, None).await
+    }
+
+    async fn start_managed(profile: &str, behaviours: &[&str]) -> Self {
+        Self::start_with_approval_policy(
+            profile,
+            behaviours,
+            Some(ManagedInteractionRefusal::ApprovalsUnavailableOnBuild),
+        )
+        .await
+    }
+
+    async fn start_with_approval_policy(
+        profile: &str,
+        behaviours: &[&str],
+        managed_refusal: Option<ManagedInteractionRefusal>,
+    ) -> Self {
         let root = tempfile::tempdir().expect("fixture root");
         let base = std::fs::canonicalize(root.path()).expect("canonical root");
         let project = base.join("project");
@@ -124,7 +162,7 @@ impl Fixture {
             acp_client_runtime::ProviderModelPicker::Standard,
             "fixture",
             "http://127.0.0.1:1/mcp",
-            Arc::new(CancellingApprovals),
+            Arc::new(CancellingApprovals(managed_refusal)),
             Arc::new(IgnoredEvents),
             Arc::new(crate::test_behavior::ClaudeLikeAutoBehavior),
             Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
@@ -161,26 +199,92 @@ impl Fixture {
         &self,
         session: &str,
     ) -> Result<(), ExternalProviderRuntimeError> {
-        let edit = json!({"kind":"edit","locations":[{"path":self.scratch.join("note.txt")}]});
+        self.prompt_edit(session, &self.scratch.join("note.txt"))
+            .await
+            .map(|_| ())
+    }
+
+    async fn prompt_edit(
+        &self,
+        session: &str,
+        path: &Path,
+    ) -> Result<(ExternalProviderPromptOutcome, CancellationToken), ExternalProviderRuntimeError>
+    {
+        let edit = json!({"kind":"edit","locations":[{"path":path}]});
+        let input = InputId::generate();
+        let managed_cancellation = CancellationToken::new();
         self.client
             .submit_with_approval_dispatch_for_input(
                 session.to_owned(),
-                InputId::generate(),
+                input.clone(),
                 acp_client_runtime::ProviderTurnInput::Prompt(
                     session_event_model::ProviderSubmission::plain(vec![
                         session_event_model::PromptContent::text(edit.to_string())
                             .expect("text prompt"),
                     ]),
                 ),
-                (),
+                PromptApprovalContext {
+                    input,
+                    binding_retirement: CancellationToken::new(),
+                    managed_cancellation: managed_cancellation.clone(),
+                },
                 None,
             )
             .await
-            .map(|_| ())
+            .map(|outcome| (outcome, managed_cancellation))
     }
 
     fn receipt(&self) -> Value {
         serde_json::from_slice(&std::fs::read(&self.receipt).expect("receipt")).expect("JSON")
+    }
+
+    fn last_permission_reply(&self, session: &str) -> Value {
+        let receipt = self.receipt();
+        let answer = receipt["permissionAnswers"]
+            .as_array()
+            .and_then(|answers| answers.last())
+            .expect("one permission reply for the prompt");
+        assert_eq!(answer["sessionId"], session);
+        answer["answer"].clone()
+    }
+
+    async fn assert_managed_allowance(&self, session: &str) {
+        let (outcome, cancellation) = self
+            .prompt_edit(session, &self.scratch.join("note.txt"))
+            .await
+            .expect("the prompt reaches its terminal response");
+        assert_eq!(
+            self.last_permission_reply(session),
+            json!({"outcome":{"outcome":"selected","optionId":"allow"}}),
+            "an eligible grant selects the provider's allow-once option"
+        );
+        assert_eq!(outcome.stop_reason, StopReason::EndTurn);
+        assert_eq!(outcome.permission_refusal_reason, None);
+        assert!(
+            !cancellation.is_cancelled(),
+            "the allowed turn keeps running"
+        );
+    }
+
+    async fn assert_managed_refusal(&self, session: &str, path: &Path) {
+        let (outcome, cancellation) = self
+            .prompt_edit(session, path)
+            .await
+            .expect("the prompt reaches its terminal response");
+        assert_eq!(
+            self.last_permission_reply(session),
+            json!({"outcome":{"outcome":"cancelled"}}),
+        );
+        assert_eq!(
+            outcome.permission_refusal_reason,
+            Some(ExternalProviderApprovalRefusalReason::Managed(
+                ManagedInteractionRefusal::ApprovalsUnavailableOnBuild
+            )),
+        );
+        assert!(
+            cancellation.is_cancelled(),
+            "the managed port cancels the refused turn"
+        );
     }
 }
 
@@ -336,8 +440,40 @@ async fn a_restored_auto_session_gets_its_folders_and_an_active_grant() {
 }
 
 #[tokio::test]
+async fn auto_only_allows_in_folder_edits_under_managed_refusal() {
+    let fixture = Fixture::start_managed("claude", &[]).await;
+    let session = fixture
+        .create("auto")
+        .await
+        .expect("created in Auto")
+        .provider_session_id;
+    fixture.assert_managed_allowance(&session).await;
+    let outside = fixture
+        .scratch
+        .parent()
+        .expect("scratch parent")
+        .join("other.txt");
+    fixture.assert_managed_refusal(&session, &outside).await;
+    fixture.client.shutdown().await;
+}
+
+#[tokio::test]
+async fn default_refuses_in_folder_edits_under_managed_refusal() {
+    let fixture = Fixture::start_managed("claude", &[]).await;
+    let session = fixture
+        .create("default")
+        .await
+        .expect("created in default")
+        .provider_session_id;
+    fixture
+        .assert_managed_refusal(&session, &fixture.scratch.join("note.txt"))
+        .await;
+    fixture.client.shutdown().await;
+}
+
+#[tokio::test]
 async fn a_session_the_agent_restores_out_of_auto_is_set_back_to_auto() {
-    let fixture = Fixture::start(&["advertise-restore"]).await;
+    let fixture = Fixture::start_managed("claude", &["advertise-restore"]).await;
     let id = "resumed-session";
     fixture
         .restore(id, fixture.saved_setup("auto"), RestoreVia::Resume)
@@ -349,12 +485,14 @@ async fn a_session_the_agent_restores_out_of_auto_is_set_back_to_auto() {
         "the ready run grants its confirmed Auto mode"
     );
     assert_eq!(fixture.current_mode(id), "auto");
+    fixture.assert_managed_allowance(id).await;
     fixture.client.shutdown().await;
 }
 
 #[tokio::test]
 async fn a_session_recorded_in_default_that_restores_in_auto_ends_in_default() {
-    let fixture = Fixture::start(&["advertise-restore", "restored-in-auto"]).await;
+    let fixture =
+        Fixture::start_managed("claude", &["advertise-restore", "restored-in-auto"]).await;
     let id = "loaded-session";
     fixture
         .restore(id, fixture.saved_setup("default"), RestoreVia::Load)
@@ -366,12 +504,15 @@ async fn a_session_recorded_in_default_that_restores_in_auto_ends_in_default() {
         "the ready run cannot use the old permissive scope"
     );
     assert_eq!(fixture.current_mode(id), "default");
+    fixture
+        .assert_managed_refusal(id, &fixture.scratch.join("note.txt"))
+        .await;
     fixture.client.shutdown().await;
 }
 
 #[tokio::test]
 async fn a_restore_whose_mode_set_fails_loads_without_a_grant_and_shows_the_mismatch() {
-    let fixture = Fixture::start(&["advertise-restore", "reject-mode"]).await;
+    let fixture = Fixture::start_managed("claude", &["advertise-restore", "reject-mode"]).await;
     let id = "resumed-session";
     fixture
         .restore(id, fixture.saved_setup("auto"), RestoreVia::Resume)
@@ -379,12 +520,19 @@ async fn a_restore_whose_mode_set_fails_loads_without_a_grant_and_shows_the_mism
     assert_eq!(fixture.mode_requests(id), ["auto"]);
     assert_eq!(fixture.current_mode(id), "default");
     assert_eq!(fixture.grant(id), Some(false));
+    fixture
+        .assert_managed_refusal(id, &fixture.scratch.join("note.txt"))
+        .await;
     fixture.client.shutdown().await;
 }
 
 #[tokio::test]
 async fn a_refused_stricter_restore_reports_auto_without_granting_it() {
-    let fixture = Fixture::start(&["advertise-restore", "restored-in-auto", "reject-mode"]).await;
+    let fixture = Fixture::start_managed(
+        "claude",
+        &["advertise-restore", "restored-in-auto", "reject-mode"],
+    )
+    .await;
     let id = "loaded-session";
     let restored = fixture
         .restore(id, fixture.saved_setup("default"), RestoreVia::Load)
@@ -399,12 +547,15 @@ async fn a_refused_stricter_restore_reports_auto_without_granting_it() {
             .and_then(|evidence| evidence.cause),
         Some(ObservationCause::Refused),
     );
+    fixture
+        .assert_managed_refusal(id, &fixture.scratch.join("note.txt"))
+        .await;
     fixture.client.shutdown().await;
 }
 
 #[tokio::test]
 async fn a_refused_default_restore_never_grants_the_agents_auto_fallback() {
-    let fixture = Fixture::start_in_profile(
+    let fixture = Fixture::start_managed(
         "claude-without-auto",
         &[
             "advertise-restore",
@@ -432,15 +583,8 @@ async fn a_refused_default_restore_never_grants_the_agents_auto_fallback() {
         Some(ObservationCause::Refused),
     );
     fixture
-        .prompt_in_folder_edit(id)
-        .await
-        .expect("input remains available");
-    assert_eq!(
-        fixture
-            .receipt()
-            .pointer("/permissionAnswers/0/answer/outcome/outcome"),
-        Some(&json!("cancelled")),
-    );
+        .assert_managed_refusal(id, &fixture.scratch.join("note.txt"))
+        .await;
     fixture.client.shutdown().await;
 }
 
