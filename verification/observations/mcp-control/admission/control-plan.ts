@@ -141,6 +141,7 @@ export const controlPlanSchema = z.strictObject({
       primedCancelGuidance: z.literal(true).optional(),
       restoreReapply: z.enum(["named", "auto", "unconfirmed"]).optional(),
       allowanceJourney: z.enum(["autoSeed", "autoReopen", "autoProbe", "default"]).optional(),
+      observeRestoredDelete: z.literal(true).optional(),
       restart: z
         .discriminatedUnion("phase", [
           z.strictObject({ phase: z.literal("seed"), record: absolutePath }),
@@ -408,6 +409,12 @@ function checkSessionControlDeclaration(plan: ControlPlan): void {
   checkReapplyDeclaration(plan, selected[0], control.restoreReapply);
   checkAllowanceDeclaration(plan, selected[0], control.allowanceJourney);
   if (
+    control.observeRestoredDelete &&
+    (plan.endpointId !== "cursor-local" ||
+      (control.allowanceJourney !== "autoSeed" && control.allowanceJourney !== "autoReopen"))
+  )
+    throw new Error("the restored delete requires the two Cursor allowance lifetimes");
+  if (
     control.primedCancelGuidance &&
     (selected[0] !== "unconfirmedCancel" ||
       control.cursorCancelLoad !== undefined ||
@@ -567,6 +574,12 @@ function checkActor(plan: ControlPlan): void {
 }
 
 function casePromptBudget(plan: ControlPlan, name: ControlCase): number {
+  if (
+    name === "inFolderAllowance" &&
+    plan.sessionControl?.observeRestoredDelete &&
+    plan.sessionControl.allowanceJourney === "autoSeed"
+  )
+    return 1;
   if (name === "inFolderAllowance" && plan.sessionControl?.allowanceJourney === "autoProbe")
     return 3;
   if (name === "inFolderAllowance" && plan.sessionControl?.allowanceJourney === "default") return 1;

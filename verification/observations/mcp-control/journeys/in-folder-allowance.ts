@@ -20,7 +20,9 @@ import {
   type CaseResult,
 } from "./journey-cases.ts";
 import { record } from "./journey-steps.ts";
+import { confirmedCursorAutoAfterLoad } from "./restored-cursor-mode.ts";
 import {
+  completePrompt,
   control,
   inspect,
   isAgentReply,
@@ -49,6 +51,7 @@ const restartRecord = z.strictObject({
   target: sessionRefSchema,
   setup: savedSetupSchema,
   outsidePending: z.boolean().default(false),
+  primerCompleted: z.literal(true).optional(),
 });
 const providerEdit = z.looseObject({
   toolCall: z.looseObject({
@@ -501,6 +504,18 @@ async function reopenAuto(
   )
     throw new Error("Cursor's planned Auto mode is not active after restore");
   await restoreDeclaredModel(inputs, target, "allowance-after-restore");
+  if (control(inputs).observeRestoredDelete) {
+    const mode = confirmedCursorAutoAfterLoad(wireEntries(inputs), target.sessionId);
+    record(inputs.context, { step: "allowance-restored-delete-mode", target, mode });
+    if (!saved.primerCompleted || mode === undefined)
+      return caseResult(target, [
+        {
+          verdict: "inconclusive",
+          detail: "the seed primer or correlated ACP confirmation of Cursor Auto is missing",
+        },
+      ]);
+    return observeRestoredDelete(inputs, target);
+  }
   const results: ProbeResult[] = [];
   if (saved.outsidePending) {
     const outside = await observeEdit(inputs, target, "auto-outside-folder", false, true);
@@ -520,6 +535,42 @@ async function reopenAuto(
   const result = await observeEdit(inputs, target, "restored-in-folder", true);
   report(inputs, target, "restored-in-folder", result);
   return caseResult(target, [...results, result]);
+}
+
+async function observeRestoredDelete(inputs: CaseInputs, target: SessionRef): Promise<CaseResult> {
+  const inside = await observeEdit(
+    inputs,
+    target,
+    "restored-in-folder-delete",
+    true,
+    false,
+    "delete",
+  );
+  report(inputs, target, "restored-in-folder-delete", inside);
+  if ((await inspect(inputs, "restored-delete-after-inside", target)).state !== "idle") {
+    record(inputs.context, {
+      step: "allowance-outside-not-run",
+      target,
+      reason: "restored session is no longer idle",
+    });
+    return caseResult(target, [
+      inside,
+      {
+        verdict: "inconclusive",
+        detail: "the outside probe requires the same restored idle Session",
+      },
+    ]);
+  }
+  const outside = await observeEdit(
+    inputs,
+    target,
+    "restored-outside-delete",
+    false,
+    true,
+    "delete",
+  );
+  report(inputs, target, "restored-outside-delete", outside);
+  return caseResult(target, [inside, outside]);
 }
 
 export async function inFolderAllowanceCase(inputs: CaseInputs): Promise<CaseResult> {
@@ -546,6 +597,30 @@ export async function inFolderAllowanceCase(inputs: CaseInputs): Promise<CaseRes
   )
     throw new Error("the required saved consent and provider mode were not independently observed");
   if (phase === "autoProbe") return probeAuto(inputs, target);
+  if (phase === "autoSeed" && config.observeRestoredDelete) {
+    if (!offered.load) return notOffered(NAME, "session/load");
+    if (config.restart?.phase !== "seed")
+      throw new Error("the auto session has no restart handoff");
+    await completePrompt(inputs, "restored-delete-primer", target);
+    writeFileSync(
+      config.restart.record,
+      JSON.stringify({
+        sourceHead: inputs.plan.sourceHead,
+        serviceDirectory: inputs.plan.serviceDirectory,
+        storeIdentity,
+        epoch: inputs.plan.expectedServiceEpoch,
+        target,
+        setup,
+        primerCompleted: true,
+      }) + "\n",
+      { flag: "wx", mode: 0o600 },
+    );
+    return observed(
+      NAME,
+      target,
+      "one primer completed and the saved Auto Session is ready to reopen",
+    );
+  }
   const label = phase === "default" ? "default-in-folder" : "auto-in-folder";
   const inside = await observeEdit(inputs, target, label, phase === "autoSeed");
   report(inputs, target, label, inside);

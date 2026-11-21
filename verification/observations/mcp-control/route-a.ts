@@ -91,10 +91,16 @@ const routePlanSchema = z.strictObject({
     }),
     z.strictObject({ kind: z.literal("cancelRestartSeed") }),
     z.strictObject({ kind: z.literal("cancelRestartReopen"), record: pathSchema }),
+    z.strictObject({ kind: z.enum(["allowanceAutoProbe", "allowanceDefault"]) }),
     z.strictObject({
-      kind: z.enum(["allowanceAutoSeed", "allowanceAutoProbe", "allowanceDefault"]),
+      kind: z.literal("allowanceAutoSeed"),
+      observeRestoredDelete: z.literal(true).optional(),
     }),
-    z.strictObject({ kind: z.literal("allowanceAutoReopen"), record: pathSchema }),
+    z.strictObject({
+      kind: z.literal("allowanceAutoReopen"),
+      record: pathSchema,
+      observeRestoredDelete: z.literal(true).optional(),
+    }),
   ]),
 });
 type RoutePlan = z.infer<typeof routePlanSchema>;
@@ -185,8 +191,11 @@ function prepare(plan: RoutePlan) {
 }
 
 function prepareProvider(plan: RoutePlan) {
-  if (plan.journey.kind === "allowanceAutoProbe" && plan.cursor === undefined)
-    throw new Error("the alternate Auto actions require the commissioned Cursor route");
+  if (
+    (plan.journey.kind === "allowanceAutoProbe" || observesRestoredDelete(plan.journey)) &&
+    plan.cursor === undefined
+  )
+    throw new Error("the commissioned Auto action requires the Cursor route");
   if (
     (plan.journey.kind === "refusedSteer" && plan.cursor === undefined) ||
     (plan.journey.kind === "cancelQueued" && plan.cursor !== undefined)
@@ -209,6 +218,13 @@ function prepareProvider(plan: RoutePlan) {
     adapter,
     library: realpathSync(join(dirname(adapter), "lib.js")),
   };
+}
+
+function observesRestoredDelete(journey: RoutePlan["journey"]): boolean {
+  return (
+    (journey.kind === "allowanceAutoSeed" || journey.kind === "allowanceAutoReopen") &&
+    journey.observeRestoredDelete === true
+  );
 }
 
 function inventory(
@@ -380,7 +396,9 @@ function makeControlPlan(
       : allowanceJourney === "autoProbe" ||
           (caseName === "unconfirmedCancel" && cursorCancelLoad === undefined)
         ? 3
-        : 2;
+        : plan.journey.kind === "allowanceAutoSeed" && observesRestoredDelete(plan.journey)
+          ? 1
+          : 2;
   return controlPlanSchema.parse({
     repository: plan.repository,
     sourceHead: plan.sourceHead,
@@ -430,6 +448,7 @@ function makeControlPlan(
                 : (plan.cursor?.mode ?? "plan"),
       ...(restoreReapply === undefined ? {} : { restoreReapply }),
       ...(allowanceJourney === undefined ? {} : { allowanceJourney }),
+      ...(observesRestoredDelete(plan.journey) ? { observeRestoredDelete: true } : {}),
       ...(cursorCancelLoad === undefined ? {} : { cursorCancelLoad }),
       ...(primedCancelGuidance ? { primedCancelGuidance: true } : {}),
       ...(plan.journey.kind === "savedModeReopen" && plan.journey.observeSilentRestorePrompt
