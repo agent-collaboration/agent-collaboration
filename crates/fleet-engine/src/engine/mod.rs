@@ -16,7 +16,3 @@ pub(crate) mod receipts;
 pub(crate) mod requests;
 pub(crate) mod source;
 pub(crate) mod store_adapter;
-
-fn timestamp(time: central_engine_model::EngineTime) -> String {
-    time.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
-}

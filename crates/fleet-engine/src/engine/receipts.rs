@@ -1,6 +1,6 @@
-use super::timestamp;
 use central_engine_model::{EngineTime, TransitionError};
 use central_storage::{GuardedStatement, ReadOutcome, Statement, StoreFailure};
+use fleet_runtime_ports::stored_values::format_utc_millis;
 use fleet_runtime_ports::{
     guarded_statements::{any, exact, text},
     stored_values::{json, string},
@@ -50,7 +50,7 @@ impl ReceiptClaim {
     pub fn lookup(&self) -> Statement {
         Statement {
             sql: "SELECT caller,content_digest,answer FROM runtime_request_log WHERE request_id=? AND created_at>=?",
-            args: vec![text(&self.request), text(timestamp(self.cutoff))],
+            args: vec![text(&self.request), text(format_utc_millis(self.cutoff))],
         }
     }
     pub fn replay<State: DeserializeOwned, Error: DeserializeOwned>(
@@ -78,7 +78,7 @@ impl ReceiptClaim {
         Ok(vec![
             any(
                 "DELETE FROM runtime_request_log WHERE request_id=? AND created_at<?",
-                vec![text(&self.request), text(timestamp(self.cutoff))],
+                vec![text(&self.request), text(format_utc_millis(self.cutoff))],
             ),
             exact(
                 "INSERT INTO runtime_request_log(request_id,caller,content_digest,answer,created_at,updated_at) VALUES (?,?,?,?,?,?)",
@@ -87,8 +87,8 @@ impl ReceiptClaim {
                     text(&self.caller),
                     text(&self.digest),
                     text(encoded),
-                    text(timestamp(self.started_at)),
-                    text(timestamp(self.started_at)),
+                    text(format_utc_millis(self.started_at)),
+                    text(format_utc_millis(self.started_at)),
                 ],
             ),
         ])

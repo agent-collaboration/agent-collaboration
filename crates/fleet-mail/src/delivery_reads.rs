@@ -1,10 +1,7 @@
 //! Read and re-observe mail delivery while its recipient's central turn is held.
 use crate::{
-    direct_message::DirectMessage,
-    direct_message_rows::failure_text,
-    message_values::{encode, timestamp},
-    sender_resolution::resolve_message_sender,
-    stored_messages::decode_messages,
+    direct_message::DirectMessage, direct_message_rows::failure_text,
+    sender_resolution::resolve_message_sender, stored_messages::decode_messages,
 };
 use central_engine_model::{InstanceKey, Machine};
 use central_storage::{
@@ -18,6 +15,7 @@ use fleet_contracts::{
     },
 };
 use fleet_engine::{EngineHost, delete_attempt};
+use fleet_runtime_ports::stored_values::{encode_json, format_utc_millis};
 use fleet_runtime_ports::{
     CentralStore, WorkspaceStores,
     guarded_statements::{exact, text},
@@ -39,7 +37,10 @@ pub async fn windowed_welcome_page_held(
     now: Timestamp,
 ) -> Result<Vec<WindowedDelivery>, StoreFailure> {
     let (created_at, message_id) = cursor.map_or((SqlValue::Null, SqlValue::Null), |cursor| {
-        (text(timestamp(cursor.created_at)), text(&cursor.message_id))
+        (
+            text(format_utc_millis(cursor.created_at)),
+            text(&cursor.message_id),
+        )
     });
     let limit = i64::try_from(WELCOME_PAGE_SIZE)
         .ok()
@@ -48,7 +49,7 @@ pub async fn windowed_welcome_page_held(
     let rows = host.read(Statement {
         sql: "SELECT message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at,delivery_window_ends_at FROM mail_messages WHERE target_machine_id=?1 AND state='queued' AND message_kind IN ('direct','notice','deliveryOutcome') AND delivery_window_ends_at>?2 AND (?3 IS NULL OR (created_at,message_id)>(?3,?4)) ORDER BY created_at,message_id LIMIT ?5",
         args: vec![
-            text(recipient), text(timestamp(now)), created_at, message_id,
+            text(recipient), text(format_utc_millis(now)), created_at, message_id,
             SqlValue::Integer(limit),
         ],
     }).await?;
@@ -85,7 +86,7 @@ where
     let now = runtime.now()?;
     let rows = runtime.host().read(Statement {
         sql: "SELECT message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at,delivery_window_ends_at FROM mail_messages WHERE message_id=? AND target_machine_id=? AND state='queued' AND message_kind IN ('direct','notice','deliveryOutcome') AND delivery_window_ends_at>?",
-        args: vec![text(message_id), text(recipient), text(timestamp(now))],
+        args: vec![text(message_id), text(recipient), text(format_utc_millis(now))],
     }).await?;
     let mut messages = decode_messages(&rows)?;
     let row = match rows.rows.as_slice() {
@@ -120,7 +121,7 @@ async fn fail_unresolved_sender<R: EngineHost>(
     let MessageSender::Actor(_) = &message.sender else {
         return Err(corrupt("mail_messages.sender"));
     };
-    let now = timestamp(runtime.now()?);
+    let now = format_utc_millis(runtime.now()?);
     let statements = vec![
         exact(
             "UPDATE mail_messages SET state='failed',failure_reason=?,updated_at=? WHERE message_id=? AND target_machine_id=? AND sender=? AND message_kind='direct' AND state='queued' AND failure_reason IS NULL AND delivery_window_ends_at>?",
@@ -129,7 +130,7 @@ async fn fail_unresolved_sender<R: EngineHost>(
                 text(&now),
                 text(&message.message_id),
                 text(&message.target.machine_id),
-                encode(&message.sender)?,
+                encode_json(&message.sender, "mail JSON")?,
                 text(now),
             ],
         ),

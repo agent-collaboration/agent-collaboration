@@ -262,3 +262,102 @@ fn each_timer_rejects_a_path_through_runtime_into_notices() {
         }
     }
 }
+
+#[test]
+fn directory_rejects_upper_dependencies_through_its_board_leaf() {
+    for kind in [DependencyKind::Normal, DependencyKind::Build] {
+        let allowed = graph(&[
+            ("fleet-workspace-directory", "message-board", kind),
+            ("fleet-workspace-directory", "fleet-contracts", kind),
+            ("fleet-workspace-directory", "fleet-runtime-ports", kind),
+            ("fleet-workspace-directory", "central-storage", kind),
+            ("fleet-workspace-directory", "workspace-model", kind),
+        ]);
+        assert!(check_boundaries(&allowed).is_ok());
+
+        for upper in [
+            "fleet-engine",
+            "fleet-mail",
+            "fleet-notices",
+            "fleet-wakes",
+            "fleet-schedules",
+            "fleet-workspace-access",
+            "fleet-workspace-requests",
+            "fleet-runtime",
+            "fleet-timer-policy",
+            "fleet-signin",
+            "fleet-machine-login",
+            "fleet-admin",
+            "fleet-application",
+            "collaboration-central-core",
+            "collaboration-central-tokio",
+            "collaboration-central-cloudflare",
+        ] {
+            let direct = graph(&[("fleet-workspace-directory", upper, kind)]);
+            assert_eq!(
+                check_boundaries(&direct).map_err(|failure| failure.to_string()),
+                Err(format!(
+                    "BD1: forbidden {kind:?} dependency fleet-workspace-directory -> {upper}"
+                )),
+            );
+            let transitive = graph(&[
+                (
+                    "fleet-workspace-directory",
+                    "message-board",
+                    DependencyKind::Normal,
+                ),
+                ("message-board", upper, kind),
+            ]);
+            assert_eq!(
+                check_boundaries(&transitive).map_err(|failure| failure.to_string()),
+                Err(format!(
+                    "BD1: forbidden reachable dependency fleet-workspace-directory -> {upper}"
+                )),
+            );
+        }
+    }
+}
+
+#[test]
+fn existing_jobs_reject_transitive_directory_dependencies() {
+    for kind in [DependencyKind::Normal, DependencyKind::Build] {
+        for job in ["fleet-mail", "fleet-notices"] {
+            let transitive = graph(&[
+                (job, "fleet-workspace-access", DependencyKind::Normal),
+                ("fleet-workspace-access", "fleet-workspace-directory", kind),
+            ]);
+            assert_eq!(
+                check_boundaries(&transitive).map_err(|failure| failure.to_string()),
+                Err(format!(
+                    "BD1: forbidden reachable dependency {job} -> fleet-workspace-directory"
+                )),
+            );
+        }
+
+        for timer in ["fleet-wakes", "fleet-schedules"] {
+            let transitive = graph(&[
+                (timer, "fleet-engine", DependencyKind::Normal),
+                ("fleet-engine", "fleet-runtime", DependencyKind::Normal),
+                ("fleet-runtime", "fleet-workspace-directory", kind),
+            ]);
+            assert_eq!(
+                check_boundaries(&transitive).map_err(|failure| failure.to_string()),
+                Err(format!(
+                    "BD1: forbidden reachable dependency {timer} -> fleet-workspace-directory"
+                )),
+            );
+        }
+
+        let engine = graph(&[
+            ("fleet-engine", "fleet-runtime", DependencyKind::Normal),
+            ("fleet-runtime", "fleet-workspace-directory", kind),
+        ]);
+        assert_eq!(
+            check_boundaries(&engine).map_err(|failure| failure.to_string()),
+            Err(
+                "BD1: forbidden reachable dependency fleet-engine -> fleet-workspace-directory"
+                    .into()
+            ),
+        );
+    }
+}

@@ -1,9 +1,7 @@
 //! Plan the actor and pending-window updates for a cadence request.
-use crate::{
-    recipient_cadence::notice_due_with_cadence, window_rows::notification_windows,
-    window_statements::timestamp,
-};
+use crate::{recipient_cadence::notice_due_with_cadence, window_rows::notification_windows};
 use central_storage::{GuardedStatement, StoreFailure};
+use fleet_runtime_ports::stored_values::format_utc_millis;
 use fleet_runtime_ports::{
     CentralStore,
     guarded_statements::{exact, text},
@@ -32,7 +30,11 @@ pub async fn plan_notice_cadence_held(
         let due = notice_due_with_cadence(now, cadence)?;
         statements.push(exact(
             "UPDATE mail_notification_windows SET due_at=?,updated_at=? WHERE window_id=?",
-            vec![text(timestamp(due)), text(timestamp(now)), text(&window.id)],
+            vec![
+                text(format_utc_millis(due)),
+                text(format_utc_millis(now)),
+                text(&window.id),
+            ],
         ));
     }
     Ok(statements)

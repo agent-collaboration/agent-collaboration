@@ -2,7 +2,6 @@
 //! over the probe tables (P10). Rows carry machine_kind='owed_reply'; the
 //! production table and link wiring belong to deliverable 4.
 use super::machines::owed_reply::{Effect, Finish, OwedReply, State};
-use crate::central_statement_values::timestamp;
 use central_engine_model::{EngineTime, InstanceKey};
 use central_storage::{GuardedStatement, ReadOutcome, SqlValue, Statement, StoreFailure};
 use fleet_engine::{
@@ -10,6 +9,7 @@ use fleet_engine::{
     load_store_failure, raw_version,
 };
 use fleet_runtime_ports::CentralStore as _;
+use fleet_runtime_ports::stored_values::format_utc_millis;
 use fleet_runtime_ports::{
     guarded_statements::{exact, text},
     stored_values::{column, string},
@@ -119,7 +119,7 @@ impl<R: EngineHost> StoreAdapter<OwedReply> for OwedReplyStore<'_, R> {
             text(stored_state(next)),
             send,
             connection,
-            text(timestamp(self.0.now()?)),
+            text(format_utc_millis(self.0.now()?)),
         ];
         args.extend(prior.version.0.clone());
         Ok(exact(
@@ -132,7 +132,7 @@ impl<R: EngineHost> StoreAdapter<OwedReply> for OwedReplyStore<'_, R> {
         key: &InstanceKey,
         effect: &Effect,
     ) -> Result<Vec<GuardedStatement>, StoreFailure> {
-        let now = timestamp(self.0.now()?);
+        let now = format_utc_millis(self.0.now()?);
         Ok(match effect {
             // One send is counted on the item's group.
             Effect::SendItem { .. } => vec![exact(

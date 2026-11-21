@@ -13,6 +13,8 @@ mod mail_delivery_ready;
 pub mod mail_link;
 mod provisioning_failure;
 mod statement_refusal;
+pub mod workspace_description;
+mod workspace_directory;
 
 pub use central_observation::CentralObservation;
 pub use client_id::ClientId;
@@ -28,3 +30,5 @@ pub use engine_attempts::{
 };
 pub use legacy_units::LegacyUnitOutcome;
 pub use mail_delivery_ready::MailDeliveryReady;
+pub use workspace_description::MAXIMUM_DESCRIPTION_BYTES;
+pub use workspace_directory::{DirectoryWorkspace, WorkspaceDirectory, WorkspaceView};

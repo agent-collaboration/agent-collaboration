@@ -152,7 +152,3 @@ pub(crate) fn decode_automations(rows: &ReadOutcome) -> Result<Vec<AutomationRow
 pub(crate) const AUTOMATION_FAILURE: &str = guarded_attempt_sql!(
     "EXISTS(SELECT 1 FROM automation_schedules WHERE automation_id IS ?20 AND target IS ?21 AND timing_rule IS ?22 AND anchor_at IS ?23 AND expires_at IS ?24 AND evaluated_through_at IS ?25 AND text IS ?26 AND next_due_at IS ?27 AND state IS ?28 AND created_at IS ?29 AND updated_at IS ?30 AND state NOT IN ('done','disabled'))"
 );
-
-pub(crate) fn timestamp(value: Timestamp) -> String {
-    value.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
-}

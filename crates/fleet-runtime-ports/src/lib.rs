@@ -1,5 +1,5 @@
-//! The capabilities a host supplies to FleetRuntime. Traits and the leaf values
-//! they carry only: no behavior, no Tokio and no Cloudflare type.
+//! Host capabilities for FleetRuntime, their leaf values, and pure storage
+//! helpers. The ports stay independent of Tokio and Cloudflare.
 #![forbid(unsafe_code)]
 
 mod central_observer;

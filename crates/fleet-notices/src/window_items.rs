@@ -6,7 +6,7 @@ use fleet_runtime::FleetRuntime;
 use fleet_runtime_ports::{
     CentralStore, WorkspaceStores,
     guarded_statements::text,
-    stored_values::{column, json, string},
+    stored_values::{column, encode_json, json, string},
     workspace_decode_error::corrupt,
 };
 use fleet_workspace_access::workspace_change_records::StoredChange;
@@ -54,9 +54,7 @@ pub(crate) async fn window_notice_items<Host: CentralStore, Stores: WorkspaceSto
     let mut items = Vec::new();
     for (workspace, changes) in grouped {
         let ids: Vec<_> = changes.iter().map(|(id, _)| id).collect();
-        let encoded = serde_json::to_string(&ids)
-            .map(text)
-            .map_err(|_| corrupt("mail JSON"))?;
+        let encoded = encode_json(&ids, "mail JSON")?;
         let rows = execution
             .read_workspace(&workspace, Statement {
                 sql: "SELECT json_object('changeId',change_id,'position',position,'item',json_object('kind',item_kind,'id',item_id),'actor',actor,'changeKind',change_kind,'threadId',thread_id,'projectId',project_id,'subjectActor',subject_actor,'role',role,'createdAt',created_at) AS payload FROM workspace_changes WHERE change_id IN (SELECT value FROM json_each(?)) ORDER BY position",

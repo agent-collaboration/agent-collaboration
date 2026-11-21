@@ -18,8 +18,6 @@ fleet-runtime-ports.workspace = true
 fleet-timer-policy.workspace = true
 workspace-ids.workspace = true
 workspace-model.workspace = true
-chrono = { version = "0.4.45", default-features = false, features = ["alloc"] }
-serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]

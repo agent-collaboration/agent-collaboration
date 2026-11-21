@@ -1,6 +1,7 @@
 //! Read and edit only the queued mailbox rows affected by notice changes.
-use crate::{message_values::timestamp, stored_messages::decode_messages};
+use crate::stored_messages::decode_messages;
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
+use fleet_runtime_ports::stored_values::format_utc_millis;
 use fleet_runtime_ports::{
     CentralStore,
     guarded_statements::{any, text},
@@ -38,7 +39,7 @@ pub async fn plan_cancel_queued_notices_held(
             vec![
                 text(workspace),
                 text(thread),
-                text(timestamp(now)),
+                text(format_utc_millis(now)),
                 recipient.clone(),
                 recipient,
             ],
