@@ -1,8 +1,5 @@
 //! Literal job-graph controls for direct dependencies and paths through lower crates.
-use super::{
-    DependencyKind, ENGINE_EDGES, FLEET_ENGINE, FLEET_SCHEDULES, FLEET_WAKES, TIMER_CRATES,
-    check_boundaries, check_closed_workspace_edges, graph,
-};
+use super::{DependencyKind, FLEET_ENGINE, FLEET_SCHEDULES, FLEET_WAKES, check_boundaries, graph};
 
 #[test]
 fn timer_job_reachability_rejects_forbidden_edges_through_an_allowed_leaf() {
@@ -91,21 +88,10 @@ fn mail_rejects_timer_policy_through_workspace_model_and_automation() {
 #[test]
 fn engine_rejects_an_upward_core_dependency() {
     for kind in [DependencyKind::Normal, DependencyKind::Build] {
-        assert!(
-            check_closed_workspace_edges(
-                &graph(&[(FLEET_ENGINE, "fleet-runtime", kind)]),
-                FLEET_ENGINE,
-                ENGINE_EDGES
-            )
-            .is_ok()
-        );
+        assert!(check_boundaries(&graph(&[(FLEET_ENGINE, "fleet-runtime", kind)])).is_ok());
         let target = "collaboration-central-core";
-        let error = check_closed_workspace_edges(
-            &graph(&[(FLEET_ENGINE, target, kind)]),
-            FLEET_ENGINE,
-            ENGINE_EDGES,
-        )
-        .expect_err("engine dependencies must point down");
+        let error = check_boundaries(&graph(&[(FLEET_ENGINE, target, kind)]))
+            .expect_err("engine dependencies must point down");
         assert_eq!(
             error.to_string(),
             format!("BD1: forbidden {kind:?} dependency {FLEET_ENGINE} -> {target}")
@@ -115,20 +101,12 @@ fn engine_rejects_an_upward_core_dependency() {
 
 #[test]
 fn timer_crates_reject_a_direct_mail_dependency() {
-    for (package, allowed) in TIMER_CRATES {
+    for package in [FLEET_WAKES, FLEET_SCHEDULES, "fleet-timer-policy"] {
         for kind in [DependencyKind::Normal, DependencyKind::Build] {
-            assert!(
-                check_closed_workspace_edges(
-                    &graph(&[(package, "central-engine-model", kind)]),
-                    package,
-                    allowed
-                )
-                .is_ok()
-            );
+            assert!(check_boundaries(&graph(&[(package, "central-engine-model", kind)])).is_ok());
             let target = "fleet-mail";
-            let error =
-                check_closed_workspace_edges(&graph(&[(package, target, kind)]), package, allowed)
-                    .expect_err("timer dependencies must point down");
+            let error = check_boundaries(&graph(&[(package, target, kind)]))
+                .expect_err("timer dependencies must point down");
             assert_eq!(
                 error.to_string(),
                 format!("BD1: forbidden {kind:?} dependency {package} -> {target}")
@@ -240,5 +218,99 @@ fn engine_rejects_a_transitive_directory_dependency() {
                     .into()
             ),
         );
+    }
+}
+
+fn assert_transitive_rejection(job: &str, via: &[&str], target: &str) {
+    for kind in [DependencyKind::Normal, DependencyKind::Build] {
+        let mut source = job;
+        let mut edges = Vec::with_capacity(via.len() + 1);
+        for &intermediate in via {
+            edges.push((source, intermediate, DependencyKind::Normal));
+            source = intermediate;
+        }
+        edges.push((source, target, kind));
+
+        assert_eq!(
+            check_boundaries(&graph(&edges)).map_err(|failure| failure.to_string()),
+            Err(format!(
+                "BD1: forbidden reachable dependency {job} -> {target}"
+            )),
+            "{kind:?} edge from {source} to {target}"
+        );
+    }
+}
+
+#[test]
+fn jobs_reject_transitive_dependencies_on_siblings() {
+    let through_runtime = &["fleet-engine", "fleet-runtime"][..];
+    let through_access = &["fleet-workspace-access"][..];
+    let cases: [(&str, &[&str], &[&str]); 5] = [
+        (
+            "fleet-wakes",
+            through_runtime,
+            &["fleet-schedules", "fleet-mail", "fleet-workspace-directory"],
+        ),
+        (
+            "fleet-schedules",
+            through_runtime,
+            &["fleet-mail", "fleet-notices", "fleet-workspace-directory"],
+        ),
+        (
+            "fleet-mail",
+            through_access,
+            &[
+                "fleet-wakes",
+                "fleet-schedules",
+                "fleet-notices",
+                "fleet-workspace-directory",
+            ],
+        ),
+        (
+            "fleet-notices",
+            through_access,
+            &[
+                "fleet-wakes",
+                "fleet-schedules",
+                "fleet-timer-policy",
+                "fleet-workspace-directory",
+            ],
+        ),
+        (
+            "fleet-workspace-directory",
+            &["message-board"],
+            &[
+                "fleet-workspace-access",
+                "fleet-mail",
+                "fleet-notices",
+                "fleet-wakes",
+                "fleet-schedules",
+                "fleet-timer-policy",
+                "fleet-workspace-requests",
+                "fleet-runtime",
+                "fleet-signin",
+                "fleet-machine-login",
+                "fleet-admin",
+            ],
+        ),
+    ];
+    for (job, via, siblings) in cases {
+        for sibling in siblings {
+            assert_transitive_rejection(job, via, sibling);
+        }
+    }
+}
+
+#[test]
+fn schedules_rejects_transitive_dependencies_on_services() {
+    for service in [
+        "fleet-application",
+        "collaboration-central-core",
+        "collaboration-central-tokio",
+        "collaboration-central-cloudflare",
+        "codex-router-debug-hosts",
+        "codex-router-tailnet-verification-host",
+    ] {
+        assert_transitive_rejection("fleet-schedules", &["agent-automation"], service);
     }
 }
