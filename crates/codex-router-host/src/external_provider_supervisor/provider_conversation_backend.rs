@@ -748,8 +748,8 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
             } else {
                 record
             };
+            self.inner.refresh_durable_operation(&record);
             drop(store);
-            self.inner.release_reconciled_prompt(&record).await;
             snapshot_from_record(record).map_err(|message| {
                 failure(
                     ConversationOperationFailureKind::ProtocolViolation,

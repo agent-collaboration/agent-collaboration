@@ -55,10 +55,11 @@ impl SupervisorInner {
         live: &LiveOperation,
     ) {
         if let Some(endpoint) = live.binding() {
+            let cell = self.uncertainty.slot(endpoint);
+            #[cfg(test)]
+            cell.fixture.hold_residue_read(operation).await;
             let observed = store.inspect(operation).await;
-            self.uncertainty
-                .slot(endpoint)
-                .preserve_residual(operation, live.target(), observed);
+            cell.preserve_residual(operation, live.target(), observed);
         }
     }
 
@@ -72,7 +73,7 @@ impl SupervisorInner {
         collaboration_runtime::ProviderOperationRecord,
         collaboration_runtime::ProviderOperationStoreError,
     > {
-        store
+        let row = store
             .record_terminal(
                 operation,
                 failure.effect,
@@ -80,7 +81,9 @@ impl SupervisorInner {
                 None,
                 self.now_ms(),
             )
-            .await
+            .await?;
+        self.refresh_durable_operation(&row);
+        Ok(row)
     }
 
     pub(super) async fn finish(
@@ -159,7 +162,7 @@ impl SupervisorInner {
                     _ => None,
                 };
                 let mut store = self.store.lock().await;
-                if crate::provider_operation_settlement::persist_provider_success(
+                match crate::provider_operation_settlement::persist_provider_success(
                     &mut store,
                     &operation_id,
                     target.as_ref(),
@@ -167,15 +170,20 @@ impl SupervisorInner {
                     terminal_stop_reason,
                 )
                 .await
-                .is_err()
                 {
-                    let durable = durable_stage(&mut store, &operation_id).await;
-                    (
-                        Err(applied_unsaved(operation_id.clone(), target, durable)),
-                        Retention::PersistenceFailed,
-                    )
-                } else {
-                    (Ok(settlement), Retention::Settled)
+                    Ok(row) => {
+                        if let Some(row) = row {
+                            self.refresh_durable_operation(&row);
+                        }
+                        (Ok(settlement), Retention::Settled)
+                    }
+                    Err(_) => {
+                        let durable = durable_stage(&mut store, &operation_id).await;
+                        (
+                            Err(applied_unsaved(operation_id.clone(), target, durable)),
+                            Retention::PersistenceFailed,
+                        )
+                    }
                 }
             }
             ProviderOperationCompletion::Failure(operation_failure)
@@ -221,14 +229,22 @@ impl SupervisorInner {
                         .await
                     {
                         Ok(settled) => settled,
-                        Err(late_end) => {
+                        Err(mut late_end) => {
                             if late_end == CustodyEnd::Failed {
-                                self.preserve_operation_residue(
-                                    &mut *self.store.lock().await,
-                                    &operation_id,
-                                    &live,
-                                )
-                                .await;
+                                let preserve = async {
+                                    let mut store = self.store.lock().await;
+                                    self.preserve_operation_residue(
+                                        &mut store,
+                                        &operation_id,
+                                        &live,
+                                    )
+                                    .await;
+                                };
+                                late_end = tokio::select! {
+                                    biased;
+                                    () = self.operation_cleanup_cancel.cancelled() => CustodyEnd::Released,
+                                    () = preserve => CustodyEnd::Failed,
+                                };
                             }
                             self.finish_late_write(&live, late_end);
                             return;

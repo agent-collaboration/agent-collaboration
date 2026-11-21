@@ -1,6 +1,7 @@
 //! Directional conflicts between one admission and an existing operation.
 
 use collaboration_protocol::{OperationId, ProviderOperationKind, SessionRef};
+use provider_session_machines::session_owner::earlier_send_in_flight_answer;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum DispatchMark {
@@ -11,8 +12,14 @@ pub(super) enum DispatchMark {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum AdmissionClass {
     Independent,
-    LinePlacement,
+    OwnerPlaced,
     RefuseWhileRunning { foreground: uuid::Uuid },
+}
+
+impl AdmissionClass {
+    pub(super) const fn holds_admission(self) -> bool {
+        matches!(self, Self::Independent)
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -93,7 +100,7 @@ impl AdmissionRequest<'_> {
             // to the owner, and same-ID reuse consults the existing operation.
             EarlierOperation::InFlight { .. }
                 if self.kind == ConversationClose
-                    || self.mode.class == AdmissionClass::LinePlacement
+                    || self.mode.class == AdmissionClass::OwnerPlaced
                     || self.operation == earlier =>
             {
                 false
@@ -132,10 +139,7 @@ impl AdmissionBlockers {
             ));
         }
         if !self.in_flight.is_empty() {
-            clauses.push(format!(
-                "an earlier send is still in flight; wait for {}",
-                ids(&self.in_flight)
-            ));
+            clauses.push(earlier_send_in_flight_answer(ids(&self.in_flight)));
         }
         (!clauses.is_empty()).then(|| clauses.join("; "))
     }

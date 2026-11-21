@@ -18,6 +18,7 @@ use uuid::Uuid;
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub(crate) enum LaneDispatchKind {
     Prompt,
+    QueuedPrompt,
     Steer,
     Undo,
 }
@@ -114,7 +115,10 @@ impl SessionStoreLane {
                 operation: key(blocker)?,
             });
         }
-        if kind == LaneDispatchKind::Prompt {
+        if matches!(
+            kind,
+            LaneDispatchKind::Prompt | LaneDispatchKind::QueuedPrompt
+        ) {
             if let Some(blocker) = outcomes
                 .pending_dispatches_for(&self.inner.target)
                 .find(|held| *held != operation)
@@ -127,7 +131,7 @@ impl SessionStoreLane {
             if let Some(blocker) = binding
                 .live_dispatch_blocker
                 .get()
-                .and_then(|check| check(operation, &self.inner.target))
+                .and_then(|gate| gate(operation, &self.inner.target))
             {
                 return Err(SessionStoreOfferError::DispatchBusy {
                     operation: key(&blocker)?,

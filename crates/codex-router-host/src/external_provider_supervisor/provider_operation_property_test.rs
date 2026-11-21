@@ -6,14 +6,14 @@ mod write_custody;
 use super::{
     LiveOperation, LiveOperations, OperationId, ProviderBindingIdentity, ProviderOperationKind,
     SessionRef,
-    provider_admission_policy::{AdmissionClass, AdmissionMode, AdmissionRequest, DispatchMark},
+    provider_admission_policy::{AdmissionClass, AdmissionMode, AdmissionRequest},
     provider_operation_index::Reservation,
     tests::binding,
 };
 use crate::provider_operation_custody::CustodyEnd;
 use collaboration_protocol::SessionId;
 use hegel::generators as gs;
-use std::sync::Arc;
+use std::{collections::VecDeque, sync::Arc};
 
 fn target(binding: &ProviderBindingIdentity, name: &str) -> SessionRef {
     SessionRef {
@@ -42,7 +42,7 @@ fn reserve(
             binding,
             request.target.cloned(),
             request.kind,
-            request.mode.mark,
+            request.mode,
         )),
         vec![],
         None,
@@ -72,7 +72,7 @@ fn generated_admission_rechecks_at_reservation(case: hegel::TestCase) {
     // The competing preflight can see an empty index. Its reservation still
     // has to decide against the live index after the first request arrives.
     let mut live = LiveOperations::default();
-    assert!(live.in_flight_blockers(&binding, second).is_empty());
+    assert!(live.admission_blockers(&binding, second).is_empty());
     assert!(matches!(
         reserve(&mut live, &binding, first),
         Ok(Reservation::Acquired)
@@ -108,13 +108,17 @@ fn compare_admission(
     }
 
     let holder = Arc::new(if holder_stage == 5 {
-        LiveOperation::queued_prompt(&prior_binding, targets[0].clone())
+        LiveOperation::queued_prompt(
+            &prior_binding,
+            targets[0].clone(),
+            AdmissionMode::deferred(AdmissionClass::OwnerPlaced),
+        )
     } else {
         LiveOperation::reserving(
             &prior_binding,
             held_target.cloned(),
             independent_kind(held_target),
-            DispatchMark::BeforeHandoff,
+            AdmissionMode::HANDOFF,
         )
     });
     if (1..=4).contains(&holder_stage) {
@@ -143,7 +147,7 @@ fn compare_admission(
         },
         target: asking_target,
         mode: match asking_port {
-            3 => AdmissionMode::deferred(AdmissionClass::LinePlacement),
+            3 => AdmissionMode::deferred(AdmissionClass::OwnerPlaced),
             4 => AdmissionMode::deferred(AdmissionClass::Independent),
             _ => AdmissionMode::HANDOFF,
         },
@@ -177,4 +181,331 @@ fn compare_admission(
             assert_eq!(blockers.in_flight, vec![first_id.clone()]);
         }
     }
+}
+
+struct ReservationEntry {
+    name: &'static str,
+    mode: AdmissionMode,
+    rowless: bool,
+    admission_holder: bool,
+}
+
+fn prompt_entries(foreground: uuid::Uuid) -> [ReservationEntry; 17] {
+    use AdmissionClass::{Independent, OwnerPlaced, RefuseWhileRunning};
+    [
+        ("direct prompt", Independent, false, true),
+        ("Compact", Independent, false, true),
+        ("Warm", Independent, false, true),
+        ("direct delivery", Independent, false, true),
+        ("idle API Auto", OwnerPlaced, false, false),
+        ("idle Steer fallback", OwnerPlaced, false, false),
+        ("rowless idle Auto", OwnerPlaced, true, false),
+        ("rowless idle mail Auto", OwnerPlaced, true, false),
+        ("rowless idle evidenced Auto", OwnerPlaced, true, false),
+        ("Queue", OwnerPlaced, true, false),
+        ("API Queue", OwnerPlaced, false, false),
+        ("QueueOnRun", OwnerPlaced, true, false),
+        ("running Auto", OwnerPlaced, false, false),
+        ("loading Auto", OwnerPlaced, false, false),
+        ("running Steer", OwnerPlaced, false, false),
+        ("exact-turn Steer", OwnerPlaced, false, false),
+        (
+            "foreground refusal",
+            RefuseWhileRunning { foreground },
+            false,
+            false,
+        ),
+    ]
+    .map(
+        |(name, class, rowless, admission_holder)| ReservationEntry {
+            name,
+            mode: AdmissionMode::deferred(class),
+            rowless,
+            admission_holder,
+        },
+    )
+}
+
+fn prompt_request<'a>(
+    operation: &'a OperationId,
+    target: &'a SessionRef,
+    mode: AdmissionMode,
+) -> AdmissionRequest<'a> {
+    AdmissionRequest {
+        operation,
+        kind: ProviderOperationKind::ConversationPrompt,
+        target: Some(target),
+        mode,
+    }
+}
+
+fn place_prompt(
+    index: &mut LiveOperations,
+    binding: &ProviderBindingIdentity,
+    target: &SessionRef,
+    operation: &OperationId,
+    entry: &ReservationEntry,
+) -> Arc<LiveOperation> {
+    let request = prompt_request(operation, target, entry.mode);
+    let live = Arc::new(if entry.rowless {
+        LiveOperation::queued_prompt(binding, target.clone(), entry.mode)
+    } else {
+        LiveOperation::reserving(binding, Some(target.clone()), request.kind, entry.mode)
+    });
+    assert!(matches!(
+        index.reserve(binding, request, &live, vec![], None),
+        Ok(Reservation::Acquired)
+    ));
+    live
+}
+
+#[test]
+fn the_reservation_class_table_keeps_admission_and_dispatch_holds_distinct() {
+    let binding = binding();
+    let session = target(&binding, "scope");
+    let first = OperationId::generate();
+    let second = OperationId::generate();
+    let independent = AdmissionMode::deferred(AdmissionClass::Independent);
+    let asks = prompt_request(&second, &session, independent);
+    let places = prompt_request(
+        &second,
+        &session,
+        AdmissionMode::deferred(AdmissionClass::OwnerPlaced),
+    );
+    for entry in prompt_entries(uuid::Uuid::now_v7()) {
+        let mut index = LiveOperations::default();
+        let holder = place_prompt(&mut index, &binding, &session, &first, &entry);
+        let assert_hold_readers = |dispatch_hold: bool| {
+            // Independent admission sees either hold, the lane sees dispatch only,
+            // and owner placement sees neither.
+            assert_eq!(
+                index.admission_blockers(&binding, asks).contains(&first),
+                entry.admission_holder || dispatch_hold,
+                "{}",
+                entry.name
+            );
+            assert_eq!(
+                index.lane_mark_blocker(&binding, asks),
+                dispatch_hold.then(|| first.clone()),
+                "{}",
+                entry.name
+            );
+            assert!(
+                index.admission_blockers(&binding, places).is_empty(),
+                "{}",
+                entry.name
+            );
+        };
+        assert_hold_readers(false);
+        if !entry.rowless {
+            holder.admitted();
+            assert_hold_readers(false);
+        }
+        holder.dispatch_marked();
+        assert_hold_readers(true);
+        holder.undispatched();
+        assert_hold_readers(false);
+        holder.finish_write(CustodyEnd::NoWrite);
+        assert!(index.admission_blockers(&binding, asks).is_empty());
+        assert_eq!(index.lane_mark_blocker(&binding, asks), None);
+    }
+    for (kind, target, mode) in [
+        (
+            ProviderOperationKind::ConversationCreate,
+            None,
+            AdmissionMode::HANDOFF,
+        ),
+        (
+            ProviderOperationKind::ConversationLoad,
+            Some(&session),
+            AdmissionMode::HANDOFF,
+        ),
+        (
+            ProviderOperationKind::ConversationResume,
+            Some(&session),
+            AdmissionMode::HANDOFF,
+        ),
+        (
+            ProviderOperationKind::ConversationClose,
+            Some(&session),
+            AdmissionMode::HANDOFF,
+        ),
+        (
+            ProviderOperationKind::ConversationCancel,
+            Some(&session),
+            AdmissionMode::canceling(&OperationId::generate()),
+        ),
+    ] {
+        let mut index = LiveOperations::default();
+        assert!(matches!(
+            reserve(
+                &mut index,
+                &binding,
+                AdmissionRequest {
+                    operation: &first,
+                    kind,
+                    target,
+                    mode,
+                }
+            ),
+            Ok(Reservation::Acquired)
+        ));
+        assert_eq!(
+            index.admission_blockers(&binding, asks),
+            vec![first.clone()],
+            "{kind:?}"
+        );
+        assert_eq!(
+            index.lane_mark_blocker(&binding, asks),
+            Some(first.clone()),
+            "{kind:?}"
+        );
+        index.operations[&first].admitted();
+        assert_eq!(
+            index.admission_blockers(&binding, asks),
+            vec![first.clone()],
+            "{kind:?}"
+        );
+        assert_eq!(
+            index.lane_mark_blocker(&binding, asks),
+            Some(first.clone()),
+            "{kind:?}"
+        );
+    }
+}
+
+#[test]
+fn owner_placement_ignores_both_holds_before_its_own_lane_mark() {
+    let binding = binding();
+    let session = target(&binding, "same-session");
+    let first = OperationId::generate();
+    let second = OperationId::generate();
+    let independent = AdmissionMode::deferred(AdmissionClass::Independent);
+    let entries = prompt_entries(uuid::Uuid::now_v7());
+    for entry in entries
+        .iter()
+        .filter(|entry| entry.mode.class == AdmissionClass::OwnerPlaced)
+    {
+        let mut index = LiveOperations::default();
+        let first_holder = place_prompt(&mut index, &binding, &session, &first, &entries[0]);
+        let owner_placed = place_prompt(&mut index, &binding, &session, &second, entry);
+        first_holder.finish_write(CustodyEnd::NoWrite);
+        owner_placed.admitted();
+        owner_placed.dispatch_marked();
+        let asks = prompt_request(&first, &session, independent);
+        assert_eq!(
+            index.admission_blockers(&binding, asks),
+            vec![second.clone()]
+        );
+        assert_eq!(
+            index.lane_mark_blocker(&binding, asks),
+            Some(second.clone())
+        );
+        let third = OperationId::generate();
+        place_prompt(&mut index, &binding, &session, &third, entry);
+    }
+}
+
+#[hegel::test(seed = Some(2912101), test_cases = 100)]
+fn generated_same_target_reservations_obey_first_independent_hold(case: hegel::TestCase) {
+    let binding = binding();
+    let session = target(&binding, "shared");
+    let ids = [OperationId::generate(), OperationId::generate()];
+    let first = usize::from(case.draw(gs::booleans()));
+    let (earlier, later) = (&ids[first], &ids[1 - first]);
+    let entries = prompt_entries(uuid::Uuid::now_v7());
+    let entry = &entries[case.draw(gs::integers::<usize>().max_value(entries.len() - 1))];
+    let independent = AdmissionMode::deferred(AdmissionClass::Independent);
+    let asks = prompt_request(later, &session, independent);
+    let mut index = LiveOperations::default();
+    let holder = place_prompt(&mut index, &binding, &session, earlier, entry);
+    let stage = case.draw(gs::integers::<u8>().max_value(3));
+    if stage >= 1 && !entry.rowless {
+        holder.admitted();
+    }
+    if stage >= 2 {
+        holder.dispatch_marked();
+    }
+    if stage == 3 {
+        holder.finish_write(CustodyEnd::Written);
+    }
+    let blocked = stage == 2 || (stage < 2 && entry.admission_holder);
+    match reserve(&mut index, &binding, asks) {
+        Err(blockers) => {
+            assert!(blocked, "{} {stage}", entry.name);
+            assert_eq!(blockers.in_flight, vec![earlier.clone()]);
+            assert!(!index.operations.contains_key(later));
+        }
+        Ok(Reservation::Acquired) => assert!(!blocked, "{} {stage}", entry.name),
+        Ok(Reservation::Occupied(_)) => panic!("fresh request was treated as an ID reuse"),
+    }
+}
+
+#[hegel::test(seed = Some(2912102), test_cases = 100)]
+fn generated_owner_line_settles_after_external_holds_release(case: hegel::TestCase) {
+    use crate::operation_machines::operation_record_machine::AttemptEnding;
+    let binding = binding();
+    let session = target(&binding, "owner-line");
+    let ids = [OperationId::generate(), OperationId::generate()];
+    let entries = prompt_entries(uuid::Uuid::now_v7());
+    let independent = &entries[case.draw(gs::integers::<usize>().max_value(3))];
+    let queued = entries.iter().find(|entry| entry.name == "Queue").unwrap();
+    let mut index = LiveOperations::default();
+    let holds = [
+        place_prompt(&mut index, &binding, &session, &ids[0], independent),
+        place_prompt(&mut index, &binding, &session, &ids[1], queued),
+    ];
+    let handoff_id = OperationId::generate();
+    let handoff = AdmissionRequest {
+        operation: &handoff_id,
+        kind: ProviderOperationKind::ConversationCreate,
+        target: None,
+        mode: AdmissionMode::HANDOFF,
+    };
+    let with_external_hold = case.draw(gs::booleans());
+    if with_external_hold {
+        assert!(matches!(
+            reserve(&mut index, &binding, handoff),
+            Ok(Reservation::Acquired)
+        ));
+    }
+    let first = usize::from(case.draw(gs::booleans()));
+    let mut owner_line = VecDeque::new();
+    owner_line.push_back(first);
+    if case.draw(gs::booleans()) {
+        owner_line.push_back(1 - first);
+    }
+    let mut answers = [false; 2];
+    let drain = |owner_line: &mut VecDeque<usize>, answers: &mut [bool; 2]| {
+        while let Some(&head) = owner_line.front() {
+            let request = prompt_request(&ids[head], &session, independent.mode);
+            if let Some(blocker) = index.lane_mark_blocker(&binding, request) {
+                assert_eq!(
+                    blocker, handoff_id,
+                    "a line head cannot wait on a prompt behind it"
+                );
+                assert!(!owner_line.iter().skip(1).any(|&tail| ids[tail] == blocker));
+                return;
+            }
+            holds[head].admitted();
+            holds[head].dispatch_marked();
+            holds[head].completed(AttemptEnding::Applied);
+            holds[head].finish_write(CustodyEnd::Written);
+            answers[owner_line.pop_front().unwrap()] = true;
+        }
+    };
+    drain(&mut owner_line, &mut answers);
+    if with_external_hold {
+        index.operations[&handoff_id].finish_write(CustodyEnd::NoWrite);
+    }
+    if !owner_line.contains(&(1 - first)) && !answers[1 - first] {
+        owner_line.push_back(1 - first);
+    }
+    drain(&mut owner_line, &mut answers);
+    assert_eq!(
+        answers,
+        [true, true],
+        "all admitted inputs settle after the external hold"
+    );
+    assert!(owner_line.is_empty());
 }

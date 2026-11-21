@@ -242,6 +242,58 @@ fn end_turn(
 }
 
 #[test]
+fn auto_queued_during_restore_steers_when_the_first_prompt_takes_wire() {
+    let mut state = fresh();
+    let restoring = open_wire(&mut state, 1);
+    let first = input(restoring.generation, 2);
+    let second = input(restoring.generation, 3);
+    for pending in [&first, &second] {
+        assert!(
+            enqueue_prompt(&mut state, pending)
+                .contains(&OwnerEffect::InputQueued(pending.clone()))
+        );
+    }
+    apply(&mut state, restore_reply(restoring));
+    let restored = finish_preparation(&mut state, restoring);
+    assert!(restored.contains(&OwnerEffect::Store(
+        SessionStoreRequest::MarkQueuedDispatch(first.clone())
+    )));
+    let first_mark = apply(&mut state, mark_prompt(&first));
+    let first_authorization = authorization(&first_mark);
+    assert!(first_mark.contains(&OwnerEffect::Authorize {
+        authorization: first_authorization.clone(),
+        work: AuthorizedWork::Prompt(first.clone()),
+    }));
+
+    let taken = apply(
+        &mut state,
+        OwnerEvent::Dispatch(DispatchResult::Taken(first_authorization)),
+    );
+    let exact_steer = OwnerInput {
+        turn: first.turn,
+        ..second
+    };
+
+    assert!(
+        taken.contains(&OwnerEffect::Store(SessionStoreRequest::MarkSteerDispatch(
+            exact_steer.clone()
+        ))),
+        "the second Auto input must mark a steer on the turn that took the wire: {taken:?}"
+    );
+    let steer_mark = apply(
+        &mut state,
+        OwnerEvent::Store(SessionStoreResult::SteerDispatch {
+            input: exact_steer.clone(),
+            outcome: EffectOutcome::Applied,
+        }),
+    );
+    assert!(steer_mark.contains(&OwnerEffect::Authorize {
+        authorization: authorization(&steer_mark),
+        work: AuthorizedWork::Steer(exact_steer),
+    }));
+}
+
+#[test]
 fn unknown_prompt_offers_terminal_then_retires_the_line_known_unsent() {
     let mut state = fresh();
     let run = restore_live(&mut state, 10);

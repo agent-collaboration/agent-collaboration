@@ -6,7 +6,7 @@ async fn a_marked_create_refuses_an_independent_direct_prompt() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn a_marked_create_refuses_auto_ahead_of_an_idle_start() {
+async fn a_marked_create_refuses_an_unacknowledged_auto_at_dispatch() {
     check_marked_create_against_idle_prompt(PromptBusyPolicy::Send(MessageDelivery::Auto)).await;
 }
 
@@ -42,22 +42,73 @@ async fn check_marked_create_against_idle_prompt(busy: PromptBusyPolicy) {
     )
     .unwrap();
     request.busy = busy;
-    let refusal = host
-        .prompt_contents(request)
-        .await
-        .expect_err("independent idle prompt overlapped a marked wide create");
-    assert_eq!(refusal.kind, ConversationOperationFailureKind::Busy);
-    assert_eq!(refusal.effect, ProviderOperationEffect::None);
-    assert!(String::from(refusal.message).contains(create.as_str()));
-    assert!(
-        host.inner
+    let parked = host
+        .inner
+        .uncertainty
+        .slot(&rig.target.endpoint)
+        .fixture
+        .notice_wait(
+            rig.target.clone(),
+            crate::binding_store_fixture::BindingFixtureWait::QueuedDispatchParked,
+        );
+    let result = tokio::select! {
+        result = host.prompt_contents(request) => result,
+        reached = parked => {
+            reached.expect("the blocked mark reached the owner line");
+            panic!("an unacknowledged start must answer before the wide create ends")
+        }
+    };
+    let refusal = if busy == PromptBusyPolicy::RefuseBusy {
+        let refused = result.expect_err("the direct request must be refused at admission");
+        assert_eq!(refused.stage, ConversationOperationFailureStage::Validation);
+        assert!(
+            host.inner
+                .store
+                .lock()
+                .await
+                .inspect(&prompt)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        refused
+    } else {
+        assert_eq!(
+            result
+                .expect("the owner-placed Auto has a durable admission")
+                .admission,
+            collaboration_protocol::ConversationAdmissionState::Admitted,
+        );
+        let refused = host
+            .wait(wait_request(prompt.clone()))
+            .await
+            .expect_err("the mark is refused before the create ends");
+        assert_eq!(refused.stage, ConversationOperationFailureStage::Dispatch);
+        let row = host
+            .inner
             .store
             .lock()
             .await
             .inspect(&prompt)
             .await
             .unwrap()
-            .is_none()
+            .expect("admitted Auto row");
+        assert_eq!(row.stage, ProviderOperationStage::Terminal);
+        assert_eq!(row.effect, ProviderOperationEffect::None);
+        assert_eq!(
+            row.reconciliation_state,
+            ProviderReconciliationState::Confirmed
+        );
+        refused
+    };
+    assert_eq!(refusal.kind, ConversationOperationFailureKind::Busy);
+    assert_eq!(refusal.effect, ProviderOperationEffect::None);
+    assert_eq!(
+        String::from(refusal.message),
+        format!(
+            "an earlier send is still in flight; wait for {}",
+            create.as_str()
+        ),
     );
     let wire = rig.wire_receipt();
     assert!(wire["prompts"].as_array().unwrap().is_empty());

@@ -95,22 +95,7 @@ impl ExternalProviderSupervisor {
                             })
                     })
                     .unwrap_or(AdmissionClass::Independent),
-                PromptBusyPolicy::Send(MessageDelivery::Queue) => AdmissionClass::LinePlacement,
-                PromptBusyPolicy::Send(MessageDelivery::Auto | MessageDelivery::Steer)
-                    if snapshot
-                        .as_ref()
-                        .is_some_and(|owner| matches!(owner.turn, SessionTurn::Running { .. })) =>
-                {
-                    AdmissionClass::LinePlacement
-                }
-                PromptBusyPolicy::Send(MessageDelivery::Auto)
-                    if snapshot.as_ref().is_some_and(|owner| {
-                        matches!(owner.lifecycle, SessionLifecycle::Loading { .. })
-                    }) =>
-                {
-                    AdmissionClass::LinePlacement
-                }
-                PromptBusyPolicy::Send(_) => AdmissionClass::Independent,
+                PromptBusyPolicy::Send(_) => AdmissionClass::OwnerPlaced,
             };
             let prepared = backend
                 .admit_operation(
@@ -215,6 +200,8 @@ impl ExternalProviderSupervisor {
         use provider_session_machines::session_owner::SessionOwnerCommand;
         let target = request.target;
         let operation = request.operation_id;
+        #[cfg(test)]
+        self.pause_before_owner_prompt_for_test(&operation).await;
         let provider_id = String::from(target.session_id.clone());
         let content = runtime
             .prepare_owner_prompt(&provider_id, request.input)
@@ -467,6 +454,7 @@ pub(super) fn retained_prompt(
                 provider_session_machines::session_owner::RevokeReason::SettingsUnresolved => {
                     ConversationOperationFailureKind::SettingsUnresolved
                 }
+                RevokeReason::EarlierSendInFlight { .. } => ConversationOperationFailureKind::Busy,
                 _ => ConversationOperationFailureKind::Unavailable,
             },
             ConversationOperationFailureStage::Dispatch,

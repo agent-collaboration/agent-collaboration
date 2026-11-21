@@ -128,6 +128,7 @@ pub enum AuthorizedWork {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RevokeReason {
     EarlierOutcomeUnknown { operation: Uuid },
+    EarlierSendInFlight { operation: Uuid },
     RestoreDidNotActivate,
     NotLoaded,
     QueueCancelled,
@@ -161,6 +162,7 @@ impl RevokeReason {
     pub const fn human_phrase(self) -> &'static str {
         match self {
             Self::EarlierOutcomeUnknown { .. } => "not sent: an earlier outcome is unknown",
+            Self::EarlierSendInFlight { .. } => EARLIER_SEND_IN_FLIGHT,
             Self::RestoreDidNotActivate => {
                 "the restore did not activate; load or resume this session and retry the input"
             }
@@ -187,11 +189,19 @@ impl RevokeReason {
 
     #[must_use]
     pub fn display_detail(self) -> std::borrow::Cow<'static, str> {
-        if let Self::EarlierOutcomeUnknown { operation } = self {
-            return format!("an earlier prompt's outcome is unknown; check the session, then run operation reconcile for {operation}").into();
+        match self {
+            Self::EarlierOutcomeUnknown { operation } => format!("an earlier prompt's outcome is unknown; check the session, then run operation reconcile for {operation}").into(),
+            Self::EarlierSendInFlight { operation } => earlier_send_in_flight_answer(operation).into(),
+            _ => self.human_phrase().into(),
         }
-        self.human_phrase().into()
     }
+}
+
+const EARLIER_SEND_IN_FLIGHT: &str = "an earlier send is still in flight";
+
+/// Shared by admission and dispatch when an earlier operation holds the way.
+pub fn earlier_send_in_flight_answer(operations: impl std::fmt::Display) -> String {
+    format!("{EARLIER_SEND_IN_FLIGHT}; wait for {operations}")
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

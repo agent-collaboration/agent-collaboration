@@ -18,6 +18,18 @@ impl AdmissionTestPause {
 }
 
 impl ExternalProviderSupervisor {
+    pub(super) async fn pause_before_owner_prompt_for_test(&self, operation: &OperationId) {
+        let pause = self
+            .inner
+            .before_owner_prompt_test_pause
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take_if(|(selected, _)| selected == operation);
+        if let Some((_, pause)) = pause {
+            pause.wait().await;
+        }
+    }
+
     pub(super) async fn pause_before_admission_reservation_for_test(&self) {
         let pause = self
             .inner

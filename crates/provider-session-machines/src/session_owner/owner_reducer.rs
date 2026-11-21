@@ -256,6 +256,9 @@ impl OwnerTransition {
             SessionStoreResult::DispatchBlockedByUnknown { input, operation } => {
                 self.dispatch_blocked_by_unknown(&input, operation)
             }
+            SessionStoreResult::DispatchBlockedByLive { input, operation } => {
+                self.dispatch_blocked_by_live(&input, operation)
+            }
             SessionStoreResult::QueuedDispatchBusy { input, attempt } => {
                 self.park_queued_dispatch(&input, attempt)
             }

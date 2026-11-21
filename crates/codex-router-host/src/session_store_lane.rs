@@ -691,7 +691,8 @@ impl SessionStoreLaneWriter {
             && let (Some(binding), Some(operation), Some(_)) =
                 (self.lane.inner.binding.get(), operation, &custody)
         {
-            let observed = self.store.lock().await.inspect(&operation).await;
+            let mut store = self.store.lock().await;
+            let observed = store.inspect(&operation).await;
             if observed.as_ref().is_err()
                 || observed
                     .as_ref()
@@ -792,6 +793,7 @@ impl SessionStoreLaneWriter {
                 effect,
                 reconciliation,
                 stop_reason,
+                recovery,
                 ..
             } => {
                 let row = store
@@ -803,6 +805,9 @@ impl SessionStoreLaneWriter {
                         offered_at_ms,
                     )
                     .await?;
+                if let Some(binding) = self.lane.inner.binding.get() {
+                    binding.refresh_durable_row(&row, Some(recovery));
+                }
                 let mut state = self.lane.state();
                 state.marks.remove(&operation);
                 state.queued_admissions.remove(&operation);
@@ -862,10 +867,7 @@ impl SessionStoreLaneWriter {
         let row = store
             .confirm_recorded_target(&operation, offered_at_ms)
             .await?;
-        if let Some(outcomes) = binding.outcomes.get() {
-            lock(outcomes).record_reconciled(operation);
-        }
-        binding.eligibility_changed();
+        binding.refresh_durable_row(&row, None);
         Ok(SessionStoreSettlement::Operation(Box::new(row)))
     }
 
