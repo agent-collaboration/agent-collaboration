@@ -1,33 +1,8 @@
-use super::*;
-use central_engine_model::{IdSource, check_transitions};
-
-struct NoIds;
-impl IdSource for NoIds {
-    fn next_id(&mut self) -> uuid::Uuid {
-        uuid::Uuid::from_u128(0x01890f2e7b4c7cc098c4000000000001)
-    }
-}
-
-fn context_now() -> EngineTime {
-    EngineTime::from_timestamp(1_794_571_200, 0).unwrap()
-}
-
-#[test]
-fn every_lifecycle_state_meets_discard_exactly_as_declared() {
-    let cases = [Lifecycle::Active, Lifecycle::Done, Lifecycle::Disabled]
-        .into_iter()
-        .map(|state| (state, FinishEvent::Discard));
-    assert_eq!(
-        check_transitions::<LifecycleFinish<WakeKind>>(
-            cases,
-            &mut Context {
-                now: context_now(),
-                ids: &mut NoIds
-            }
-        ),
-        Ok(())
-    );
-}
+use central_engine_model::{Context, Machine, MachineKind, TransitionError};
+use central_engine_test_support::timer::{NoIds, context_now};
+use fleet_schedules::AutomationKind;
+use fleet_timer_policy::{FinishEvent, Lifecycle, LifecycleFinish, TimerRefusal};
+use fleet_wakes::WakeKind;
 
 #[test]
 fn discard_disables_an_active_subject_and_refuses_a_finished_one() {

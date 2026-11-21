@@ -1,77 +1,36 @@
-//! Validated wake and automation rows, decoded without any runtime, so request
-//! plans and the engine machines share them with no module cycle.
-use agent_automation::TimingRule;
 use central_storage::{ReadOutcome, StoreFailure};
+use fleet_engine::guarded_attempt_sql;
 use fleet_runtime_ports::{
     stored_values::{json, string},
     workspace_decode_error::corrupt,
 };
 use workspace_ids::SessionRef;
-use workspace_ids::{AutomationId, WakeId};
-use workspace_model::central_mail as mail;
-use workspace_model::{PostText, Timestamp};
+use workspace_model::{PostText, Timestamp, central_mail as mail};
+
+use agent_automation::TimingRule;
+use workspace_ids::AutomationId;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct WakeRow {
-    pub id: WakeId,
-    pub target: SessionRef,
-    pub due: Timestamp,
-    pub text: PostText,
-    pub state: mail::WakeState,
-}
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct AutomationRow {
-    pub id: AutomationId,
-    pub target: SessionRef,
-    pub timing: TimingRule,
-    pub anchor: Timestamp,
-    pub expires_at: Timestamp,
-    pub evaluated: Option<Timestamp>,
-    pub due: Option<Timestamp>,
-    pub text: PostText,
-    pub state: mail::AutomationState,
+pub struct AutomationRow {
+    pub(crate) id: AutomationId,
+    pub(crate) target: SessionRef,
+    pub(crate) timing: TimingRule,
+    pub(crate) anchor: Timestamp,
+    pub(crate) expires_at: Timestamp,
+    pub(crate) evaluated: Option<Timestamp>,
+    pub(crate) due: Option<Timestamp>,
+    pub(crate) text: PostText,
+    pub(crate) state: mail::AutomationState,
 }
 fn parse_time(value: &str, field: &str) -> Result<Timestamp, StoreFailure> {
     let time: Timestamp = parse(value, field)?;
-    if !crate::central_mail_time::supported(time) {
+    if !central_engine_model::supported_time(time) {
         return Err(corrupt(field));
     }
     Ok(time)
 }
 fn parse<T: std::str::FromStr>(value: &str, column: &str) -> Result<T, StoreFailure> {
     value.parse().map_err(|_| corrupt(column))
-}
-pub(crate) fn decode_wakes(rows: &ReadOutcome) -> Result<Vec<WakeRow>, StoreFailure> {
-    rows.rows
-        .iter()
-        .map(|row| {
-            Ok(WakeRow {
-                id: parse(string(rows, row, "wake_id")?, "automation_wakes.wake_id")?,
-                target: json(string(rows, row, "target")?, "automation_wakes.target")?,
-                due: {
-                    let due = parse_time(string(rows, row, "due_at")?, "automation_wakes.due_at")?;
-                    let created_at = parse_time(
-                        string(rows, row, "created_at")?,
-                        "automation_wakes.created_at",
-                    )?;
-                    let expiry = crate::central_mail_time::lifetime_end(created_at)
-                        .ok_or_else(|| corrupt("automation_wakes.created_at"))?;
-                    if !crate::central_mail_time::on_grid(due) || due <= created_at || due > expiry
-                    {
-                        return Err(corrupt("automation_wakes.due_at"));
-                    }
-                    due
-                },
-                text: string(rows, row, "text")?
-                    .to_owned()
-                    .try_into()
-                    .map_err(|_| corrupt("automation_wakes.text"))?,
-                state: serde_json::from_value(serde_json::Value::String(
-                    string(rows, row, "state")?.to_owned(),
-                ))
-                .map_err(|_| corrupt("automation_wakes.state"))?,
-            })
-        })
-        .collect()
 }
 fn optional_time(
     rows: &ReadOutcome,
@@ -122,16 +81,16 @@ pub(crate) fn decode_automations(rows: &ReadOutcome) -> Result<Vec<AutomationRow
                 string(rows, row, "created_at")?,
                 "automation_schedules.created_at",
             )?;
-            let expected_expiry = crate::central_mail_time::lifetime_end(admission)
+            let expected_expiry = fleet_timer_policy::lifetime_end(admission)
                 .ok_or_else(|| corrupt("automation_schedules.created_at"))?;
             if expires_at != expected_expiry {
                 return Err(corrupt("automation_schedules.expires_at"));
             }
-            if crate::central_mail_time::aligned_at_or_after(admission, 300) != Some(anchor) {
+            if central_engine_model::aligned_at_or_after(admission, 300) != Some(anchor) {
                 return Err(corrupt("automation_schedules.anchor_at"));
             }
             if due.is_some_and(|due| {
-                !crate::central_mail_time::on_grid(due) || due > expires_at || due < anchor
+                !central_engine_model::on_five_minute_grid(due) || due > expires_at || due < anchor
             }) {
                 return Err(corrupt("automation_schedules.next_due_at"));
             }
@@ -187,4 +146,12 @@ pub(crate) fn decode_automations(rows: &ReadOutcome) -> Result<Vec<AutomationRow
             })
         })
         .collect()
+}
+
+pub(crate) const AUTOMATION_FAILURE: &str = guarded_attempt_sql!(
+    "EXISTS(SELECT 1 FROM automation_schedules WHERE automation_id IS ?20 AND target IS ?21 AND timing_rule IS ?22 AND anchor_at IS ?23 AND expires_at IS ?24 AND evaluated_through_at IS ?25 AND text IS ?26 AND next_due_at IS ?27 AND state IS ?28 AND created_at IS ?29 AND updated_at IS ?30 AND state NOT IN ('done','disabled'))"
+);
+
+pub(crate) fn timestamp(value: Timestamp) -> String {
+    value.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }

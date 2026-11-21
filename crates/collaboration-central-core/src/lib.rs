@@ -59,7 +59,6 @@ mod central_mail_sender;
 mod central_mail_status;
 mod central_mail_store;
 mod central_timer_plans;
-mod central_timer_rows;
 mod central_timers;
 mod direct_message_rows;
 mod notification_windows;

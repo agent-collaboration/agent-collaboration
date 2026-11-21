@@ -42,6 +42,9 @@ const LAYER_POLICY: [(&str, &[&str]); 36] = [
         "collaboration-central-core",
         &[
             "fleet-engine",
+            "fleet-wakes",
+            "fleet-schedules",
+            "fleet-timer-policy",
             "agent-automation",
             "central-engine-model",
             "central-link-protocol",
@@ -235,6 +238,7 @@ fn layer_policy() -> impl Iterator<Item = (&'static str, &'static [&'static str]
     LAYER_POLICY
         .into_iter()
         .chain(workspace_boundaries::FLEET_PURE_CRATES)
+        .chain(workspace_boundaries::TIMER_CRATES)
 }
 
 #[derive(Deserialize)]

@@ -10,9 +10,7 @@ fn expiry_is_terminal_and_has_no_sender_effect(case: hegel::TestCase) {
     let queued = State::Queued { deadline };
     let skew = case.draw(gs::integers::<i64>().min_value(-3_000).max_value(3_000));
     let step = |state: &State, event, now| {
-        crate::engine::machine_property_support::checked_step::<SystemMessageExpiry>(
-            state, event, now, 0,
-        )
+        central_engine_test_support::checked_step::<SystemMessageExpiry>(state, event, now, 0)
     };
     assert_eq!(
         step(

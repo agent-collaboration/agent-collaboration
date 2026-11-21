@@ -1,14 +1,14 @@
 #![deny(clippy::wildcard_enum_match_arm)]
-use super::timer_effects::{TimerRefusal, queue_message};
-use crate::central_timer_rows::WakeRow;
+use crate::rows::WakeRow;
 use central_engine_model::{
     Context, EngineTime, EventTag, Machine, MachineKind, StateTag, Transition, TransitionError,
 };
+use fleet_timer_policy::TimerRefusal;
 use workspace_model::central_mail as mail;
 
-pub(crate) struct WakeTimer;
+pub struct WakeTimer;
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum State {
+pub enum State {
     Active(WakeRow),
     Done,
     Disabled,
@@ -33,17 +33,8 @@ impl StateTag for State {
     }
 }
 #[derive(Clone)]
-pub(crate) enum Event {
-    Due {
-        occurrence: EngineTime,
-    },
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "CancelWake keeps its own request path until wakes move onto handle (deliverable 2)"
-        )
-    )]
+pub enum Event {
+    Due { occurrence: EngineTime },
     Cancel,
 }
 impl EventTag for Event {
@@ -55,7 +46,7 @@ impl EventTag for Event {
     }
 }
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) enum Effect {
+pub enum Effect {
     QueueMessage(mail::MessageRecord),
 }
 
@@ -75,14 +66,23 @@ impl Machine for WakeTimer {
                 if row.due != occurrence {
                     return Err(TransitionError::Stale);
                 }
-                let message = queue_message(
-                    context,
+                let raw_id = context.ids.next_id();
+                if raw_id.get_version_num() != 7 {
+                    return Err(TransitionError::Domain(TimerRefusal::InvalidIdentifier));
+                }
+                let message_id = raw_id
+                    .to_string()
+                    .try_into()
+                    .map_err(|_| TransitionError::Domain(TimerRefusal::InvalidIdentifier))?;
+                let message = mail::MessageRecord::queued_central(
+                    message_id,
                     row.target.clone(),
                     mail::MessageBody::Wake {
                         wake_id: row.id.clone(),
                         text: row.text.clone(),
                     },
-                )?;
+                    context.now,
+                );
                 Ok((State::Done, vec![Effect::QueueMessage(message)]))
             }
             (State::Active(_), Event::Cancel) => Ok((State::Disabled, vec![])),

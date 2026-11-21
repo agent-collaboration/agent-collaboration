@@ -67,7 +67,7 @@ fn probe_sequences_are_declared_deterministic_and_finish_once(case: hegel::TestC
             2 => ProbeEvent::Run,
             _ => ProbeEvent::Stop,
         };
-        match crate::engine::machine_property_support::checked_step::<EngineProbe>(
+        match central_engine_test_support::checked_step::<EngineProbe>(
             &state,
             event,
             now,

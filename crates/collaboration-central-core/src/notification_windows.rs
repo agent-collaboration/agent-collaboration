@@ -27,7 +27,7 @@ pub(crate) fn parse<T: std::str::FromStr>(value: &str, field: &str) -> Result<T,
 }
 pub(crate) fn parse_time(value: &str, field: &str) -> Result<Timestamp, StoreFailure> {
     let time: Timestamp = parse(value, field)?;
-    if !crate::central_mail_time::supported(time) {
+    if !central_engine_model::supported_time(time) {
         return Err(corrupt(field));
     }
     Ok(time)
@@ -66,7 +66,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         decision_at: Timestamp,
         cadence: NoticeCadence,
     ) -> Result<Timestamp, StoreFailure> {
-        crate::central_mail_time::aligned_strictly_after(decision_at, cadence.seconds())
+        central_engine_model::aligned_strictly_after(decision_at, cadence.seconds())
             .ok_or_else(|| corrupt("mail_notification_windows.due_at"))
     }
     pub(crate) async fn notification_windows(
@@ -83,7 +83,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
                 string(&rows, row, "due_at")?,
                 "mail_notification_windows.due_at",
             )?;
-            if !crate::central_mail_time::on_grid(due) {
+            if !central_engine_model::on_five_minute_grid(due) {
                 return Err(corrupt("mail_notification_windows.due_at"));
             }
             let recipient = parse(

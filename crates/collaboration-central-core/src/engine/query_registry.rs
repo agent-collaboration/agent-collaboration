@@ -33,21 +33,10 @@ macro_rules! grid_inputs {
     () => {
         concat!(
             "COALESCE(",
-            controlled_machine!(
-                "wake_timer",
-                machine_rows!("automation_wakes", "wake_id", "s.due_at", "wake_timer")
-            ),
+            fleet_wakes::wake_alarm_input!(),
             ",9223372036855),",
             "COALESCE(",
-            controlled_machine!(
-                "automation_timer",
-                machine_rows!(
-                    "automation_schedules",
-                    "automation_id",
-                    "s.next_due_at",
-                    "automation_timer"
-                )
-            ),
+            fleet_schedules::schedule_alarm_input!(),
             ",9223372036855)",
             ",COALESCE(",
             controlled_machine!("direct_message", direct_message_rows!()),
@@ -106,22 +95,6 @@ macro_rules! all_grid_inputs {
         grid_inputs!()
     };
 }
-pub(crate) const WAKE_LIST: &str = concat!(
-    "SELECT subject_key,occurrence_ms,effective_due_ms FROM (",
-    machine_rows!("automation_wakes", "wake_id", "s.due_at", "wake_timer"),
-    ") WHERE effective_due_ms<=?1 ORDER BY effective_due_ms,subject_key LIMIT ?2"
-);
-pub(crate) const AUTOMATION_LIST: &str = concat!(
-    "SELECT subject_key,occurrence_ms,effective_due_ms FROM (",
-    machine_rows!(
-        "automation_schedules",
-        "automation_id",
-        "s.next_due_at",
-        "automation_timer"
-    ),
-    ") WHERE effective_due_ms<=?1 ORDER BY effective_due_ms,subject_key LIMIT ?2"
-);
-
 /// Direct messages still queued at their cancel mark (design 2026-11-17).
 pub(crate) const DIRECT_MESSAGE_LIST: &str = concat!(
     "SELECT subject_key,occurrence_ms,effective_due_ms FROM (",

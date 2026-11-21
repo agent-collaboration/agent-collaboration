@@ -375,6 +375,27 @@ pub struct MessageRecord {
     pub updated_at: Timestamp,
 }
 
+impl MessageRecord {
+    /// Builds a queued message from central using its already validated id.
+    pub fn queued_central(
+        message_id: MessageId,
+        target: SessionRef,
+        body: MessageBody,
+        now: Timestamp,
+    ) -> Self {
+        Self {
+            message_id,
+            sender: MessageSender::Central,
+            target,
+            body,
+            state: MessageState::Queued,
+            source: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+}
+
 /// Non-destructive view of one session's queued messages in stable UUIDv7 order.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

@@ -1,3 +1,14 @@
+//! Reducer and SQLite fixtures for the central engine packages.
+#![expect(
+    clippy::unwrap_used,
+    reason = "fixture inputs and setup failures must fail the calling test"
+)]
+
+pub mod timer;
+
+#[cfg(feature = "sqlite-fixtures")]
+pub mod sqlite;
+
 use central_engine_model::{
     Context, EngineTime, EventTag, IdSource, Machine, StateTag, Transition, TransitionResult,
 };
@@ -19,7 +30,7 @@ impl IdSource for ReplayIds {
     clippy::panic_in_result_fn,
     reason = "property support asserts determinism and declared edges before returning the step"
 )]
-pub(crate) fn checked_step<M>(
+pub fn checked_step<M>(
     state: &M::State,
     event: M::Event,
     now: EngineTime,
