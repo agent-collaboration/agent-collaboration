@@ -1,4 +1,5 @@
-//! Construct the queued record, durable statement and answer for a direct send.
+//! Construct queued mail records and plan the insert, answer and delivery hint
+//! for a direct send.
 use crate::{
     message_deadline::{cancel_due_at, delivery_window_ends_at},
     message_insert::{DirectMessageTerms, insert_message_due},
@@ -14,6 +15,7 @@ use workspace_model::{
     },
 };
 
+/// Build a queued record for the caller to insert.
 pub fn prepare_message_record(
     sender: MessageSender,
     target: SessionRef,
@@ -40,6 +42,10 @@ pub struct DirectSendPlan {
     pub delivery_ready: MailDeliveryReady,
 }
 
+/// Plan a direct send after the caller has admitted the request and checked
+/// that the target session belongs to an enrolled machine. Pass Central's
+/// request-time clock sample as `accepted_at` and the sender's timestamp as
+/// `sent_at`.
 pub fn plan_direct_send(
     request: &RequestId,
     actor: ActorIdentityId,

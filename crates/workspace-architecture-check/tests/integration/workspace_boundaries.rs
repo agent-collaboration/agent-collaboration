@@ -209,7 +209,12 @@ pub(super) fn check_boundaries(
     check_job_reachability(
         graph,
         FLEET_MAIL,
-        &[FLEET_WAKES, FLEET_SCHEDULES, "fleet-notices"],
+        &[
+            FLEET_WAKES,
+            FLEET_SCHEDULES,
+            FLEET_TIMER_POLICY,
+            "fleet-notices",
+        ],
     )?;
     for name in PROXY_CRATES {
         let Some(source) = graph.workspace_id(name) else {
@@ -347,6 +352,27 @@ fn mail_rejects_sibling_and_host_dependencies_even_through_an_allowed_crate() {
             );
         }
     }
+}
+
+#[test]
+fn mail_rejects_timer_policy_through_workspace_model_and_automation() {
+    let outcomes = [DependencyKind::Normal, DependencyKind::Build].map(|kind| {
+        let indirect = graph(&[
+            ("fleet-mail", "workspace-model", DependencyKind::Normal),
+            (
+                "workspace-model",
+                "agent-automation",
+                DependencyKind::Normal,
+            ),
+            ("agent-automation", "fleet-timer-policy", kind),
+        ]);
+        check_boundaries(&indirect).map_err(|failure| failure.to_string())
+    });
+    let forbidden = "BD1: forbidden reachable dependency fleet-mail -> fleet-timer-policy";
+    assert_eq!(
+        outcomes,
+        [Err(forbidden.to_owned()), Err(forbidden.to_owned())]
+    );
 }
 
 #[test]

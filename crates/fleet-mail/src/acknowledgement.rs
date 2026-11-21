@@ -21,6 +21,8 @@ use workspace_ids::{MachineId, MessageId};
 use workspace_model::central_mail::DeliveryAnswer;
 
 /// The caller holds the central turn and has restored live recipient authority.
+/// It owns event completion after releasing the turn when settlement is applied
+/// or the answer is lost.
 pub async fn settle_delivery_ack_held<R: EngineHost>(
     runtime: &R,
     recipient: &MachineId,

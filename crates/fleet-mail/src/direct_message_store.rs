@@ -1,6 +1,6 @@
-//! The direct message reducer's row codec over `messages`. The version is the
-//! message's own columns; the sender's session is read from actor_identities,
-//! which owns the actor-to-session mapping, and is not part of the version.
+//! Load direct message reducer state from `mail_messages`, guard settlement
+//! against that row's version, and plan sender outcome inserts. The adapter
+//! reads the sender's session from `access_actor_identities` separately.
 use super::direct_message::{self as direct, DirectMessage, DirectMessageSubject};
 use crate::{
     direct_message_rows::{
