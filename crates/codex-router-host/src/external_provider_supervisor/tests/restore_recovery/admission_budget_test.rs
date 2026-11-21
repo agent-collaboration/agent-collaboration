@@ -553,3 +553,54 @@ async fn a_failed_or_expired_restore_dispatch_mark_never_enters_the_owner() {
         host.shutdown().await.expect("fixture shutdown");
     }
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn reconcile_leaves_a_dispatched_restore_alone_while_the_owner_waits() {
+    let rig = RestoreRig::new();
+    rig.seed_session().await;
+    let host = rig.open_host("silent-first-restore").await;
+    let operation = OperationId::generate();
+    host.load(rig.load_request(operation.clone()))
+        .await
+        .expect("admitted");
+    rig.until_wire_request("restores").await;
+    let before = rig
+        .store()
+        .await
+        .inspect(&operation)
+        .await
+        .expect("read dispatch mark");
+    let live = host
+        .held_result_for_test(&operation)
+        .expect("live dispatch")
+        .0;
+    let live_before = live.record();
+
+    let answer = host
+        .reconcile(ConversationOperationReconcileRequest {
+            operation_id: operation.clone(),
+        })
+        .await
+        .expect("read the live dispatch");
+    assert_eq!(answer.stage, ProviderOperationStage::MayHaveDispatched);
+    assert_eq!(answer.effect, ProviderOperationEffect::Unknown);
+    assert_eq!(
+        answer.reconciliation,
+        ProviderReconciliationState::Unresolved
+    );
+    let after = rig
+        .store()
+        .await
+        .inspect(&operation)
+        .await
+        .expect("read dispatch again");
+    assert_eq!(after, before, "reconcile leaves the marked row alone");
+    let live_after = host
+        .held_result_for_test(&operation)
+        .expect("dispatch remains live")
+        .0;
+    assert!(Arc::ptr_eq(&live, &live_after));
+    assert_eq!(live_after.record(), live_before);
+    assert!(live_after.result.lock().await.is_none());
+    host.shutdown().await.expect("fixture shutdown");
+}

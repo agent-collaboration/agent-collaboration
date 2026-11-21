@@ -4,6 +4,8 @@ mod deferred_uncertainty_admission_tests;
 mod owner_skill_queue_tests;
 #[path = "tests/persistence_overlay_test.rs"]
 mod persistence_overlay_tests;
+#[path = "tests/reconcile_reservation_test.rs"]
+mod reconcile_reservation_tests;
 #[path = "tests/restore_recovery_test.rs"]
 mod restore_recovery_tests;
 #[path = "tests/steered_input_join_test.rs"]
@@ -596,85 +598,6 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
     ));
     backend.cancel_waiting_owner_inputs().await;
     backend.shutdown().await.expect("supervisor shutdown");
-}
-
-#[tokio::test]
-async fn concurrent_admission_precedes_reconcile_live_state_check() {
-    let root = tempfile::tempdir().expect("temporary root");
-    let runtime = ExternalProviderRuntime::initialize(
-        create_fixture(),
-        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
-    )
-    .await
-    .expect("fixture initializes");
-    let store = ProviderOperationStore::open(&root.path().join("operations.sqlite"))
-        .await
-        .expect("operation store opens");
-    let backend = ExternalProviderSupervisor::new(
-        vec![ExternalProviderBinding {
-            identity: binding(),
-            runtime,
-        }],
-        Arc::new(Mutex::new(store)),
-    )
-    .expect("supervisor initializes");
-    let operation_id = OperationId::generate();
-
-    let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
-    let (release_tx, release_rx) = tokio::sync::oneshot::channel();
-    *backend
-        .inner
-        .admission_test_pause
-        .lock()
-        .expect("admission test pause") = Some(AdmissionTestPause {
-        entered: entered_tx,
-        release: release_rx,
-    });
-    let create_backend = backend.clone();
-    let create_operation_id = operation_id.clone();
-    let create_task = tokio::spawn(async move {
-        create_backend
-            .create(ConversationCreateRequest {
-                work_roots: Vec::new(),
-                settings: Some(collaboration_protocol::ProviderRequestedSettings {
-                    mode: Some("auto".into()),
-                    ..collaboration_protocol::ProviderRequestedSettings::default()
-                }),
-                operation_id: create_operation_id,
-                endpoint: endpoint(),
-                generation: Some(generation()),
-                working_directory: ProviderWorkingDirectory::try_from("/tmp".to_owned())
-                    .expect("working directory"),
-                created_by: (requester()).into(),
-                approver: (requester()).into(),
-                requested_policy: ProviderRequestedPolicy {
-                    access: RouterAccess::WriteRestricted,
-                },
-            })
-            .await
-    });
-    entered_rx.await.expect("admission holds the store lock");
-    let reconcile_operation_id = operation_id.clone();
-    let reconcile = backend.reconcile(ConversationOperationReconcileRequest {
-        operation_id: reconcile_operation_id,
-    });
-    tokio::pin!(reconcile);
-    assert!(futures_util::poll!(&mut reconcile).is_pending());
-    release_tx.send(()).expect("release admission");
-
-    let submitted = create_task
-        .await
-        .expect("create task joins")
-        .expect("create admitted");
-    assert_eq!(submitted.operation.operation_id, operation_id);
-    let reconciled = reconcile.await.expect("live operation reconciles");
-    assert_eq!(reconciled.stage, ProviderOperationStage::MayHaveDispatched);
-    assert_eq!(
-        reconciled.reconciliation,
-        ProviderReconciliationState::Unresolved
-    );
-
-    backend.shutdown().await.expect("supervisor shuts down");
 }
 
 #[test]
