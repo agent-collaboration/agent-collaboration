@@ -3,15 +3,16 @@
 use codex_acp_adapter::QueuedAcpFrame;
 use collaboration_contracts::{SessionCommandPort, SessionEventHub, SessionTargetCommand};
 use message_board::{Identity, SessionRef};
-use router_clock::RuntimeClock;
+use router_clock::{ClockInstant, RuntimeClock};
 use serde_json::Value;
-use session_event_model::{CapabilityReport, SessionState};
-use std::{collections::VecDeque, time::Duration};
+use session_event_model::SessionState;
+use std::{collections::VecDeque, future::Future, time::Duration};
 
 use super::{command_failure, failure, response, session_result};
+use crate::provider_acp_event_projection::PreparedProviderObservation;
 
 const STORE_BUDGET: Duration = Duration::from_secs(10);
-const STORE_ELAPSED: (i32, &str) = (-32000, "the store didn't respond in time");
+pub(super) const STORE_ELAPSED: (i32, &str) = (-32000, "the store didn't respond in time");
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum AcpRestoreMethod {
@@ -40,6 +41,7 @@ pub(super) enum WaitingSessionFrame {
         frame: QueuedAcpFrame,
         session: SessionRef,
         cwd: String,
+        valid_refusal: (i32, &'static str),
     },
     RestoreRefusal {
         frame: QueuedAcpFrame,
@@ -56,6 +58,22 @@ pub(super) struct AwaitingRestore {
     pub(super) frames: VecDeque<WaitingSessionFrame>,
 }
 
+impl AwaitingRestore {
+    pub(super) fn ready_after(
+        mut self,
+        post_activation_elapsed: bool,
+    ) -> VecDeque<WaitingSessionFrame> {
+        if post_activation_elapsed {
+            for frame in &mut self.frames {
+                if let WaitingSessionFrame::DuplicateLoad { valid_refusal, .. } = frame {
+                    *valid_refusal = STORE_ELAPSED;
+                }
+            }
+        }
+        self.frames
+    }
+}
+
 pub(super) struct RestoreRequest {
     pub(super) method: AcpRestoreMethod,
     pub(super) session: SessionRef,
@@ -65,7 +83,19 @@ pub(super) struct RestoreRequest {
 
 pub(super) enum RestoreCompletion {
     Activated(RestoreRequest),
-    Reply { session: SessionRef, reply: Value },
+    Reply {
+        session: SessionRef,
+        reply: Value,
+    },
+    Observed {
+        session: SessionRef,
+        reply: Value,
+        observation: Box<PreparedProviderObservation>,
+    },
+    PostActivationElapsed {
+        session: SessionRef,
+        id: Value,
+    },
 }
 
 impl RestoreRequest {
@@ -76,16 +106,17 @@ impl RestoreRequest {
         clock: &dyn RuntimeClock,
         actor: Identity,
     ) -> RestoreCompletion {
+        let deadline = clock.monotonic_now().after(STORE_BUDGET);
         if let Some(cwd) = self.cwd.as_deref()
             && let Err((code, message)) =
-                validate_load_inventory(events, clock, &self.session, cwd).await
+                validate_load_inventory(events, clock, deadline, &self.session, cwd).await
         {
             return RestoreCompletion::Reply {
                 session: self.session,
                 reply: failure(self.id, code, message),
             };
         }
-        match router_clock::timeout(clock, STORE_BUDGET, events.state(self.session.clone())).await {
+        match router_clock::timeout_at(clock, deadline, events.state(self.session.clone())).await {
             Ok(Ok(SessionState::Unloaded)) => {}
             Ok(Ok(_)) => return RestoreCompletion::Activated(self),
             Ok(Err(_)) => {
@@ -122,23 +153,38 @@ impl RestoreRequest {
         self,
         events: &dyn SessionEventHub,
         clock: &dyn RuntimeClock,
-        capabilities: CapabilityReport,
+        prepare: impl Future<Output = Result<PreparedProviderObservation, ()>>,
     ) -> RestoreCompletion {
         let history_unavailable = self.method == AcpRestoreMethod::Resume;
-        let result = router_clock::timeout(
-            clock,
-            STORE_BUDGET,
-            session_result(events, &self.session, capabilities, history_unavailable),
-        )
+        let result = router_clock::timeout(clock, STORE_BUDGET, async {
+            let observation = prepare
+                .await
+                .map_err(|()| "Session event hub unavailable")?;
+            let payload = session_result(
+                events,
+                &self.session,
+                observation.report.clone(),
+                history_unavailable,
+            )
+            .await
+            .map_err(|()| "Session inventory unavailable")?;
+            Ok((observation, payload))
+        })
         .await;
-        let reply = match result {
-            Ok(Ok(payload)) => response(self.id, payload),
-            Ok(Err(())) => failure(self.id, -32000, "Session inventory unavailable"),
-            Err(_) => failure(self.id, STORE_ELAPSED.0, STORE_ELAPSED.1),
-        };
-        RestoreCompletion::Reply {
-            session: self.session,
-            reply,
+        match result {
+            Ok(Ok((observation, payload))) => RestoreCompletion::Observed {
+                session: self.session,
+                reply: response(self.id, payload),
+                observation: Box::new(observation),
+            },
+            Ok(Err(message)) => RestoreCompletion::Reply {
+                session: self.session,
+                reply: failure(self.id, -32000, message),
+            },
+            Err(_) => RestoreCompletion::PostActivationElapsed {
+                session: self.session,
+                id: self.id,
+            },
         }
     }
 }
@@ -149,11 +195,13 @@ pub(super) async fn reject_duplicate_load(
     session: SessionRef,
     id: Value,
     cwd: String,
+    valid_refusal: (i32, &'static str),
 ) -> RestoreCompletion {
-    let (code, message) = validate_load_inventory(events, clock, &session, &cwd)
+    let deadline = clock.monotonic_now().after(STORE_BUDGET);
+    let (code, message) = validate_load_inventory(events, clock, deadline, &session, &cwd)
         .await
         .err()
-        .unwrap_or(RESTORE_IN_PROGRESS);
+        .unwrap_or(valid_refusal);
     RestoreCompletion::Reply {
         session,
         reply: failure(id, code, message),
@@ -163,17 +211,15 @@ pub(super) async fn reject_duplicate_load(
 async fn validate_load_inventory(
     events: &dyn SessionEventHub,
     clock: &dyn RuntimeClock,
+    deadline: ClockInstant,
     session: &SessionRef,
     cwd: &str,
 ) -> Result<(), (i32, &'static str)> {
-    let summaries = router_clock::timeout(
-        clock,
-        STORE_BUDGET,
-        events.sessions(session.endpoint.clone()),
-    )
-    .await
-    .map_err(|_| STORE_ELAPSED)?
-    .map_err(|_| (-32000, "Session inventory unavailable"))?;
+    let summaries =
+        router_clock::timeout_at(clock, deadline, events.sessions(session.endpoint.clone()))
+            .await
+            .map_err(|_| STORE_ELAPSED)?
+            .map_err(|_| (-32000, "Session inventory unavailable"))?;
     let stored = summaries
         .into_iter()
         .find(|summary| summary.session == *session)

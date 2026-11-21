@@ -6,6 +6,9 @@ use crate::{
     ProviderCancelActiveTurnError, ProviderPromptContentsError, ProviderQueueAdmissionError,
     ProviderQueueCancellationError, ProviderSteerContentsError,
 };
+use crate::{
+    external_provider_supervisor::operation_store_deadline_failed, session_store_lane::STORE_WAIT,
+};
 use collaboration_contracts::CommandFailure;
 use collaboration_contracts::CommandFuture;
 use collaboration_contracts::CreateSessionCommand;
@@ -23,11 +26,13 @@ use collaboration_contracts::SetSessionSettingCommand;
 use collaboration_contracts::SteerSessionCommand;
 use collaboration_protocol::{
     ConversationCloseRequest, ConversationCreateRequest, ConversationLoadRequest,
-    ConversationOperationFailure, ConversationOperationSettlement, ConversationOperationWaitOutput,
+    ConversationOperationFailure, ConversationOperationFailureStage,
+    ConversationOperationSettlement, ConversationOperationWaitOutput,
     ConversationOperationWaitRequest, ConversationResumeRequest, EndpointId, EndpointRef,
-    OperationId, PositiveSeconds, ProviderIdentity, ProviderRequestedPolicy,
-    ProviderRequestedSettings, ProviderSettingName, ProviderSettingsSetRequest,
-    ProviderWorkingDirectory, RouterAccess, SessionId, SessionRef, UuidIdentity,
+    OperationId, PositiveSeconds, ProviderIdentity, ProviderOperationEffect,
+    ProviderRequestedPolicy, ProviderRequestedSettings, ProviderSettingName,
+    ProviderSettingsSetRequest, ProviderWorkingDirectory, RouterAccess, SessionId, SessionRef,
+    UuidIdentity,
 };
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionEventHub;
@@ -84,16 +89,11 @@ impl HostSessionCommandPort {
         session: message_board::SessionRef,
         previous_epoch: Option<u64>,
     ) -> Result<(), CommandFailure> {
-        let attachment = self
-            .hub
-            .attach(session.clone())
-            .await
-            .map_err(|_| CommandFailure::ProviderFailure)?;
         wait_for_session_event(
             self.clock.as_ref(),
             self.hub.as_ref(),
             session,
-            attachment,
+            None,
             |epoch, event| {
                 (Some(epoch) != previous_epoch
                     && matches!(event, SessionEvent::CapabilitiesChanged { .. }))
@@ -101,6 +101,61 @@ impl HostSessionCommandPort {
             },
         )
         .await
+    }
+
+    async fn read_restore_baseline(
+        &self,
+        operation_id: &OperationId,
+        target: &SessionRef,
+        hub_session: &message_board::SessionRef,
+    ) -> Result<(collaboration_runtime::ProviderSessionRecord, u64), CommandFailure> {
+        router_clock::timeout(self.clock.as_ref(), STORE_WAIT, async {
+            let saved = self.stored_session(target).await?;
+            let attachment = self
+                .hub
+                .attach(hub_session.clone())
+                .await
+                .map_err(|_| CommandFailure::ProviderFailure)?;
+            Ok((saved, attachment.epoch))
+        })
+        .await
+        .unwrap_or_else(|_| Err(pre_admission_store_elapsed(operation_id, target)))
+    }
+
+    async fn wait_for_restore_settlement(
+        &self,
+        operation_id: OperationId,
+    ) -> Result<ConversationOperationSettlement, CommandFailure> {
+        if let Some(result) = self
+            .supervisor
+            .retained_restore_settlement(&operation_id)
+            .await
+        {
+            return result.map_err(map_operation_failure);
+        }
+        // After loss of the retained completion, use the existing wait
+        // projection under one local store deadline, even across a restart.
+        let timeout_seconds = PositiveSeconds::try_from(OPERATION_WAIT_SECONDS)
+            .map_err(|_| CommandFailure::ProviderFailure)?;
+        let read = self.supervisor.wait(ConversationOperationWaitRequest {
+            operation_id: operation_id.clone(),
+            timeout_seconds,
+        });
+        let Ok(result) = router_clock::timeout(self.clock.as_ref(), STORE_WAIT, read).await else {
+            return Err(map_operation_failure(operation_store_deadline_failed(
+                operation_id,
+                None,
+                ConversationOperationFailureStage::Settlement,
+                ProviderOperationEffect::Unknown,
+            )));
+        };
+        match result.map_err(map_operation_failure)?.output {
+            ConversationOperationWaitOutput::Available { settlement } => Ok(settlement),
+            ConversationOperationWaitOutput::Pending
+            | ConversationOperationWaitOutput::OutputUnavailable { .. } => {
+                Err(CommandFailure::ProviderFailure)
+            }
+        }
     }
 }
 
@@ -158,14 +213,10 @@ impl SessionCommandPort for HostSessionCommandPort {
     fn load_session(&self, command: SessionTargetCommand) -> CommandFuture<'_, ()> {
         Box::pin(async move {
             let target = protocol_session(&command.target)?;
-            let stored = self.stored_session(&target).await?;
-            let previous_epoch = self
-                .hub
-                .attach(command.target.clone())
-                .await
-                .map_err(|_| CommandFailure::ProviderFailure)?
-                .epoch;
             let operation_id = OperationId::generate();
+            let (stored, previous_epoch) = self
+                .read_restore_baseline(&operation_id, &target, &command.target)
+                .await?;
             self.supervisor
                 .load(ConversationLoadRequest {
                     operation_id: operation_id.clone(),
@@ -178,7 +229,7 @@ impl SessionCommandPort for HostSessionCommandPort {
                 })
                 .await
                 .map_err(map_operation_failure)?;
-            match wait_for_settlement(self.supervisor.as_ref(), operation_id).await? {
+            match self.wait_for_restore_settlement(operation_id).await? {
                 ConversationOperationSettlement::Loaded { .. } => {
                     self.wait_for_activation(command.target, Some(previous_epoch))
                         .await
@@ -191,14 +242,10 @@ impl SessionCommandPort for HostSessionCommandPort {
     fn resume_session(&self, command: SessionTargetCommand) -> CommandFuture<'_, ()> {
         Box::pin(async move {
             let target = protocol_session(&command.target)?;
-            let stored = self.stored_session(&target).await?;
-            let previous_epoch = self
-                .hub
-                .attach(command.target.clone())
-                .await
-                .map_err(|_| CommandFailure::ProviderFailure)?
-                .epoch;
             let operation_id = OperationId::generate();
+            let (stored, previous_epoch) = self
+                .read_restore_baseline(&operation_id, &target, &command.target)
+                .await?;
             self.supervisor
                 .resume(ConversationResumeRequest {
                     operation_id: operation_id.clone(),
@@ -211,7 +258,7 @@ impl SessionCommandPort for HostSessionCommandPort {
                 })
                 .await
                 .map_err(map_operation_failure)?;
-            match wait_for_settlement(self.supervisor.as_ref(), operation_id).await? {
+            match self.wait_for_restore_settlement(operation_id).await? {
                 ConversationOperationSettlement::Resumed { .. } => {
                     self.wait_for_activation(command.target, Some(previous_epoch))
                         .await
@@ -452,8 +499,14 @@ impl SessionCommandPort for HostSessionCommandPort {
     fn close(&self, command: SessionTargetCommand) -> CommandFuture<'_, ()> {
         Box::pin(async move {
             let target = protocol_session(&command.target)?;
-            let stored = self.stored_session(&target).await?;
             let operation_id = OperationId::generate();
+            let stored = router_clock::timeout(
+                self.clock.as_ref(),
+                STORE_WAIT,
+                self.stored_session(&target),
+            )
+            .await
+            .unwrap_or_else(|_| Err(pre_admission_store_elapsed(&operation_id, &target)))?;
             self.supervisor
                 .close(ConversationCloseRequest {
                     operation_id: operation_id.clone(),
@@ -620,6 +673,15 @@ fn map_operation_failure(error: ConversationOperationFailure) -> CommandFailure 
     CommandFailure::ProviderOperation(Box::new(error))
 }
 
+fn pre_admission_store_elapsed(operation_id: &OperationId, target: &SessionRef) -> CommandFailure {
+    map_operation_failure(operation_store_deadline_failed(
+        operation_id.clone(),
+        Some(target.clone()),
+        ConversationOperationFailureStage::Admission,
+        ProviderOperationEffect::None,
+    ))
+}
+
 async fn wait_for_settlement(
     supervisor: &ExternalProviderSupervisor,
     operation_id: OperationId,
@@ -726,13 +788,19 @@ async fn wait_for_turn_start(
     attachment: SessionEventAttachment,
     input_id: InputId,
 ) -> Result<String, CommandFailure> {
-    wait_for_session_event(clock, hub, session, attachment, |_, event| match event {
-        SessionEvent::TurnStarted {
-            turn_id,
-            input_id: observed,
-        } if observed == &input_id => Some(turn_id.clone()),
-        _ => None,
-    })
+    wait_for_session_event(
+        clock,
+        hub,
+        session,
+        Some(attachment),
+        |_, event| match event {
+            SessionEvent::TurnStarted {
+                turn_id,
+                input_id: observed,
+            } if observed == &input_id => Some(turn_id.clone()),
+            _ => None,
+        },
+    )
     .await
 }
 
@@ -740,10 +808,17 @@ async fn wait_for_session_event<T>(
     clock: &dyn router_clock::RuntimeClock,
     hub: &ProviderSessionEventHub,
     session: message_board::SessionRef,
-    mut attachment: SessionEventAttachment,
+    attachment: Option<SessionEventAttachment>,
     observe: impl Fn(u64, &SessionEvent) -> Option<T>,
 ) -> Result<T, CommandFailure> {
     let received = router_clock::timeout(clock, SESSION_EVENT_DEADLINE, async {
+        let mut attachment = match attachment {
+            Some(attachment) => attachment,
+            None => hub
+                .attach(session.clone())
+                .await
+                .map_err(|_| CommandFailure::ProviderFailure)?,
+        };
         loop {
             if let Some(observed) = attachment
                 .snapshot

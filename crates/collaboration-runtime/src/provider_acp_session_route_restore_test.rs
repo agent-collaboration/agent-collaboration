@@ -45,6 +45,8 @@ pub(super) struct RestoreFixture {
     clock: Arc<ManualClock>,
     gate: Mutex<Option<RestoreGate>>,
     inventory: Mutex<Option<HeldInventoryRead>>,
+    attachment: Mutex<Option<RestoreGate>>,
+    attachments: Mutex<usize>,
 }
 
 impl RestoreFixture {
@@ -79,6 +81,31 @@ impl RestoreFixture {
                 },
             });
         (reading, release)
+    }
+
+    pub(super) fn attach(
+        &self,
+        attachment: SessionEventAttachment,
+    ) -> HubFuture<'_, SessionEventAttachment> {
+        *self.attachments.lock().expect("attachment count") += 1;
+        let gate = self.attachment.lock().expect("attachment gate").take();
+        Box::pin(async move {
+            if let Some(gate) = gate {
+                gate.entered.send(()).expect("attachment reached");
+                gate.release.await.expect("attachment released");
+            }
+            Ok(attachment)
+        })
+    }
+
+    fn hold_attachment(&self) -> (oneshot::Receiver<()>, oneshot::Sender<()>) {
+        let (entered, attaching) = oneshot::channel();
+        let (release, released) = oneshot::channel();
+        *self.attachment.lock().expect("attachment gate") = Some(RestoreGate {
+            entered,
+            release: released,
+        });
+        (attaching, release)
     }
 
     pub(super) fn restore(
@@ -139,6 +166,8 @@ impl RestoreConnection {
                 release: wait_for_release,
             })),
             inventory: Mutex::default(),
+            attachment: Mutex::default(),
+            attachments: Mutex::default(),
         });
         let closed = CancellationToken::new();
         let (input, input_frames) = bounded_acp_output(closed.clone());
@@ -391,6 +420,77 @@ async fn held_restore_reply_inventory_leaves_the_other_session_responsive() {
     assert_eq!(
         queued,
         json!({"jsonrpc":"2.0","id":"same-session","result":{"items":[]}})
+    );
+    connection.closed.cancel();
+    connection.route.await.expect("route shutdown");
+}
+
+#[tokio::test]
+async fn held_restore_attachment_expires_without_blocking_other_sessions_or_reloading() {
+    let mut connection = RestoreConnection::new();
+    let backend = connection.backend.clone();
+    let fixture = backend.restore.as_ref().expect("restore fixture");
+    let clock = fixture.clock.clone();
+    let other = fixture.other.clone();
+    let (attaching, release_attachment) = fixture.hold_attachment();
+    connection.hold_restore("session/load").await;
+    connection.release.send(()).expect("provider activates A");
+    reaches_inventory(&mut connection.route, attaching).await;
+    let session = connection.backend.session.clone();
+    request(
+        &connection.input,
+        "session/load",
+        json!("duplicate"),
+        &session,
+    )
+    .await;
+    request(
+        &connection.input,
+        "_session/queue/list",
+        json!("same-session"),
+        &session,
+    )
+    .await;
+    assert_other_session_replies(
+        &connection.input,
+        &mut connection.route,
+        &mut connection.replies,
+        &other,
+    )
+    .await;
+    assert_eq!(
+        fixture.queue_reads.lock().expect("calls").as_slice(),
+        &[other]
+    );
+
+    clock
+        .advance(Duration::from_secs(10))
+        .expect("expire the post-activation deadline");
+    for id in ["first", "duplicate"] {
+        assert_eq!(
+            next_response(&mut connection.route, &mut connection.replies).await,
+            json!({"jsonrpc":"2.0","id":id,"error":{"code":-32000,"message":"the store didn't respond in time"}}),
+        );
+    }
+    assert_eq!(
+        next_response(&mut connection.route, &mut connection.replies).await,
+        json!({"jsonrpc":"2.0","id":"same-session","result":{"items":[]}}),
+    );
+    assert!(
+        release_attachment.is_closed(),
+        "the first attachment was cancelled"
+    );
+    assert_eq!(*fixture.attachments.lock().expect("attachment count"), 1);
+    assert_eq!(*fixture.state.lock().expect("state"), SessionState::Idle);
+
+    request(&connection.input, "session/load", json!("fresh"), &session).await;
+    let reply = next_response(&mut connection.route, &mut connection.replies).await;
+    assert_eq!(reply["id"], "fresh");
+    assert_eq!(reply["result"]["sessionId"], session.session_id.as_str());
+    assert_eq!(*fixture.attachments.lock().expect("attachment count"), 2);
+    assert_eq!(
+        fixture.calls.lock().expect("restore calls").as_slice(),
+        &[(RestoreMethod::Load, session)],
     );
     connection.closed.cancel();
     connection.route.await.expect("route shutdown");

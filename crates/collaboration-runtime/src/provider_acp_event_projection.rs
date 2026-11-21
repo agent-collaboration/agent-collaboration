@@ -206,6 +206,13 @@ pub(crate) struct ProviderSessionObservers {
     cancellations: HashMap<SessionRef, CancellationToken>,
 }
 
+pub(crate) struct PreparedProviderObservation {
+    pub(crate) report: CapabilityReport,
+    attachment: SessionEventAttachment,
+    item_text: HashMap<String, String>,
+    active_turn: Option<String>,
+}
+
 impl ProviderSessionObservers {
     pub(crate) fn new(
         events: Arc<dyn SessionEventHub>,
@@ -230,20 +237,36 @@ impl ProviderSessionObservers {
         replace_existing: bool,
     ) -> Result<CapabilityReport, ()> {
         if replace_existing {
-            if let Some(previous) = self.cancellations.remove(&session) {
-                previous.cancel();
-            }
-            self.attached.remove(&session);
-            self.observed_events.remove(&session);
+            self.detach(&session);
         }
-        let attachment = self.events.attach(session.clone()).await.map_err(|_| ())?;
-        let report = capabilities_from_snapshot(&attachment.snapshot).ok_or(())?;
-        if self.attached.insert(session.clone()) {
-            let (progress, observed) = watch::channel(None);
-            self.observed_events.insert(session.clone(), observed);
-            let cancellation = CancellationToken::new();
-            self.cancellations
-                .insert(session.clone(), cancellation.clone());
+        let observe = self.prepare_attachment(session.clone(), replay_history);
+        let observation = observe.await?;
+        let report = observation.report.clone();
+        self.install_attachment(session, observation);
+        Ok(report)
+    }
+
+    pub(crate) fn detach(&mut self, session: &SessionRef) {
+        if let Some(previous) = self.cancellations.remove(session) {
+            previous.cancel();
+        }
+        self.attached.remove(session);
+        self.observed_events.remove(session);
+    }
+
+    pub(crate) fn prepare_attachment(
+        &self,
+        session: SessionRef,
+        replay_history: bool,
+    ) -> impl std::future::Future<Output = Result<PreparedProviderObservation, ()>> + Send + use<>
+    {
+        let events = Arc::clone(&self.events);
+        let output = self.output.clone();
+        let supports_state = self.supports_state;
+        let replay_history = replay_history && !self.attached.contains(&session);
+        async move {
+            let attachment = events.attach(session.clone()).await.map_err(|_| ())?;
+            let report = capabilities_from_snapshot(&attachment.snapshot).ok_or(())?;
             let mut item_text = HashMap::new();
             let mut active_turn = None;
             if replay_history {
@@ -251,14 +274,40 @@ impl ProviderSessionObservers {
                     if let Some(notification) = event_notification(
                         &event.event,
                         &session,
-                        self.supports_state,
+                        supports_state,
                         &mut item_text,
                         &mut active_turn,
                     ) {
-                        self.output.send(notification).await.map_err(|_| ())?;
+                        output.send(notification).await.map_err(|_| ())?;
                     }
                 }
             }
+            Ok(PreparedProviderObservation {
+                report,
+                attachment,
+                item_text,
+                active_turn,
+            })
+        }
+    }
+
+    pub(crate) fn install_attachment(
+        &mut self,
+        session: SessionRef,
+        observation: PreparedProviderObservation,
+    ) {
+        let PreparedProviderObservation {
+            attachment,
+            mut item_text,
+            mut active_turn,
+            ..
+        } = observation;
+        if self.attached.insert(session.clone()) {
+            let (progress, observed) = watch::channel(None);
+            self.observed_events.insert(session.clone(), observed);
+            let cancellation = CancellationToken::new();
+            self.cancellations
+                .insert(session.clone(), cancellation.clone());
             let mut epoch = attachment.epoch;
             if let Some(last) = attachment.snapshot.last() {
                 progress.send_replace(Some(ObservedEventPosition {
@@ -334,7 +383,6 @@ impl ProviderSessionObservers {
                 }
             });
         }
-        Ok(report)
     }
 }
 

@@ -34,7 +34,7 @@ use tokio::task::JoinSet;
 mod restore;
 use restore::{
     AcpRestoreMethod, AwaitingRestore, RESTORE_IN_PROGRESS, RestoreCompletion, RestoreRequest,
-    WaitingSessionFrame, reject_duplicate_load,
+    STORE_ELAPSED, WaitingSessionFrame, reject_duplicate_load,
 };
 
 pub struct ProviderAcpSessionRoute {
@@ -336,6 +336,7 @@ async fn serve_provider_requests(
                 frame,
                 session,
                 cwd,
+                valid_refusal,
             }) => {
                 if let Some(id) = frame.get("id").cloned() {
                     awaiting_restore.insert(
@@ -347,8 +348,15 @@ async fn serve_provider_requests(
                     let events = Arc::clone(&route.events);
                     let clock = Arc::clone(&route.clock);
                     restores.spawn(async move {
-                        reject_duplicate_load(events.as_ref(), clock.as_ref(), session, id, cwd)
-                            .await
+                        reject_duplicate_load(
+                            events.as_ref(),
+                            clock.as_ref(),
+                            session,
+                            id,
+                            cwd,
+                            valid_refusal,
+                        )
+                        .await
                     });
                 }
                 continue;
@@ -358,24 +366,28 @@ async fn serve_provider_requests(
                     let Some(Ok(completion)) = completed else {
                         return Err(io::Error::other("provider ACP restore task failed"));
                     };
-                    let (session, reply) = match completion {
-                        RestoreCompletion::Reply { session, reply } => (session, reply),
+                    let (session, reply, post_activation_elapsed) = match completion {
+                        RestoreCompletion::Reply { session, reply } => (session, reply, false),
                         RestoreCompletion::Activated(request) => {
                             let include_history = request.method == AcpRestoreMethod::Load;
-                            match observers.attach(request.session.clone(), include_history, true).await {
-                                Ok(report) => {
-                                    let events = Arc::clone(&route.events);
-                                    let clock = Arc::clone(&route.clock);
-                                    restores.spawn(async move { request.reply(events.as_ref(), clock.as_ref(), report).await });
-                                    continue;
-                                }
-                                Err(()) => (request.session, failure(request.id, -32000, "Session event hub unavailable")),
-                            }
+                            observers.detach(&request.session);
+                            let prepare = observers.prepare_attachment(request.session.clone(), include_history);
+                            let events = Arc::clone(&route.events);
+                            let clock = Arc::clone(&route.clock);
+                            restores.spawn(async move { request.reply(events.as_ref(), clock.as_ref(), prepare).await });
+                            continue;
+                        }
+                        RestoreCompletion::Observed { session, reply, observation } => {
+                            observers.install_attachment(session.clone(), *observation);
+                            (session, reply, false)
+                        }
+                        RestoreCompletion::PostActivationElapsed { session, id } => {
+                            (session, failure(id, STORE_ELAPSED.0, STORE_ELAPSED.1), true)
                         }
                     };
                     router.output.send(reply).await?;
                     if let Some(waiting) = awaiting_restore.remove(&session) {
-                        ready_frames = waiting.frames;
+                        ready_frames = waiting.ready_after(post_activation_elapsed);
                     }
                     continue;
                 },
@@ -412,6 +424,7 @@ async fn serve_provider_requests(
                             frame,
                             session,
                             cwd,
+                            valid_refusal: RESTORE_IN_PROGRESS,
                         },
                         Err((code, message)) => WaitingSessionFrame::RestoreRefusal {
                             frame,

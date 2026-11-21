@@ -604,3 +604,97 @@ async fn reconcile_leaves_a_dispatched_restore_alone_while_the_owner_waits() {
     assert!(live_after.result.lock().await.is_none());
     host.shutdown().await.expect("fixture shutdown");
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn held_terminal_write_cannot_delay_an_explicit_restore_preflight_refusal() {
+    let rig = RestoreRig::new();
+    rig.seed_session().await;
+    let host = rig.open_host("restored-in-auto").await;
+    rig.assert_loads(&host).await;
+    let operation = OperationId::generate();
+    let PreparedOperation::Admitted { live, .. } = host
+        .prepare_operation(
+            host.admission_deadline(),
+            operation.clone(),
+            ProviderOperationKind::ConversationLoad,
+            binding(),
+            Some(&rig.target),
+        )
+        .await
+        .expect("a second explicit restore is admitted to the Host")
+    else {
+        panic!("fresh operation must be admitted");
+    };
+    host.inner
+        .store
+        .lock()
+        .await
+        .mark_may_have_dispatched(&operation, host.inner.now_ms())
+        .await
+        .expect("mark before owner handoff");
+    live.dispatch_marked();
+    let request = rig.load_request(operation.clone());
+    let record = Box::new(provider_session_record(
+        request.target,
+        request.working_directory,
+        request.requested_policy,
+        request.requested_by,
+        request.approver,
+        collaboration_runtime::ProviderSessionResumeInputs::default(),
+        host.inner.now_ms(),
+    ));
+    let completion = crate::external_provider_supervisor::provider_owner_operations::restore(
+        &host,
+        operation.clone(),
+        record,
+        provider_session_machines::session_lifecycle_machine::RestoreVia::Load,
+    )
+    .await;
+    let ProviderOperationCompletion::Failure(refusal) = &completion else {
+        panic!("the live owner must refuse a second restore in preflight");
+    };
+    assert_eq!(refusal.stage, ConversationOperationFailureStage::Admission);
+    assert_eq!(refusal.effect, ProviderOperationEffect::None);
+    let expected = refusal.clone();
+
+    let mut held = host.inner.store.lock().await;
+    let finish = host.inner.finish(operation.clone(), live, completion);
+    tokio::pin!(finish);
+    assert!(futures_util::poll!(&mut finish).is_pending());
+    rig.clock
+        .advance(Duration::from_secs(10))
+        .expect("reach the terminal write deadline");
+    assert!(futures_util::poll!(&mut finish).is_pending());
+    let mut wait = host.wait(wait_request(operation.clone()));
+    let Poll::Ready(Err(answer)) = futures_util::poll!(&mut wait) else {
+        panic!("the restore refusal must reach the caller while terminal storage is held");
+    };
+    assert_eq!(answer.kind, expected.kind);
+    assert_eq!(answer.stage, expected.stage);
+    assert_eq!(answer.effect, expected.effect);
+    assert_eq!(answer.message, expected.message);
+    let marked = held
+        .inspect(&operation)
+        .await
+        .expect("read marked row")
+        .expect("operation exists");
+    assert_eq!(marked.stage, ProviderOperationStage::MayHaveDispatched);
+    assert_eq!(marked.effect, ProviderOperationEffect::Unknown);
+    drop(held);
+    finish.await;
+
+    let terminal = rig
+        .store()
+        .await
+        .inspect(&operation)
+        .await
+        .expect("read terminal row")
+        .expect("operation exists");
+    assert_eq!(terminal.stage, ProviderOperationStage::Terminal);
+    assert_eq!(terminal.effect, ProviderOperationEffect::None);
+    assert_eq!(
+        terminal.reconciliation_state,
+        ProviderReconciliationState::Confirmed
+    );
+    host.shutdown().await.expect("fixture shutdown");
+}

@@ -5,7 +5,9 @@
 //! settled.
 
 use super::{LiveOperation, SupervisorInner, failure};
-use crate::provider_operation_settlement::ProviderOperationCompletion;
+use crate::{
+    provider_operation_settlement::ProviderOperationCompletion, session_store_lane::STORE_WAIT,
+};
 use collaboration_protocol::{
     ConversationOperationFailure, ConversationOperationFailureKind,
     ConversationOperationFailureStage, ConversationOperationSettlement, OperationId,
@@ -139,6 +141,7 @@ impl SupervisorInner {
                 }
             }
             ProviderOperationCompletion::Failure(operation_failure) => {
+                let restore_failure = live.is_restore().then(|| operation_failure.clone());
                 let reconciliation = if operation_failure.effect == ProviderOperationEffect::Unknown
                 {
                     // Recorded on the binding's uncertainty cell before this
@@ -159,43 +162,41 @@ impl SupervisorInner {
                 } else {
                     ProviderReconciliationState::Confirmed
                 };
-                let mut store = self.store.lock().await;
-                let target = operation_failure.target.clone();
-                let target_record_failed =
-                    if operation_failure.effect == ProviderOperationEffect::Applied {
-                        match target.as_ref() {
-                            Some(target) => store
-                                .record_target(&operation_id, target, self.now_ms())
-                                .await
-                                .is_err(),
-                            None => false,
-                        }
-                    } else {
-                        false
+                let persistence =
+                    self.persist_failed_operation(&operation_id, operation_failure, reconciliation);
+                if let Some(restore_failure) = restore_failure {
+                    tokio::pin!(persistence);
+                    let bounded = tokio::select! {
+                        biased;
+                        () = self.operation_cleanup_cancel.cancelled() => Err(router_clock::WaitElapsed),
+                        written = router_clock::timeout(self.clock.as_ref(), STORE_WAIT, &mut persistence) => written,
                     };
-                if target_record_failed {
-                    let durable = durable_stage(&mut store, &operation_id).await;
-                    (
-                        Err(applied_unsaved(operation_id.clone(), target, durable)),
-                        Retention::PersistenceFailed,
-                    )
-                } else if self
-                    .write_terminal_failure(
-                        &mut store,
-                        &operation_id,
-                        &operation_failure,
-                        reconciliation,
-                    )
-                    .await
-                    .is_err()
-                {
-                    let durable = durable_stage(&mut store, &operation_id).await;
-                    (
-                        Err(failure_unsaved(operation_failure, durable)),
-                        Retention::PersistenceFailed,
-                    )
+                    match bounded {
+                        Ok(settled) => settled,
+                        Err(_) => {
+                            self.publish_result(
+                                operation_id.clone(),
+                                &live,
+                                Err(restore_failure),
+                                Retention::PersistenceFailed,
+                            )
+                            .await;
+                            // Keep the write in the same shutdown-tracked task.
+                            // Late persistence cannot replace the delivered failure.
+                            tokio::select! {
+                                biased;
+                                () = self.operation_cleanup_cancel.cancelled() => {}
+                                (_, retention) = &mut persistence => {
+                                    if retention == Retention::PersistenceFailed {
+                                        tracing::error!(operation = operation_id.as_str(), "could not settle the late terminal write for a restore failure");
+                                    }
+                                }
+                            }
+                            return;
+                        }
+                    }
                 } else {
-                    (Err(operation_failure), Retention::Settled)
+                    persistence.await
                 }
             }
             ProviderOperationCompletion::FailureWithSession {
@@ -263,6 +264,49 @@ impl SupervisorInner {
         };
         self.publish_result(operation_id, &live, result, retention)
             .await;
+    }
+
+    async fn persist_failed_operation(
+        &self,
+        operation_id: &OperationId,
+        operation_failure: ConversationOperationFailure,
+        reconciliation: ProviderReconciliationState,
+    ) -> (
+        Result<ConversationOperationSettlement, ConversationOperationFailure>,
+        Retention,
+    ) {
+        let mut store = self.store.lock().await;
+        let target = operation_failure.target.clone();
+        let target_record_failed = if operation_failure.effect == ProviderOperationEffect::Applied {
+            match target.as_ref() {
+                Some(target) => store
+                    .record_target(operation_id, target, self.now_ms())
+                    .await
+                    .is_err(),
+                None => false,
+            }
+        } else {
+            false
+        };
+        if target_record_failed {
+            let durable = durable_stage(&mut store, operation_id).await;
+            (
+                Err(applied_unsaved(operation_id.clone(), target, durable)),
+                Retention::PersistenceFailed,
+            )
+        } else if self
+            .write_terminal_failure(&mut store, operation_id, &operation_failure, reconciliation)
+            .await
+            .is_err()
+        {
+            let durable = durable_stage(&mut store, operation_id).await;
+            (
+                Err(failure_unsaved(operation_failure, durable)),
+                Retention::PersistenceFailed,
+            )
+        } else {
+            (Err(operation_failure), Retention::Settled)
+        }
     }
 }
 

@@ -179,7 +179,7 @@ impl SessionEventHub for RecordingSessionBackend {
     fn skill_view(&self, _: SessionRef, _: PathBuf) -> HubFuture<'_, SkillViewAttachment> {
         Box::pin(async { Err(collaboration_contracts::SessionEventHubError::Unavailable) })
     }
-    fn attach(&self, _: SessionRef) -> HubFuture<'_, SessionEventAttachment> {
+    fn attach(&self, session: SessionRef) -> HubFuture<'_, SessionEventAttachment> {
         let receiver = self.events.subscribe();
         let mut snapshot = vec![HubEvent {
             sequence: 1,
@@ -196,13 +196,17 @@ impl SessionEventHub for RecordingSessionBackend {
                 },
             });
         }
-        Box::pin(async move {
-            Ok(SessionEventAttachment {
-                snapshot,
-                receiver,
-                epoch: 0,
-            })
-        })
+        let attachment = SessionEventAttachment {
+            snapshot,
+            receiver,
+            epoch: 0,
+        };
+        if let Some(fixture) = &self.restore
+            && session == self.session
+        {
+            return fixture.attach(attachment);
+        }
+        Box::pin(async move { Ok(attachment) })
     }
     fn state(&self, session: SessionRef) -> HubFuture<'_, SessionState> {
         let state = if let Some(fixture) = &self.restore

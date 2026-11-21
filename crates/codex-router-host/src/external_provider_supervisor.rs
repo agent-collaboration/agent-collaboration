@@ -85,7 +85,7 @@ struct SupervisorInner {
     clock: Arc<dyn router_clock::RuntimeClock>,
     live_operations: StdMutex<LiveOperations>,
     operation_tasks: TaskTracker,
-    late_dispatch_cleanup_cancel: tokio_util::sync::CancellationToken,
+    operation_cleanup_cancel: tokio_util::sync::CancellationToken,
     /// Each binding's unknown outcomes: the one place admission asks
     /// whether an earlier send's outcome is unknown (design note §14.1).
     uncertainty: UncertaintyCells,
@@ -401,7 +401,7 @@ impl ExternalProviderSupervisor {
                 clock,
                 live_operations: StdMutex::new(LiveOperations::default()),
                 operation_tasks: TaskTracker::new(),
-                late_dispatch_cleanup_cancel: tokio_util::sync::CancellationToken::new(),
+                operation_cleanup_cancel: tokio_util::sync::CancellationToken::new(),
                 uncertainty,
                 completions: tokio::sync::watch::channel(0).0,
                 queued_operations,
@@ -550,9 +550,35 @@ impl ExternalProviderSupervisor {
             })
     }
 
+    pub(crate) async fn retained_restore_settlement(
+        &self,
+        operation_id: &OperationId,
+    ) -> Option<Result<ConversationOperationSettlement, ConversationOperationFailure>> {
+        let live = self
+            .inner
+            .live_operations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .operations
+            .get(operation_id)
+            .cloned()?;
+        loop {
+            let changed = live.changed.notified();
+            if let Some(result) = live.result.lock().await.clone() {
+                return Some(result);
+            }
+            if matches!(
+                live.record(),
+                provider_session_machines::operation_record_machine::OperationRecord::Dropped
+            ) {
+                return None;
+            }
+            changed.await;
+        }
+    }
+
     pub async fn shutdown(&self) -> Result<(), &'static str> {
-        let _cancel_late_dispatch_cleanup =
-            self.inner.late_dispatch_cleanup_cancel.clone().drop_guard();
+        let _cancel_operation_cleanup = self.inner.operation_cleanup_cancel.clone().drop_guard();
         for binding in self.inner.bindings.values() {
             binding.runtime.retirement().cancel();
         }
@@ -739,6 +765,22 @@ fn unavailable_failure(
         ConversationOperationFailureStage::Settlement,
         ProviderOperationEffect::None,
         "provider operation metadata is unavailable",
+        operation_id,
+        target,
+    )
+}
+
+pub(crate) fn operation_store_deadline_failed(
+    operation_id: OperationId,
+    target: Option<SessionRef>,
+    stage: ConversationOperationFailureStage,
+    effect: ProviderOperationEffect,
+) -> ConversationOperationFailure {
+    failure(
+        ConversationOperationFailureKind::Unavailable,
+        stage,
+        effect,
+        "the store didn't respond in time",
         operation_id,
         target,
     )

@@ -146,7 +146,7 @@ impl ExternalProviderSupervisor {
         tokio::pin!(mark);
         let receipt = tokio::select! {
             biased;
-            () = self.inner.late_dispatch_cleanup_cancel.cancelled() => Err(router_clock::WaitElapsed),
+            () = self.inner.operation_cleanup_cancel.cancelled() => Err(router_clock::WaitElapsed),
             receipt = router_clock::timeout_at(clock, deadline, &mut mark) => receipt,
         };
         let completion = match receipt {
@@ -181,7 +181,7 @@ impl ExternalProviderSupervisor {
                 };
                 tokio::select! {
                     biased;
-                    () = self.inner.late_dispatch_cleanup_cancel.cancelled() => {}
+                    () = self.inner.operation_cleanup_cancel.cancelled() => {}
                     () = settle_late_mark => {}
                 }
                 return;

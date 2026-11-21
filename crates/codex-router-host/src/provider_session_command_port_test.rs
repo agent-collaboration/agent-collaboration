@@ -7,7 +7,10 @@ use crate::{
     ExternalProviderSupervisor, LiveSessionOwnership, LiveSessionOwnershipCheck,
     ProviderAcpDeliveryRoute,
 };
-use collaboration_contracts::{DeliveryFuture, QueuedInputOutcome, SessionCommandPort as _};
+use collaboration_contracts::{
+    CommandFailure, DeliveryFuture, QueuedInputOutcome, SessionCommandPort as _,
+    SessionTargetCommand,
+};
 use collaboration_protocol::{
     CodexGeneration, EndpointId, EndpointRef, GenerationNumber, NonEmptyText, OperationId,
     ProviderBindingId, ProviderBindingIdentity, ProviderKind, ProviderRuntimeIdentity,
@@ -15,7 +18,7 @@ use collaboration_protocol::{
 };
 use collaboration_runtime::{ProviderOperationStore, ProviderSessionEventHub};
 use session_event_model::{InputId, PromptContent, SessionEvent, StopReason, TurnOutcome};
-use std::sync::Arc;
+use std::{sync::Arc, task::Poll, time::Duration};
 use tokio::sync::Mutex;
 
 struct NoLivePeer;
@@ -65,6 +68,139 @@ fn binding(target: &SessionRef) -> ProviderBindingIdentity {
         ])
         .expect("capabilities"),
     }
+}
+
+struct StoreDeadlineFixture {
+    _root: tempfile::TempDir,
+    store: Arc<Mutex<ProviderOperationStore>>,
+    clock: Arc<router_clock::ManualClock>,
+    port: HostSessionCommandPort,
+    session: message_board::SessionRef,
+}
+
+impl StoreDeadlineFixture {
+    async fn new() -> Self {
+        let root = tempfile::tempdir().expect("root");
+        let store = Arc::new(Mutex::new(
+            ProviderOperationStore::open(&root.path().join("operations.sqlite"))
+                .await
+                .expect("store"),
+        ));
+        let target = target();
+        let session = serde_json::from_value(serde_json::to_value(&target).expect("target JSON"))
+            .expect("hub session");
+        let hub = Arc::new(ProviderSessionEventHub::new(Arc::clone(&store)));
+        let supervisor = Arc::new(
+            ExternalProviderSupervisor::new(Vec::new(), Arc::clone(&store)).expect("supervisor"),
+        );
+        let clock = Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
+        let delivery = Arc::new(ProviderAcpDeliveryRoute::new(
+            target.endpoint.service_id.clone(),
+            std::collections::HashSet::new(),
+            collaboration_runtime::EndpointDirectory::new(target.endpoint.service_id),
+            Arc::clone(&supervisor),
+            Arc::clone(&store),
+            Arc::new(NoLivePeer),
+            clock.clone(),
+        ));
+        let port = HostSessionCommandPort::new(
+            supervisor,
+            delivery,
+            hub,
+            Arc::clone(&store),
+            clock.clone(),
+        );
+        Self {
+            _root: root,
+            store,
+            clock,
+            port,
+            session,
+        }
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn load_resume_and_close_answer_at_l_when_the_port_pre_read_is_held() {
+    let fixture = StoreDeadlineFixture::new().await;
+    let mut store = fixture.store.lock().await;
+    let command = || SessionTargetCommand {
+        target: fixture.session.clone(),
+        actor: serde_json::from_value(
+            serde_json::json!({"kind":"human","humanId":"fixture-owner"}),
+        )
+        .expect("actor"),
+    };
+    for mut pending in [
+        fixture.port.load_session(command()),
+        fixture.port.resume_session(command()),
+        fixture.port.close(command()),
+    ] {
+        assert!(futures_util::poll!(&mut pending).is_pending());
+        fixture
+            .clock
+            .advance(Duration::from_secs(10))
+            .expect("reach L");
+        let Poll::Ready(Err(error)) = futures_util::poll!(&mut pending) else {
+            panic!("the Host command must answer at L while its pre-read is held");
+        };
+        assert_eq!(error.to_string(), "the store didn't respond in time");
+        let failure = error.operation_failure().expect("typed operation failure");
+        assert_eq!(
+            failure.stage,
+            collaboration_protocol::ConversationOperationFailureStage::Admission
+        );
+        assert_eq!(
+            failure.effect,
+            collaboration_protocol::ProviderOperationEffect::None
+        );
+        let operation = failure.operation_id.as_ref().expect("operation ID");
+        assert!(
+            store
+                .inspect(operation)
+                .await
+                .expect("inspect operation")
+                .is_none()
+        );
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn activation_event_budget_includes_the_first_history_attach() {
+    let fixture = StoreDeadlineFixture::new().await;
+    let _store = fixture.store.lock().await;
+    let activation = fixture
+        .port
+        .wait_for_activation(fixture.session.clone(), None);
+    tokio::pin!(activation);
+    assert!(futures_util::poll!(&mut activation).is_pending());
+    fixture
+        .clock
+        .advance(Duration::from_secs(30))
+        .expect("reach the activation deadline");
+    assert!(matches!(
+        futures_util::poll!(&mut activation),
+        Poll::Ready(Err(CommandFailure::ProviderFailure))
+    ));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn restore_settlement_fallback_without_a_live_entry_is_bounded_by_l() {
+    let fixture = StoreDeadlineFixture::new().await;
+    let _store = fixture.store.lock().await;
+    let wait = fixture
+        .port
+        .wait_for_restore_settlement(OperationId::generate());
+    tokio::pin!(wait);
+    assert!(futures_util::poll!(&mut wait).is_pending());
+    fixture
+        .clock
+        .advance(Duration::from_secs(10))
+        .expect("reach the fallback deadline");
+    let Poll::Ready(Err(error)) = futures_util::poll!(&mut wait) else {
+        panic!("a restore whose live result is gone must answer at L");
+    };
+    assert_eq!(error.to_string(), "the store didn't respond in time");
 }
 
 /// Oracle: D1 spec R12, "a queued ACP prompt answers when its own turn ends,

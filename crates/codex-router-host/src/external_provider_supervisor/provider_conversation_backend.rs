@@ -658,13 +658,11 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                 return Err(failure.clone());
                             }
                             let Some(snapshot) = pending_snapshot else {
-                                return Err(failure(
-                                    ConversationOperationFailureKind::Unavailable,
-                                    ConversationOperationFailureStage::Settlement,
-                                    ProviderOperationEffect::Unknown,
-                                    "the store didn't respond in time",
+                                return Err(super::operation_store_deadline_failed(
                                     operation_id.clone(),
                                     live.target(),
+                                    ConversationOperationFailureStage::Settlement,
+                                    ProviderOperationEffect::Unknown,
                                 ));
                             };
                             return Ok(ConversationOperationWaitResult {

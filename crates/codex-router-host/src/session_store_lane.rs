@@ -20,7 +20,7 @@ use std::{
 use tokio::sync::{Mutex as AsyncMutex, Notify, oneshot};
 use tokio_util::sync::CancellationToken;
 
-const STORE_WAIT: Duration = Duration::from_secs(10);
+pub(crate) const STORE_WAIT: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MarkedInput {
