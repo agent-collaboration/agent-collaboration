@@ -1,0 +1,20 @@
+[package]
+name = "central-engine-test-support"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+autotests = false
+
+[lints]
+workspace = true
+
+[features]
+default = []
+sqlite-fixtures = ["dep:sqlx"]
+
+[dependencies]
+central-engine-model.workspace = true
+workspace-ids.workspace = true
+uuid.workspace = true
+sqlx = { workspace = true, optional = true, features = ["sqlite", "migrate"] }

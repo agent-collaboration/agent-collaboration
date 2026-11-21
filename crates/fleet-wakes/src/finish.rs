@@ -1,13 +1,18 @@
-//! Finishing views keep the exact raw compare-and-set version and decode only state.
-use super::lifecycle_finish::{AutomationKind, Lifecycle, LifecycleFinish, WakeKind};
-use crate::central_mail_rows::timestamp;
-use central_engine_model::{EngineTime, ItemFailureClass};
+use crate::stored_rows::{WAKE_FAILURE, timestamp};
+use central_engine_model::{EngineTime, ItemFailureClass, MachineKind};
 use central_storage::ReadOutcome;
 use fleet_engine::{DiscardStore, LoadFailure, Versioned, raw_version};
 use fleet_runtime_ports::{
     guarded_statements::{exact, text},
     stored_values::string,
 };
+use fleet_timer_policy::{FinishKind, Lifecycle, LifecycleFinish};
+
+pub struct WakeKind;
+impl FinishKind for WakeKind {
+    const KIND: MachineKind = MachineKind("wake_timer");
+}
+pub type WakeFinish = LifecycleFinish<WakeKind>;
 
 /// Only the lifecycle column is decoded; an unknown value is the one case the
 /// finishing view cannot act on, and it is never coerced.
@@ -17,12 +22,8 @@ fn lifecycle(rows: &ReadOutcome, column: &'static str) -> Result<Lifecycle, Item
         raw_value: None,
     };
     let row = rows.rows.first().ok_or_else(corrupt)?;
-    match string(rows, row, "state").map_err(|_| corrupt())? {
-        "active" => Ok(Lifecycle::Active),
-        "done" => Ok(Lifecycle::Done),
-        "disabled" => Ok(Lifecycle::Disabled),
-        _ => Err(corrupt()),
-    }
+    Lifecycle::from_stored_tag(string(rows, row, "state").map_err(|_| corrupt())?)
+        .ok_or_else(corrupt)
 }
 
 fn decode_lifecycle(
@@ -38,7 +39,7 @@ fn decode_lifecycle(
     }
 }
 
-pub(crate) fn wake_finish_store() -> DiscardStore<LifecycleFinish<WakeKind>> {
+pub fn wake_finish_store() -> DiscardStore<WakeFinish> {
     DiscardStore {
         read_sql: "SELECT wake_id,target,due_at,text,state,created_at,updated_at FROM automation_wakes WHERE wake_id=?",
         decode: |rows| decode_lifecycle(rows, "automation_wakes.state"),
@@ -54,26 +55,10 @@ pub(crate) fn wake_finish_store() -> DiscardStore<LifecycleFinish<WakeKind>> {
             ))
         },
         effect_statements: |effect| match *effect {},
-        failure_sql: super::timer_store::WAKE_FAILURE,
+        failure_sql: WAKE_FAILURE,
     }
 }
 
-pub(crate) fn automation_finish_store() -> DiscardStore<LifecycleFinish<AutomationKind>> {
-    DiscardStore {
-        read_sql: "SELECT automation_id,target,timing_rule,anchor_at,expires_at,evaluated_through_at,text,next_due_at,state,created_at,updated_at FROM automation_schedules WHERE automation_id=?",
-        decode: |rows| decode_lifecycle(rows, "automation_schedules.state"),
-        save: |prior, next, now: EngineTime| {
-            let mut args = vec![
-                text(central_engine_model::StateTag::state_tag(next)),
-                text(timestamp(now)),
-            ];
-            args.extend(prior.version.0.clone());
-            Ok(exact(
-                "UPDATE automation_schedules SET state=?1,updated_at=?2 WHERE automation_id IS ?3 AND target IS ?4 AND timing_rule IS ?5 AND anchor_at IS ?6 AND expires_at IS ?7 AND evaluated_through_at IS ?8 AND text IS ?9 AND next_due_at IS ?10 AND state IS ?11 AND created_at IS ?12 AND updated_at IS ?13",
-                args,
-            ))
-        },
-        effect_statements: |effect| match *effect {},
-        failure_sql: super::timer_store::AUTOMATION_FAILURE,
-    }
-}
+#[cfg(test)]
+#[path = "finish_test.rs"]
+mod tests;

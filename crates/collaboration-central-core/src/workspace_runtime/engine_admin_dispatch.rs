@@ -1,12 +1,11 @@
 //! Core's closed admin kind registry and discard routing.
-use crate::engine::machines::{
-    finish_store::{automation_finish_store, wake_finish_store},
-    lifecycle_finish::FinishEvent,
-};
 use crate::{WorkspaceRuntime, organization_admin_contract::EngineKindName};
 use central_storage::StoreFailure;
 use fleet_engine::{AttemptRefusal, DiscardOutcome, KindRegistry, RegisteredDiscard};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
+use fleet_schedules::automation_finish_store;
+use fleet_timer_policy::FinishEvent;
+use fleet_wakes::wake_finish_store;
 
 /// Every kind health lists, zeros included. `engine_source` rows are the due-list
 /// control subjects; the notice units are whole units, not machines.
@@ -39,12 +38,15 @@ pub(crate) async fn finish_registered_discard<H: CentralStore, S: WorkspaceStore
     match registered.kind() {
         EngineKindName::WakeTimer => {
             registered
-                .finish(wake_finish_store(), FinishEvent::Discard)
+                .finish::<fleet_wakes::WakeFinish>(wake_finish_store(), FinishEvent::Discard)
                 .await
         }
         EngineKindName::AutomationTimer => {
             registered
-                .finish(automation_finish_store(), FinishEvent::Discard)
+                .finish::<fleet_schedules::AutomationFinish>(
+                    automation_finish_store(),
+                    FinishEvent::Discard,
+                )
                 .await
         }
         EngineKindName::DirectMessage

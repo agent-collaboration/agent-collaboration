@@ -18,7 +18,7 @@ const DUE_GRID_SECONDS: u32 = 5 * 60;
 /// A notice or delivery outcome expires on the first grid mark at or after 24 hours.
 pub(crate) fn system_message_deadline(created_at: DateTime<Utc>) -> Option<DateTime<Utc>> {
     let earliest = created_at.checked_add_signed(SYSTEM_MESSAGE_DELIVERY_WINDOW)?;
-    crate::central_mail_time::aligned_at_or_after(earliest, DUE_GRID_SECONDS)
+    central_engine_model::aligned_at_or_after(earliest, DUE_GRID_SECONDS)
 }
 
 /// The cancel's 5-minute mark for a direct message the agent sent at

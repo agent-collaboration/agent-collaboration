@@ -67,8 +67,8 @@ pub(crate) fn decode_direct_message(
         present(rows, row, "cancel_due_at")?,
         "mail_messages.cancel_due_at",
     )?;
-    if !crate::central_mail_time::supported(cancel_due_at)
-        || !crate::central_mail_time::on_grid(cancel_due_at)
+    if !central_engine_model::supported_time(cancel_due_at)
+        || !central_engine_model::on_five_minute_grid(cancel_due_at)
         || cancel_due_at <= created_at
     {
         return Err(corrupt("mail_messages.cancel_due_at"));

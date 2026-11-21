@@ -1,14 +1,14 @@
 #![deny(clippy::wildcard_enum_match_arm)]
-use super::timer_effects::{TimerRefusal, queue_message};
-use crate::central_timer_rows::AutomationRow;
+use crate::stored_rows::AutomationRow;
 use central_engine_model::{
     Context, EngineTime, EventTag, Machine, MachineKind, StateTag, Transition, TransitionError,
 };
+use fleet_timer_policy::TimerRefusal;
 use workspace_model::central_mail as mail;
 
-pub(crate) struct AutomationTimer;
+pub struct AutomationTimer;
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum State {
+pub enum State {
     Active(AutomationRow),
     Done { evaluated: Option<EngineTime> },
     Disabled { evaluated: Option<EngineTime> },
@@ -33,17 +33,8 @@ impl StateTag for State {
     }
 }
 #[derive(Clone)]
-pub(crate) enum Event {
-    Due {
-        occurrence: EngineTime,
-    },
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "DisableAutomation keeps its own request path until schedules move onto handle (deliverable 3)"
-        )
-    )]
+pub enum Event {
+    Due { occurrence: EngineTime },
     Disable,
 }
 impl EventTag for Event {
@@ -62,7 +53,7 @@ impl EventTag for Event {
         reason = "effects are built and applied once per transition"
     )
 )]
-pub(crate) enum Effect {
+pub enum Effect {
     QueueMessage(mail::MessageRecord),
     ScheduleAt(EngineTime),
     ClearSchedule,
@@ -93,14 +84,23 @@ impl Machine for AutomationTimer {
                 if due.is_some_and(|due| !central_engine_model::supported_time(due)) {
                     return Err(TransitionError::Domain(TimerRefusal::InvalidTiming));
                 }
-                let message = queue_message(
-                    context,
+                let raw_id = context.ids.next_id();
+                if raw_id.get_version_num() != 7 {
+                    return Err(TransitionError::Domain(TimerRefusal::InvalidIdentifier));
+                }
+                let message_id = raw_id
+                    .to_string()
+                    .try_into()
+                    .map_err(|_| TransitionError::Domain(TimerRefusal::InvalidIdentifier))?;
+                let message = mail::MessageRecord::queued_central(
+                    message_id,
                     row.target.clone(),
                     mail::MessageBody::Automation {
                         automation_id: row.id.clone(),
                         text: row.text.clone(),
                     },
-                )?;
+                    context.now,
+                );
                 let (next, schedule) = match due {
                     Some(due) => {
                         let mut row = row.clone();

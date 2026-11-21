@@ -98,3 +98,25 @@ fn normalize_path(path: &Path) -> PathBuf {
     }
     normalized
 }
+
+#[test]
+fn central_engine_fixtures_require_a_dev_edge() {
+    use super::ManifestDependency;
+
+    for kind in [None, Some(DependencyKind::Build), Some(DependencyKind::Dev)] {
+        let package = CargoPackage {
+            id: "fleet-wakes".to_owned(),
+            name: "fleet-wakes".to_owned(),
+            manifest_path: PathBuf::new(),
+            targets: Vec::new(),
+            dependencies: vec![ManifestDependency {
+                name: "central-engine-test-support".to_owned(),
+                kind,
+            }],
+        };
+        assert_eq!(
+            check_support_dependencies(&package).is_ok(),
+            kind == Some(DependencyKind::Dev)
+        );
+    }
+}

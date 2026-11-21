@@ -1,6 +1,6 @@
 use super::*;
-use crate::engine::machines::timer_test_support::*;
 use central_engine_model::check_transitions;
+use central_engine_test_support::timer::{ReplayIds, context, target, time};
 
 #[hegel::test]
 fn automation_sequences_never_repeat_an_occurrence_and_catch_up_once(case: hegel::TestCase) {
@@ -30,7 +30,7 @@ fn automation_sequences_never_repeat_an_occurrence_and_catch_up_once(case: hegel
             Event::Due { occurrence } => Some(*occurrence),
             Event::Disable => None,
         };
-        match crate::engine::machine_property_support::checked_step::<AutomationTimer>(
+        match central_engine_test_support::checked_step::<AutomationTimer>(
             &state,
             event,
             now,
@@ -151,5 +151,23 @@ fn early_and_overdue_occurrences_are_consumed_once_and_old_occurrences_are_stale
             panic!("message");
         };
         assert_eq!(first, second);
+    }
+}
+
+fn automation(interval: bool) -> AutomationRow {
+    AutomationRow {
+        id: "01890f2e-7b4c-7cc0-98c4-000000000003".parse().unwrap(),
+        target: target(),
+        timing: if interval {
+            agent_automation::TimingRule::Interval { seconds: 300 }
+        } else {
+            agent_automation::TimingRule::At { at: time(5) }
+        },
+        anchor: time(0),
+        expires_at: time(7 * 24 * 60),
+        evaluated: None,
+        due: Some(time(5)),
+        text: "automation".to_owned().try_into().unwrap(),
+        state: mail::AutomationState::Active,
     }
 }

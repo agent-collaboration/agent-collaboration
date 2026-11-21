@@ -1,20 +1,9 @@
-//! Timer request plans; validated rows live in central_timer_rows.
-use crate::central_timer_rows::decode_automations;
-use crate::{
-    WorkspaceRuntime,
-    central_mail_store::{encode, timestamp},
-};
-use agent_automation::TimingRule;
-use central_storage::{GuardedStatement, Statement, StoreFailure};
-use fleet_runtime_ports::{CentralStore, WorkspaceStores};
-use fleet_runtime_ports::{
-    guarded_statements::{exact, text},
-    stored_values::string,
-    workspace_decode_error::corrupt,
-};
-use workspace_ids::{AutomationId, WakeId};
-use workspace_model::Timestamp;
-use workspace_model::central_mail as mail;
+//! Core composes timer request plans inside the mail turn.
+use crate::WorkspaceRuntime;
+use central_storage::{GuardedStatement, StoreFailure};
+use fleet_runtime_ports::{CentralStore, WorkspaceStores, workspace_decode_error::corrupt};
+use workspace_model::{Timestamp, central_mail as mail};
+
 impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn plan_timer_request(
         &self,
@@ -24,189 +13,51 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         Result<(Vec<GuardedStatement>, mail::CentralMailAnswer), mail::CentralMailRefusal>,
         StoreFailure,
     > {
-        use mail::{
-            CentralMailAnswer as Answer, CentralMailOperation as Op, CentralMailRefusal as Refusal,
-        };
-        let at = || text(timestamp(now));
-        let decision = match operation {
+        use mail::{CentralMailOperation as Op, CentralMailRefusal as Refusal};
+        match operation {
             Op::SetWake {
                 target,
                 due_at,
-                text: body,
+                text,
             } => {
                 if !self.known_session(target).await? {
                     return Ok(Err(Refusal::UnknownSession {
                         target: target.clone(),
                     }));
                 }
-                let id: WakeId = self.execution.mint()?;
-                (
-                    vec![exact(
-                        "INSERT INTO automation_wakes(wake_id,target,due_at,text,state,created_at,updated_at) VALUES (?,?,?,?,'active',?,?)",
-                        vec![
-                            text(&id),
-                            encode(target)?,
-                            text(timestamp(*due_at)),
-                            text(body.as_str()),
-                            at(),
-                            at(),
-                        ],
-                    )],
-                    Answer::WakeSet {
-                        wake_id: id,
-                        due_at: *due_at,
-                    },
-                )
+                fleet_wakes::plan_set_wake(target, *due_at, text, now, || self.execution.mint())
             }
             Op::CancelWake { wake_id } => {
                 let rows = self
                     .execution
                     .statement_host()
-                    .read(Statement {
-                        sql: "SELECT state FROM automation_wakes WHERE wake_id=?",
-                        args: vec![text(wake_id)],
-                    })
+                    .read(fleet_wakes::cancel_wake_read(wake_id))
                     .await?;
-                let Some(row) = rows.rows.first() else {
-                    return Ok(Err(Refusal::WakeNotFound {
-                        wake_id: wake_id.clone(),
-                    }));
-                };
-                let state: mail::WakeState = serde_json::from_value(serde_json::Value::String(
-                    string(&rows, row, "state")?.to_owned(),
-                ))
-                .map_err(|_| corrupt("automation_wakes.state"))?;
-                if state == mail::WakeState::Done {
-                    return Ok(Err(Refusal::WakeAlreadyFired {
-                        wake_id: wake_id.clone(),
-                    }));
-                }
-                let mut statements = if state == mail::WakeState::Disabled {
-                    vec![]
-                } else {
-                    vec![exact(
-                        "UPDATE automation_wakes SET state='disabled',updated_at=? WHERE wake_id=? AND state='active'",
-                        vec![at(), text(wake_id)],
-                    )]
-                };
-                statements.push(fleet_engine::delete_attempt(
-                    &fleet_contracts::EngineSubject {
-                        kind: central_engine_model::MachineKind("wake_timer"),
-                        key: central_engine_model::InstanceKey(wake_id.to_string()),
-                    },
-                ));
-                (
-                    statements,
-                    Answer::WakeCancelled {
-                        wake_id: wake_id.clone(),
-                    },
-                )
+                fleet_wakes::plan_cancel_wake(wake_id, now, &rows)
             }
             Op::SetAutomation {
                 target,
                 timing,
-                text: body,
+                text,
             } => {
                 if !self.known_session(target).await? {
                     return Ok(Err(Refusal::UnknownSession {
                         target: target.clone(),
                     }));
                 }
-                let first = match crate::central_mail_time::first_due(timing, now) {
-                    Ok(Some(first)) => first,
-                    Ok(None) | Err(agent_automation::TimingError::OutOfRange) => {
-                        return Ok(Err(Refusal::NoOccurrence));
-                    }
-                    Err(_) => {
-                        return Ok(Err(Refusal::InvalidInput {
-                            field: "timing".to_owned(),
-                        }));
-                    }
-                };
-                let Some(expires_at) = crate::central_mail_time::lifetime_end(now) else {
-                    return Ok(Err(Refusal::TimeOutOfRange {
-                        field: "anchorAt".to_owned(),
-                    }));
-                };
-                if first > expires_at {
-                    return Ok(Err(Refusal::TimingViolation {
-                        field: match timing {
-                            TimingRule::At { .. } => "timing.at",
-                            TimingRule::After { .. } | TimingRule::Interval { .. } => {
-                                "timing.seconds"
-                            }
-                            TimingRule::Cron { .. } => "timing.expression",
-                        }
-                        .to_owned(),
-                        requirement: mail::TimingRequirement::WithinSevenDays,
-                    }));
-                }
-                let Some(anchor) = crate::central_mail_time::aligned_at_or_after(now, 300) else {
-                    return Ok(Err(Refusal::TimeOutOfRange {
-                        field: "anchorAt".to_owned(),
-                    }));
-                };
-                let id: AutomationId = self.execution.mint()?;
-                (
-                    vec![exact(
-                        "INSERT INTO automation_schedules(automation_id,target,timing_rule,anchor_at,expires_at,evaluated_through_at,text,next_due_at,state,created_at,updated_at) VALUES (?,?,?,?,?,NULL,?,?,'active',?,?)",
-                        vec![
-                            text(&id),
-                            encode(target)?,
-                            encode(timing)?,
-                            text(timestamp(anchor)),
-                            text(timestamp(expires_at)),
-                            text(body.as_str()),
-                            text(timestamp(first)),
-                            at(),
-                            at(),
-                        ],
-                    )],
-                    Answer::AutomationSet {
-                        automation_id: id,
-                        next_due_at: Some(first),
-                        state: mail::AutomationState::Active,
-                    },
-                )
+                fleet_schedules::plan_set_automation(target, timing, text, now, || {
+                    self.execution.mint()
+                })
             }
             Op::DisableAutomation { automation_id } => {
-                let rows=self.execution.statement_host().read(Statement{sql:"SELECT automation_id,target,timing_rule,anchor_at,expires_at,evaluated_through_at,text,next_due_at,state,created_at FROM automation_schedules WHERE automation_id=?",args:vec![text(automation_id)]}).await?;
-                let rows = decode_automations(&rows)?;
-                let Some(row) = rows.first() else {
-                    return Ok(Err(Refusal::AutomationNotFound {
-                        automation_id: automation_id.clone(),
-                    }));
-                };
-                if row.state == mail::AutomationState::Done {
-                    return Ok(Err(Refusal::AutomationAlreadyDone {
-                        automation_id: automation_id.clone(),
-                    }));
-                }
-                let mut statements = if row.state == mail::AutomationState::Disabled {
-                    vec![]
-                } else {
-                    vec![exact(
-                        "UPDATE automation_schedules SET state='disabled',updated_at=? WHERE automation_id=? AND state='active'",
-                        vec![at(), text(automation_id)],
-                    )]
-                };
-                statements.push(fleet_engine::delete_attempt(
-                    &fleet_contracts::EngineSubject {
-                        kind: central_engine_model::MachineKind("automation_timer"),
-                        key: central_engine_model::InstanceKey(automation_id.to_string()),
-                    },
-                ));
-                (
-                    statements,
-                    Answer::AutomationDisabled {
-                        automation_id: automation_id.clone(),
-                    },
-                )
+                let rows = self
+                    .execution
+                    .statement_host()
+                    .read(fleet_schedules::disable_automation_read(automation_id))
+                    .await?;
+                fleet_schedules::plan_disable_automation(automation_id, now, &rows)
             }
-            Op::SendMessage { .. } | Op::SetNoticeCadence { .. } => {
-                return Err(corrupt("timer operation"));
-            }
-        };
-        Ok(Ok(decision))
+            Op::SendMessage { .. } | Op::SetNoticeCadence { .. } => Err(corrupt("timer operation")),
+        }
     }
 }

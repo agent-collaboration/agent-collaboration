@@ -4,7 +4,7 @@
 //! record:218). Its only timed work is the cancel, a due item on the 5-minute
 //! grid; delivery and Acks are events. The sender is told when the message did
 //! not simply arrive: refused, cancelled, or delivered after a cancel.
-use super::timer_effects::{NotUuidV7, queue_message};
+use super::message_effects::{NotUuidV7, queue_message};
 use central_engine_model::{
     Context, EngineTime, EventTag, Machine, MachineKind, RefusalTag, StateTag, Transition,
     TransitionError,

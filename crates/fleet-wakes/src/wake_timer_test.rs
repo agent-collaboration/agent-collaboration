@@ -1,6 +1,6 @@
 use super::*;
-use crate::engine::machines::timer_test_support::*;
 use central_engine_model::check_transitions;
+use central_engine_test_support::timer::{ReplayIds, context, target, time};
 
 #[hegel::test]
 fn wake_sequences_are_deterministic_declared_and_finish_once(case: hegel::TestCase) {
@@ -22,7 +22,7 @@ fn wake_sequences_are_deterministic_declared_and_finish_once(case: hegel::TestCa
             },
             _ => Event::Cancel,
         };
-        match crate::engine::machine_property_support::checked_step::<WakeTimer>(
+        match central_engine_test_support::checked_step::<WakeTimer>(
             &state,
             event,
             now,
@@ -100,5 +100,15 @@ fn wake_effects_replay_identifiers_and_a_moved_or_finished_due_is_stale() {
             ),
             Err(TransitionError::Stale)
         ));
+    }
+}
+
+fn wake() -> WakeRow {
+    WakeRow {
+        id: "01890f2e-7b4c-7cc0-98c4-000000000002".parse().unwrap(),
+        target: target(),
+        due: time(5),
+        text: "wake".to_owned().try_into().unwrap(),
+        state: mail::WakeState::Active,
     }
 }

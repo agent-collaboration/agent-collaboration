@@ -1,6 +1,6 @@
 use super::*;
-use crate::engine::machines::timer_test_support::{ReplayIds, context, time};
 use central_engine_model::check_transitions;
+use central_engine_test_support::timer::{ReplayIds, context, time};
 
 fn session(name: &str) -> SessionRef {
     SessionRef {
@@ -71,7 +71,7 @@ fn a_direct_message_ends_once_and_is_cancelled_only_at_its_mark(case: hegel::Tes
             _ => Event::Ack(REFUSED),
         };
         let before = state.clone();
-        match crate::engine::machine_property_support::checked_step::<DirectMessage>(
+        match central_engine_test_support::checked_step::<DirectMessage>(
             &state,
             event.clone(),
             now,

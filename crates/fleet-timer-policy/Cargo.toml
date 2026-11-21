@@ -1,0 +1,15 @@
+[package]
+name = "fleet-timer-policy"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+autotests = false
+
+[lints]
+workspace = true
+
+[dependencies]
+central-engine-model.workspace = true
+chrono = { version = "0.4.45", default-features = false, features = ["alloc"] }
+serde.workspace = true
