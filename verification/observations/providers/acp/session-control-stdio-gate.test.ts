@@ -13,6 +13,49 @@ import {
 
 const rpc = (frame: object): string => JSON.stringify({ jsonrpc: "2.0", ...frame });
 
+test("a load projection changes only the named session's advertised mode and retains both frames", () => {
+  const entries: WireEntry[] = [];
+  const gate = new SessionControlStdioGate(
+    "projection",
+    () => null,
+    (entry) => entries.push(entry),
+    undefined,
+    () => ({ sessionId: "A", mode: "acceptEdits" }),
+  );
+  gate.relayLine(
+    "hostToAgent",
+    rpc({ id: 0, method: "initialize", params: { protocolVersion: 1 } }),
+  );
+  const catalog = {
+    modes: { currentModeId: "auto", availableModes: [{ id: "auto" }, { id: "acceptEdits" }] },
+    configOptions: [
+      {
+        category: "mode",
+        currentValue: "auto",
+        options: [{ value: "auto" }, { value: "acceptEdits" }],
+      },
+      { category: "model", currentValue: "haiku" },
+    ],
+    other: "keep-payload",
+  };
+  gate.relayLine("hostToAgent", rpc({ id: 1, method: "session/load", params: { sessionId: "B" } }));
+  const other = rpc({ id: 1, result: catalog });
+  assert.equal(gate.relayLine("agentToHost", other), other);
+  gate.relayLine("hostToAgent", rpc({ id: 2, method: "session/load", params: { sessionId: "A" } }));
+  const returned = gate.relayLine("agentToHost", rpc({ id: 2, result: catalog }));
+  assert.ok(returned);
+  const observed = entries.at(-1);
+  assert.deepEqual(observed?.frame?.result, catalog);
+  assert.deepEqual(observed?.forwardedFrame?.result, {
+    ...catalog,
+    modes: { ...catalog.modes, currentModeId: "acceptEdits" },
+    configOptions: [
+      { ...catalog.configOptions[0], currentValue: "acceptEdits" },
+      catalog.configOptions[1],
+    ],
+  });
+});
+
 test("releasing a prompt forwards only its original terminal reply, exactly once", () => {
   const entries: WireEntry[] = [];
   const gate = new SessionControlStdioGate(

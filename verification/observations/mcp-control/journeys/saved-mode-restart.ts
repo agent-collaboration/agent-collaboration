@@ -26,6 +26,7 @@ import {
 } from "./session-control-steps.ts";
 import type { WireEntry } from "../../providers/acp/session-control-stdio-gate.ts";
 import { observeRestoredCursorPrompt } from "./restored-cursor-prompt.ts";
+import { exerciseRestoreReapply } from "./restore-mode-reapply.ts";
 
 const restartRecord = z.strictObject({
   sourceHead: z.string(),
@@ -63,7 +64,7 @@ async function seedSavedMode(
   recordPath: string,
   storeIdentity: string,
 ): Promise<CaseResult> {
-  const { savedMode } = control(inputs);
+  const { savedMode, restoreReapply } = control(inputs);
   const target = await createSession(inputs, "saved-mode-create", savedMode);
   const created = wireEntries(inputs).find(
     (entry) =>
@@ -72,11 +73,14 @@ async function seedSavedMode(
         .success,
   );
   const defaultMode = created === undefined ? undefined : reportedMode(created);
-  if (defaultMode === undefined || defaultMode === savedMode)
-    throw new Error("the saved mode must differ from the harness's observed initial default");
   if (
-    (await inspect(inputs, "saved-mode-initial", target)).settingsCatalog?.currentMode !== savedMode
+    defaultMode === undefined ||
+    (defaultMode === savedMode && (restoreReapply === undefined || restoreReapply === "named"))
   )
+    throw new Error("the saved mode must differ from the harness's observed initial default");
+  const selected = (await inspect(inputs, "saved-mode-initial", target)).settingsCatalog
+    ?.currentMode;
+  if (selected !== savedMode && !(restoreReapply === "auto" && selected === "acceptEdits"))
     throw new Error("the named mode was not observed at creation");
   await completePrompt(inputs, "saved-mode-primer", target);
   const setup = inputs.store.savedSetup(target);
@@ -123,6 +127,11 @@ export async function savedModeRestartCase(inputs: CaseInputs): Promise<CaseResu
   inputs.knownTargets.push(target);
   if ((await inspect(inputs, "saved-mode-unloaded", target)).state !== "unloaded")
     throw new Error("the new Host did not start with the saved Session unloaded");
+  if (config.restoreReapply !== undefined) {
+    if (JSON.stringify(kept.setup) !== JSON.stringify(inputs.store.savedSetup(target)))
+      throw new Error("the saved setup differs from the pre-restart receipt");
+    return exerciseRestoreReapply(inputs, target);
+  }
   const before = inputs.store.savedSetup(target);
   const result = await reattach(inputs, "saved-mode-restore", target);
   const after = inputs.store.savedSetup(target);

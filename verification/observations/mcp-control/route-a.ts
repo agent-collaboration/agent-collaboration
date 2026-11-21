@@ -79,11 +79,15 @@ const routePlanSchema = z.strictObject({
       cursorCancelLoad: z.enum(["firstPrompt", "afterPrimer"]).optional(),
       primedCancelGuidance: z.literal(true).optional(),
     }),
-    z.strictObject({ kind: z.literal("savedModeSeed") }),
+    z.strictObject({
+      kind: z.literal("savedModeSeed"),
+      restoreReapply: z.enum(["named", "auto", "unconfirmed"]).optional(),
+    }),
     z.strictObject({
       kind: z.literal("savedModeReopen"),
       record: pathSchema,
       observeSilentRestorePrompt: z.literal(true).optional(),
+      restoreReapply: z.enum(["named", "auto", "unconfirmed"]).optional(),
     }),
     z.strictObject({ kind: z.literal("cancelRestartSeed") }),
     z.strictObject({ kind: z.literal("cancelRestartReopen"), record: pathSchema }),
@@ -326,6 +330,10 @@ function makeControlPlan(
     plan.journey.kind === "unconfirmedCancel" ? plan.journey.cursorCancelLoad : undefined;
   const primedCancelGuidance =
     plan.journey.kind === "unconfirmedCancel" && plan.journey.primedCancelGuidance === true;
+  const restoreReapply =
+    plan.journey.kind === "savedModeSeed" || plan.journey.kind === "savedModeReopen"
+      ? plan.journey.restoreReapply
+      : undefined;
   const maxPrompts =
     cursorCancelLoad === "afterPrimer" || primedCancelGuidance
       ? 4
@@ -367,7 +375,13 @@ function makeControlPlan(
     sessionControl: {
       gateDirectory: capture,
       restore: "load",
-      savedMode: plan.cursor?.mode ?? "plan",
+      savedMode:
+        restoreReapply === "auto"
+          ? "auto"
+          : restoreReapply === "unconfirmed"
+            ? "default"
+            : (plan.cursor?.mode ?? "plan"),
+      ...(restoreReapply === undefined ? {} : { restoreReapply }),
       ...(cursorCancelLoad === undefined ? {} : { cursorCancelLoad }),
       ...(primedCancelGuidance ? { primedCancelGuidance: true } : {}),
       ...(plan.journey.kind === "savedModeReopen" && plan.journey.observeSilentRestorePrompt

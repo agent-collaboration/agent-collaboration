@@ -15,11 +15,13 @@ import { join } from "node:path";
 import { pipeline, Transform } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import { z } from "zod";
+import { loadModeProjectionSchema, projectLoadMode } from "./restore-mode-projection.ts";
 
 const paramsSchema = z.looseObject({
   sessionId: z.string().optional(),
   protocolVersion: z.number().optional(),
   prompt: z.array(z.looseObject({ text: z.string().optional() })).optional(),
+  configId: z.string().optional(),
   update: z
     .looseObject({
       sessionUpdate: z.string(),
@@ -36,7 +38,13 @@ const frameSchema = z.looseObject({
   error: z.unknown().optional(),
 });
 export const holdSchema = z.strictObject({
-  method: z.enum(["session/load", "session/resume", "session/close", "session/prompt"]),
+  method: z.enum([
+    "session/load",
+    "session/resume",
+    "session/close",
+    "session/prompt",
+    "restoreModeWrite",
+  ]),
   sessionId: z.string().min(1),
   promptToken: z.string().min(1).optional(),
   releaseReply: z.literal(true).optional(),
@@ -53,6 +61,7 @@ export const wireEntrySchema = z.strictObject({
   method: z.string().nullable(),
   sessionId: z.string().nullable(),
   frame: frameSchema.nullable(),
+  forwardedFrame: frameSchema.optional(),
 });
 export type WireEntry = z.infer<typeof wireEntrySchema>;
 
@@ -109,17 +118,20 @@ export class SessionControlStdioGate {
   private readonly readHold: () => Hold | null;
   private readonly record: (entry: WireEntry) => void;
   private readonly onDelayed: (() => void) | undefined;
+  private readonly projection: (() => z.infer<typeof loadModeProjectionSchema> | null) | undefined;
 
   constructor(
     connection: string,
     readHold: () => Hold | null,
     record: (entry: WireEntry) => void,
     onDelayed?: () => void,
+    projection?: () => z.infer<typeof loadModeProjectionSchema> | null,
   ) {
     this.connection = connection;
     this.readHold = readHold;
     this.record = record;
     this.onDelayed = onDelayed;
+    this.projection = projection;
   }
 
   get active(): boolean {
@@ -140,7 +152,11 @@ export class SessionControlStdioGate {
   }
 
   forward(direction: Direction, line: string): boolean {
-    if (line.trim() === "") return true;
+    return this.relayLine(direction, line) !== null;
+  }
+
+  relayLine(direction: Direction, line: string): string | null {
+    if (line.trim() === "") return line;
     const frame = frameSchema.parse(JSON.parse(line));
     const { id, params } = frame;
     const requestId = id === undefined || id === null ? null : id;
@@ -150,7 +166,7 @@ export class SessionControlStdioGate {
         frame.method !== "initialize" ||
         typeof params?.protocolVersion !== "number"
       )
-        return true;
+        return line;
       this.started = true;
     }
     const hold = this.readHold();
@@ -169,7 +185,10 @@ export class SessionControlStdioGate {
       if (
         !this.selectedRequest &&
         hold !== null &&
-        method === hold.method &&
+        (method === hold.method ||
+          (hold.method === "restoreModeWrite" &&
+            (method === "session/set_mode" ||
+              (method === "session/set_config_option" && params?.configId === "mode")))) &&
         sessionId === hold.sessionId &&
         (hold.promptToken === undefined ||
           params?.prompt?.some(({ text }) => text?.includes(hold.promptToken ?? "")))
@@ -189,8 +208,18 @@ export class SessionControlStdioGate {
           hold.releaseReply !== true &&
           hold.method !== "session/close" &&
           frame.method === "session/update" &&
+          (hold.method !== "restoreModeWrite" ||
+            ["current_mode_update", "config_option_update"].includes(
+              params?.update?.sessionUpdate ?? "",
+            )) &&
           sessionId === hold.sessionId));
     if (reply !== undefined && requestId !== null) this.outstanding.delete(requestId);
+    const projection = !withheld && reply?.method === "session/load" ? this.projection?.() : null;
+    let forwardedFrame: Frame | undefined;
+    if (projection != null && projection.sessionId === sessionId && frame.result !== undefined) {
+      const projected = projectLoadMode(frame.result, projection.mode);
+      if (projected.changed) forwardedFrame = { ...frame, result: projected.result };
+    }
     const entry: WireEntry = {
       connection: this.connection,
       sequence: this.sequence++,
@@ -200,6 +229,11 @@ export class SessionControlStdioGate {
       method,
       sessionId,
       frame: evidenceFrame(frame, method),
+      ...(forwardedFrame === undefined
+        ? {}
+        : {
+            forwardedFrame: evidenceFrame(forwardedFrame, method) ?? undefined,
+          }),
     };
     if (holdReply === true) {
       if (this.delayedReply !== null)
@@ -208,7 +242,7 @@ export class SessionControlStdioGate {
       this.onDelayed?.();
     }
     this.record(entry);
-    return !withheld;
+    return withheld ? null : forwardedFrame === undefined ? line : JSON.stringify(forwardedFrame);
   }
 }
 
@@ -255,6 +289,12 @@ function privateGate(directory: string, write: (line: string) => void): SessionC
       appendFileSync(path, JSON.stringify(entry) + "\n");
     },
     () => forwardReleasedReply(directory, gate, write),
+    () => {
+      const path = join(directory, "load-mode.json");
+      return existsSync(path)
+        ? loadModeProjectionSchema.parse(JSON.parse(readFileSync(path, "utf8")))
+        : null;
+    },
   );
   return gate;
 }
@@ -270,7 +310,8 @@ function lineFilter(gate: SessionControlStdioGate, direction: Direction) {
       const lines = pending.split("\n");
       pending = lines.pop() ?? "";
       return lines
-        .filter((line) => gate.forward(direction, line))
+        .map((line) => gate.relayLine(direction, line))
+        .filter((line) => line !== null)
         .map((line) => line + "\n")
         .join("");
     },

@@ -138,6 +138,7 @@ export const controlPlanSchema = z.strictObject({
       observeSilentRestorePrompt: z.literal(true).optional(),
       cursorCancelLoad: z.enum(["firstPrompt", "afterPrimer"]).optional(),
       primedCancelGuidance: z.literal(true).optional(),
+      restoreReapply: z.enum(["named", "auto", "unconfirmed"]).optional(),
       restart: z
         .discriminatedUnion("phase", [
           z.strictObject({ phase: z.literal("seed"), record: absolutePath }),
@@ -398,6 +399,7 @@ function checkSessionControlDeclaration(plan: ControlPlan): void {
   if (control.closePrimer === false && selected[0] !== "unansweredClose")
     throw new Error("only the unanswered-close case declares a metadata-only seed");
   checkCursorCancelDeclaration(plan, selected[0], control.cursorCancelLoad);
+  checkReapplyDeclaration(plan, selected[0], control.restoreReapply);
   if (
     control.primedCancelGuidance &&
     (selected[0] !== "unconfirmedCancel" ||
@@ -468,6 +470,21 @@ function checkSessionControlDeclaration(plan: ControlPlan): void {
     )
       throw new Error("scripted mode requires this Host's isolated fixture launch receipt");
   }
+}
+
+function checkReapplyDeclaration(
+  plan: ControlPlan,
+  selected: ControlCase | undefined,
+  variant: NonNullable<ControlPlan["sessionControl"]>["restoreReapply"],
+): void {
+  if (
+    variant !== undefined &&
+    (selected !== "savedModeRestart" ||
+      plan.sessionControl?.restore !== "load" ||
+      plan.peer.kind !== "provider" ||
+      (variant !== "named" && plan.endpointId !== "claude-local"))
+  )
+    throw new Error("restore reapply requires the commissioned real saved-mode load");
 }
 
 function checkCursorCancelDeclaration(
