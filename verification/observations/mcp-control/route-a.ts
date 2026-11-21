@@ -91,7 +91,9 @@ const routePlanSchema = z.strictObject({
     }),
     z.strictObject({ kind: z.literal("cancelRestartSeed") }),
     z.strictObject({ kind: z.literal("cancelRestartReopen"), record: pathSchema }),
-    z.strictObject({ kind: z.enum(["allowanceAutoSeed", "allowanceDefault"]) }),
+    z.strictObject({
+      kind: z.enum(["allowanceAutoSeed", "allowanceAutoProbe", "allowanceDefault"]),
+    }),
     z.strictObject({ kind: z.literal("allowanceAutoReopen"), record: pathSchema }),
   ]),
 });
@@ -183,6 +185,8 @@ function prepare(plan: RoutePlan) {
 }
 
 function prepareProvider(plan: RoutePlan) {
+  if (plan.journey.kind === "allowanceAutoProbe" && plan.cursor === undefined)
+    throw new Error("the alternate Auto actions require the commissioned Cursor route");
   if (
     (plan.journey.kind === "refusedSteer" && plan.cursor === undefined) ||
     (plan.journey.kind === "cancelQueued" && plan.cursor !== undefined)
@@ -325,6 +329,23 @@ function restartIntent(
       : undefined;
 }
 
+function allowancePhase(
+  journey: RoutePlan["journey"],
+): NonNullable<ControlPlan["sessionControl"]>["allowanceJourney"] {
+  switch (journey.kind) {
+    case "allowanceAutoSeed":
+      return "autoSeed";
+    case "allowanceAutoReopen":
+      return "autoReopen";
+    case "allowanceAutoProbe":
+      return "autoProbe";
+    case "allowanceDefault":
+      return "default";
+    default:
+      return undefined;
+  }
+}
+
 function makeControlPlan(
   plan: RoutePlan,
   prepared: ReturnType<typeof prepare>,
@@ -334,14 +355,7 @@ function makeControlPlan(
 ): ControlPlan {
   if (plan.journey.kind === "preflight") throw new Error("preflight does not drive MCP cases");
   const evidence = join(prepared.evidence, "case");
-  const allowanceJourney =
-    plan.journey.kind === "allowanceAutoSeed"
-      ? "autoSeed"
-      : plan.journey.kind === "allowanceAutoReopen"
-        ? "autoReopen"
-        : plan.journey.kind === "allowanceDefault"
-          ? "default"
-          : undefined;
+  const allowanceJourney = allowancePhase(plan.journey);
   const restart = restartIntent(plan, evidence);
   const caseName =
     allowanceJourney !== undefined
@@ -363,7 +377,8 @@ function makeControlPlan(
   const maxPrompts =
     cursorCancelLoad === "afterPrimer" || primedCancelGuidance
       ? 4
-      : caseName === "unconfirmedCancel" && cursorCancelLoad === undefined
+      : allowanceJourney === "autoProbe" ||
+          (caseName === "unconfirmedCancel" && cursorCancelLoad === undefined)
         ? 3
         : 2;
   return controlPlanSchema.parse({
@@ -402,7 +417,9 @@ function makeControlPlan(
       gateDirectory: capture,
       restore: "load",
       savedMode:
-        allowanceJourney === "autoSeed" || allowanceJourney === "autoReopen"
+        allowanceJourney === "autoSeed" ||
+        allowanceJourney === "autoReopen" ||
+        allowanceJourney === "autoProbe"
           ? "auto"
           : allowanceJourney === "default"
             ? "default"

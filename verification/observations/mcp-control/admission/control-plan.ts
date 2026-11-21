@@ -140,7 +140,7 @@ export const controlPlanSchema = z.strictObject({
       cursorCancelLoad: z.enum(["firstPrompt", "afterPrimer"]).optional(),
       primedCancelGuidance: z.literal(true).optional(),
       restoreReapply: z.enum(["named", "auto", "unconfirmed"]).optional(),
-      allowanceJourney: z.enum(["autoSeed", "autoReopen", "default"]).optional(),
+      allowanceJourney: z.enum(["autoSeed", "autoReopen", "autoProbe", "default"]).optional(),
       restart: z
         .discriminatedUnion("phase", [
           z.strictObject({ phase: z.literal("seed"), record: absolutePath }),
@@ -567,6 +567,8 @@ function checkActor(plan: ControlPlan): void {
 }
 
 function casePromptBudget(plan: ControlPlan, name: ControlCase): number {
+  if (name === "inFolderAllowance" && plan.sessionControl?.allowanceJourney === "autoProbe")
+    return 3;
   if (name === "inFolderAllowance" && plan.sessionControl?.allowanceJourney === "default") return 1;
   if (name === "unansweredClose" && plan.sessionControl?.closePrimer === false) return 1;
   if (name === "unconfirmedCancel") {
