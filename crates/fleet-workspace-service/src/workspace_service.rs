@@ -48,7 +48,9 @@ where
             result @ (WorkspaceResult::Done(_) | WorkspaceResult::NotFound { .. }) => {
                 RetainedWorkspaceStatus::Answered(Box::new(result))
             }
-            _ => return Err(corrupt("request log answer")),
+            WorkspaceResult::Conflict
+            | WorkspaceResult::OutcomeUnknown
+            | WorkspaceResult::CentralUnavailable => return Err(corrupt("request log answer")),
         };
         if caller != call.actor {
             return Ok(RetainedWorkspaceStatus::NotFound);

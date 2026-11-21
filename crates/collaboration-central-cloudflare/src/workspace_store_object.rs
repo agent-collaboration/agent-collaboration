@@ -5,7 +5,7 @@ use crate::object_location::ObjectAddress;
 use crate::statement_store::{self, AlarmPolicy};
 use crate::store_wire::{OwnedStoreCall, StoreAnswer};
 use central_storage::{StoreFailure, StoreReply};
-use fleet_contracts::{WorkspaceRequest, WorkspaceResponse};
+use fleet_contracts::{WorkspaceRequest, WorkspaceResponse, WorkspaceServiceProtocol};
 use fleet_rpc::{Envelope, dispatch};
 use fleet_workspace_service::WorkspaceService;
 use sqlx_durable_object::DoConnection;
@@ -108,25 +108,28 @@ impl DurableObject for WorkspaceStoreObject {
             }
             let envelope: Envelope<workspace_ids::WorkspaceId, WorkspaceRequest> =
                 request.json().await?;
-            let reply = dispatch::<WorkspaceRequest, _, _>(&workspace, envelope, |call| async {
-                match self
-                    .open_store(crate::object_migrations::workspace_store())
-                    .await
-                {
-                    Ok(connection) => {
-                        fleet_contracts::dispatch_workspace_request(
-                            &WorkspaceService::new(connection),
-                            call,
-                        )
+            let reply =
+                dispatch::<WorkspaceServiceProtocol, _, _>(&workspace, envelope, |call| async {
+                    match self
+                        .open_store(crate::object_migrations::workspace_store())
                         .await
+                    {
+                        Ok(connection) => {
+                            fleet_contracts::dispatch_workspace_request(
+                                &WorkspaceService::new(connection),
+                                call,
+                            )
+                            .await
+                        }
+                        Err(failure) => WorkspaceResponse::ReadRequestStatus(Err(failure)),
                     }
-                    Err(failure) => WorkspaceResponse::ReadRequestStatus(Err(failure)),
-                }
-            })
-            .await
-            .map_err(|_| {
-                worker::Error::RustError("workspace envelope target does not match address".into())
-            })?;
+                })
+                .await
+                .map_err(|_| {
+                    worker::Error::RustError(
+                        "workspace envelope target does not match address".into(),
+                    )
+                })?;
             return Response::from_json(&reply);
         }
         #[cfg(feature = "test-support")]

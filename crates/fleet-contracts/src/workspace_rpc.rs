@@ -7,7 +7,10 @@ use workspace_model::{
     ActorIdentityId, RefusalReason, RequestId, Timestamp, WorkspaceId, WorkspaceResult,
 };
 
-impl Rpc for WorkspaceRequest {
+/// Protocol selected by the owning workspace service client.
+pub struct WorkspaceServiceProtocol;
+
+impl Rpc for WorkspaceServiceProtocol {
     type Target = WorkspaceId;
     type Request = WorkspaceRequest;
     type Reply = WorkspaceResponse;
@@ -96,7 +99,10 @@ pub trait WorkspaceServiceRpc: Send + Sync {
     ) -> impl Future<Output = Result<RetainedWorkspaceStatus, StoreFailure>> + Send;
 }
 
-impl<T: Transport<WorkspaceRequest>> WorkspaceServiceRpc for RpcClient<WorkspaceRequest, T> {
+/// Typed client for the owning workspace service.
+pub type WorkspaceServiceClient<T> = RpcClient<WorkspaceServiceProtocol, T>;
+
+impl<T: Transport<WorkspaceServiceProtocol>> WorkspaceServiceRpc for WorkspaceServiceClient<T> {
     async fn read_request_status(
         &self,
         request: ReadWorkspaceRequestStatus,

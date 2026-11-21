@@ -6,9 +6,10 @@ use central_link_protocol::{
 };
 use central_storage::{ReadOutcome, StoreFailure};
 use fleet_contracts::{
-    ReadWorkspaceRequestStatus, RetainedWorkspaceStatus, WorkspaceRequest, WorkspaceServiceRpc,
+    ReadWorkspaceRequestStatus, RetainedWorkspaceStatus, WorkspaceServiceClient,
+    WorkspaceServiceProtocol, WorkspaceServiceRpc,
 };
-use fleet_rpc::{RpcClient, Transport};
+use fleet_rpc::Transport;
 use fleet_runtime::workspace_request_log::{RequestLogStore, lookup};
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_runtime_ports::{
@@ -53,7 +54,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         query: &RequestStatusQuery,
     ) -> Result<RequestStatusAnswer, StoreFailure>
     where
-        Stores: Transport<WorkspaceRequest>,
+        Stores: Transport<WorkspaceServiceProtocol>,
     {
         let _turn = self.execution.take_central_turn().await;
         let scope_workspace = match &query.scope {
@@ -78,11 +79,9 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         };
         let cutoff = self.execution.now()? - chrono::Duration::hours(24);
         let decision = if let Some(workspace) = scope_workspace {
-            let client = RpcClient::<WorkspaceRequest, _>::new(
-                workspace.clone(),
-                self.execution.workspace_stores(),
-            );
-            match client
+            let workspace =
+                WorkspaceServiceClient::new(workspace.clone(), self.execution.workspace_stores());
+            match workspace
                 .read_request_status(ReadWorkspaceRequestStatus {
                     request_id: query.request_id.clone(),
                     actor,

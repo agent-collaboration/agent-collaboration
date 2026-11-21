@@ -35,5 +35,6 @@ pub use workspace_description::MAXIMUM_DESCRIPTION_BYTES;
 pub use workspace_directory::{DirectoryWorkspace, WorkspaceDirectory, WorkspaceView};
 pub use workspace_rpc::{
     ReadWorkspaceRequestStatus, RetainedWorkspaceStatus, WorkspaceRequest, WorkspaceResponse,
-    WorkspaceServiceRpc, dispatch_workspace_request,
+    WorkspaceServiceClient, WorkspaceServiceProtocol, WorkspaceServiceRpc,
+    dispatch_workspace_request,
 };

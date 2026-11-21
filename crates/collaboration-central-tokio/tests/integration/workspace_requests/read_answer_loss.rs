@@ -3,7 +3,7 @@ use central_link_protocol::{ReplyPayload, RequestScope, RequestStatusAnswer, Req
 use central_storage::{StoreCall, StoreFailure, StoreReply};
 use collaboration_central_core::WorkspaceRuntime;
 use collaboration_central_tokio::{ObjectStorage, TokioWorkspaceStores};
-use fleet_contracts::{WorkspaceRequest, WorkspaceResponse};
+use fleet_contracts::{WorkspaceRequest, WorkspaceResponse, WorkspaceServiceProtocol};
 use fleet_rpc::{CallFailure, Envelope, Transport};
 use fleet_runtime::{ClockIds, FleetRuntime};
 use fleet_runtime_ports::{Clock, SyncTime, WorkspaceStores};
@@ -35,7 +35,7 @@ impl WorkspaceStores for LoseFirstRead {
     }
 }
 
-impl Transport<WorkspaceRequest> for LoseFirstRead {
+impl Transport<WorkspaceServiceProtocol> for LoseFirstRead {
     async fn exchange(
         &self,
         request: Envelope<m::WorkspaceId, WorkspaceRequest>,

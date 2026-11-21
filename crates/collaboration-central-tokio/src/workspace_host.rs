@@ -4,7 +4,9 @@ use crate::{
     sign_in_trust::NativeSignInTrust,
 };
 use collaboration_central_core::WorkspaceCaller;
-use fleet_contracts::{WorkspaceRequest as WorkspaceRpcRequest, WorkspaceResponse};
+use fleet_contracts::{
+    WorkspaceRequest as WorkspaceRpcRequest, WorkspaceResponse, WorkspaceServiceProtocol,
+};
 use fleet_rpc::{CallFailure, Envelope, Transport, dispatch};
 use fleet_workspace_service::WorkspaceService;
 #[path = "workspace_alarm_owner.rs"]
@@ -102,13 +104,13 @@ impl WorkspaceStores for TokioWorkspaceStores {
         }
     }
 }
-impl Transport<WorkspaceRpcRequest> for TokioWorkspaceStores {
+impl Transport<WorkspaceServiceProtocol> for TokioWorkspaceStores {
     async fn exchange(
         &self,
         request: Envelope<WorkspaceId, WorkspaceRpcRequest>,
     ) -> Result<Envelope<WorkspaceId, WorkspaceResponse>, CallFailure> {
         let workspace = request.target.clone();
-        dispatch::<WorkspaceRpcRequest, _, _>(&workspace, request, |call| async {
+        dispatch::<WorkspaceServiceProtocol, _, _>(&workspace, request, |call| async {
             let store = match self.store(&workspace).await {
                 Ok(store) => store,
                 Err(failure) => return WorkspaceResponse::ReadRequestStatus(Err(failure)),

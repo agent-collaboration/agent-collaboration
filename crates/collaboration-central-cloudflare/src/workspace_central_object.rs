@@ -9,7 +9,7 @@ use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
 use collaboration_central_core::WorkspaceRuntime;
-use fleet_contracts::{WorkspaceRequest, WorkspaceResponse};
+use fleet_contracts::{WorkspaceRequest, WorkspaceResponse, WorkspaceServiceProtocol};
 use fleet_identity_protocol::OrganizationId;
 use fleet_rpc::{CallFailure, Envelope, Transport};
 use fleet_runtime::{ClockIds, FleetRuntime};
@@ -179,7 +179,7 @@ impl WorkspaceStores for WorkspaceTransport {
         })
     }
 }
-impl Transport<WorkspaceRequest> for WorkspaceTransport {
+impl Transport<WorkspaceServiceProtocol> for WorkspaceTransport {
     fn exchange(
         &self,
         request: Envelope<workspace_ids::WorkspaceId, WorkspaceRequest>,
