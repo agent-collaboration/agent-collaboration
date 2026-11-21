@@ -15,6 +15,46 @@ use collaboration_protocol::{
 use std::sync::Arc;
 
 impl SupervisorInner {
+    pub(super) async fn settle_late_dispatch_mark(
+        &self,
+        store: &mut collaboration_runtime::ProviderOperationStore,
+        operation: &OperationId,
+        failure: &ConversationOperationFailure,
+    ) {
+        if let Err(error) = self
+            .write_terminal_failure(
+                store,
+                operation,
+                failure,
+                ProviderReconciliationState::Confirmed,
+            )
+            .await
+        {
+            tracing::error!(operation = operation.as_str(), %error, "could not settle the late mark of an unsent operation");
+        }
+    }
+
+    async fn write_terminal_failure(
+        &self,
+        store: &mut collaboration_runtime::ProviderOperationStore,
+        operation: &OperationId,
+        failure: &ConversationOperationFailure,
+        reconciliation: ProviderReconciliationState,
+    ) -> Result<
+        collaboration_runtime::ProviderOperationRecord,
+        collaboration_runtime::ProviderOperationStoreError,
+    > {
+        store
+            .record_terminal(
+                operation,
+                failure.effect,
+                reconciliation,
+                None,
+                self.now_ms(),
+            )
+            .await
+    }
+
     pub(super) async fn finish(
         &self,
         operation_id: OperationId,
@@ -139,13 +179,12 @@ impl SupervisorInner {
                         Err(applied_unsaved(operation_id.clone(), target, durable)),
                         Retention::PersistenceFailed,
                     )
-                } else if store
-                    .record_terminal(
+                } else if self
+                    .write_terminal_failure(
+                        &mut store,
                         &operation_id,
-                        operation_failure.effect,
+                        &operation_failure,
                         reconciliation,
-                        None,
-                        self.now_ms(),
                     )
                     .await
                     .is_err()

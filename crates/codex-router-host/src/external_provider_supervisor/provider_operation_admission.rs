@@ -12,6 +12,7 @@ use super::{
     ProviderReconciliationState, SessionRef, admission_failure, failure, snapshot_failure,
     snapshot_from_record, unavailable_failure,
 };
+use crate::provider_operation_settlement::ProviderOperationCompletion;
 use router_clock::ClockInstant;
 use std::{future::Future, time::Duration};
 use tokio::sync::oneshot;
@@ -36,6 +37,20 @@ fn admission_expired(
         "the Router was busy and nothing was sent, so send again as a new operation",
         operation.clone(),
         target.cloned(),
+    )
+}
+
+fn dispatch_mark_expired(
+    operation: &OperationId,
+    live: &LiveOperation,
+) -> ConversationOperationFailure {
+    failure(
+        ConversationOperationFailureKind::Unavailable,
+        ConversationOperationFailureStage::Dispatch,
+        ProviderOperationEffect::None,
+        "the store didn't respond in time, so nothing was sent",
+        operation.clone(),
+        live.target(),
     )
 }
 
@@ -119,16 +134,65 @@ pub(super) fn reused_id_failure(
 }
 
 impl ExternalProviderSupervisor {
+    pub(super) async fn run_operation_for_handoff(
+        &self,
+        operation_id: OperationId,
+        live: Arc<LiveOperation>,
+        operation: impl Future<Output = ProviderOperationCompletion>,
+    ) {
+        let deadline = self.admission_deadline();
+        let clock = self.inner.clock.as_ref();
+        let mark = self.mark_operation_for_handoff(&operation_id, &live, deadline);
+        tokio::pin!(mark);
+        let completion = match router_clock::timeout_at(clock, deadline, &mut mark).await {
+            Ok(Ok(store)) if clock.monotonic_now() < deadline => {
+                drop(store);
+                live.dispatch_marked();
+                operation.await
+            }
+            Ok(Err(failure)) if clock.monotonic_now() < deadline => {
+                ProviderOperationCompletion::DispatchMarkNotWritten(failure)
+            }
+            late => {
+                let failure = dispatch_mark_expired(&operation_id, &live);
+                self.inner
+                    .finish(
+                        operation_id.clone(),
+                        Arc::clone(&live),
+                        ProviderOperationCompletion::DispatchMarkNotWritten(failure.clone()),
+                    )
+                    .await;
+                // Keep custody of the SQL future, even though the caller's
+                // authorization expired. A committed mark must be settled.
+                if let Ok(mut store) = match late {
+                    Ok(receipt) => receipt,
+                    Err(_) => mark.await,
+                } {
+                    self.inner
+                        .settle_late_dispatch_mark(&mut store, &operation_id, &failure)
+                        .await;
+                }
+                return;
+            }
+        };
+        self.inner
+            .finish(operation_id.clone(), Arc::clone(&live), completion)
+            .await;
+    }
+
     #[expect(
         clippy::result_large_err,
         reason = "Retains the operation's typed failure."
     )]
-    pub(super) async fn mark_operation_for_handoff(
-        &self,
+    async fn mark_operation_for_handoff<'store>(
+        &'store self,
         operation: &OperationId,
         live: &LiveOperation,
-    ) -> Result<(), ConversationOperationFailure> {
-        let deadline = self.admission_deadline();
+        deadline: ClockInstant,
+    ) -> Result<
+        tokio::sync::MutexGuard<'store, super::ProviderOperationStore>,
+        ConversationOperationFailure,
+    > {
         let clock = self.inner.clock.as_ref();
         let target = live.target();
         let not_sent = |message| {
@@ -141,7 +205,7 @@ impl ExternalProviderSupervisor {
                 target.clone(),
             )
         };
-        let elapsed = || not_sent("the store didn't respond in time, so nothing was sent");
+        let elapsed = || dispatch_mark_expired(operation, live);
         let acquire_store = async {
             #[cfg(test)]
             {
@@ -161,6 +225,9 @@ impl ExternalProviderSupervisor {
         let mut store = router_clock::timeout_at(clock, deadline, acquire_store)
             .await
             .map_err(|_| elapsed())?;
+        if clock.monotonic_now() >= deadline {
+            return Err(elapsed());
+        }
         let mark = store
             .mark_may_have_dispatched_if(operation, self.inner.now_ms(), || {
                 clock.monotonic_now() < deadline
@@ -171,8 +238,7 @@ impl ExternalProviderSupervisor {
                 not_sent("the store couldn't record the dispatch mark, so nothing was sent")
             })?;
         mark.ok_or_else(elapsed)?;
-        live.dispatch_marked();
-        Ok(())
+        Ok(store)
     }
 
     pub(super) fn admission_deadline(&self) -> ClockInstant {

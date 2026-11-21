@@ -210,6 +210,141 @@ fn pause_dispatch_mark(
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn late_dispatch_acknowledgement_returns_known_unsent_before_releasing_the_commit() {
+    let rig = RestoreRig::new();
+    rig.seed_session().await;
+    let host = rig.open_host("restored-in-auto").await;
+    let operation = OperationId::generate();
+    let PreparedOperation::Admitted { live, .. } = host
+        .prepare_operation(
+            host.admission_deadline(),
+            operation.clone(),
+            ProviderOperationKind::ConversationLoad,
+            binding(),
+            Some(&rig.target),
+        )
+        .await
+        .expect("prepared restore")
+    else {
+        panic!("restore must be newly admitted");
+    };
+    let mut commit = host
+        .inner
+        .store
+        .lock()
+        .await
+        .pause_next_admission_after_commit_for_test();
+    let request = rig.load_request(operation.clone());
+    let record = Box::new(provider_session_record(
+        request.target,
+        request.working_directory,
+        request.requested_policy,
+        request.requested_by,
+        request.approver,
+        collaboration_runtime::ProviderSessionResumeInputs::default(),
+        host.inner.now_ms(),
+    ));
+    let handoff = host.run_operation_for_handoff(
+        operation.clone(),
+        live,
+        crate::external_provider_supervisor::provider_owner_operations::restore(
+            &host,
+            operation.clone(),
+            record,
+            provider_session_machines::session_lifecycle_machine::RestoreVia::Load,
+        ),
+    );
+    tokio::pin!(handoff);
+    tokio::select! {
+        () = commit.reached() => {}
+        () = &mut handoff => panic!("mark completed before the acknowledgement was held"),
+    }
+    rig.clock.advance(Duration::from_secs(10)).expect("reach L");
+    assert!(futures_util::poll!(&mut handoff).is_pending());
+    let mut wait = host.wait(wait_request(operation.clone()));
+    let Poll::Ready(Err(failure)) = futures_util::poll!(&mut wait) else {
+        panic!("dispatch mark must answer known unsent at L with acknowledgement still held");
+    };
+    assert_eq!(failure.stage, ConversationOperationFailureStage::Dispatch);
+    assert_eq!(failure.effect, ProviderOperationEffect::None);
+    assert_eq!(
+        String::from(failure.message),
+        "the store didn't respond in time, so nothing was sent"
+    );
+    assert!(host.owner_session_snapshot(&rig.target).is_none());
+    let reuse = host.prepare_operation(
+        host.admission_deadline(),
+        operation.clone(),
+        ProviderOperationKind::ConversationLoad,
+        binding(),
+        Some(&rig.target),
+    );
+    tokio::pin!(reuse);
+    assert!(futures_util::poll!(&mut reuse).is_pending());
+    commit.release();
+    let ((), reused) = tokio::join!(handoff, reuse);
+    let PreparedOperation::Existing(reused) = reused.expect("reuse waits for the late writer")
+    else {
+        panic!("reuse must see the original operation");
+    };
+    assert_eq!(reused.stage, ProviderOperationStage::Terminal);
+    assert_eq!(reused.effect, ProviderOperationEffect::None);
+
+    let row = rig
+        .store()
+        .await
+        .inspect(&operation)
+        .await
+        .expect("read durable row")
+        .expect("marked operation");
+    assert_eq!(row.stage, ProviderOperationStage::Terminal);
+    assert_eq!(row.effect, ProviderOperationEffect::None);
+    assert_eq!(
+        row.reconciliation_state,
+        ProviderReconciliationState::Confirmed
+    );
+    assert!(host.owner_session_snapshot(&rig.target).is_none());
+    assert!(!rig.root.path().join("wire.json").exists());
+    host.shutdown().await.expect("fixture shutdown");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn restore_never_enters_the_owner_after_its_dispatch_mark_expires() {
+    let rig = RestoreRig::new();
+    rig.seed_session().await;
+    let host = rig.open_host("restored-in-auto").await;
+    let operation = OperationId::generate();
+    let (mark_waiting, finish_mark) = pause_dispatch_mark(&host);
+    host.load(rig.load_request(operation.clone()))
+        .await
+        .expect("admitted restore");
+    mark_waiting.await.expect("dispatch mark is waiting");
+    let mut commit = host
+        .inner
+        .store
+        .lock()
+        .await
+        .pause_next_admission_after_commit_for_test();
+    finish_mark.send(()).expect("run the dispatch mark");
+    commit.reached().await;
+
+    rig.clock.advance(Duration::from_secs(10)).expect("reach L");
+    commit.release();
+    let failure = host
+        .wait(wait_request(operation))
+        .await
+        .expect_err("late dispatch mark is known unsent");
+    assert_eq!(failure.stage, ConversationOperationFailureStage::Dispatch);
+    assert_eq!(failure.effect, ProviderOperationEffect::None);
+    assert_eq!(
+        String::from(failure.message),
+        "the store didn't respond in time, so nothing was sent"
+    );
+    host.shutdown().await.expect("fixture shutdown");
+    assert!(!rig.root.path().join("wire.json").exists());
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn restore_dispatch_mark_is_visible_only_after_admission_and_before_wire_handoff() {
     let rig = RestoreRig::new();
     rig.seed_session().await;

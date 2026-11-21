@@ -511,16 +511,10 @@ impl ExternalProviderSupervisor {
         F: std::future::Future<Output = ProviderOperationCompletion> + Send + 'static,
     {
         let supervisor = self.clone();
-        let marking_operation = operation_id.clone();
-        let marking_live = Arc::clone(&live);
-        self.spawn_operation(operation_id, live, async move {
-            if let Err(failure) = supervisor
-                .mark_operation_for_handoff(&marking_operation, &marking_live)
-                .await
-            {
-                return ProviderOperationCompletion::DispatchMarkNotWritten(failure);
-            }
-            operation.await
+        self.inner.operation_tasks.spawn(async move {
+            supervisor
+                .run_operation_for_handoff(operation_id, live, operation)
+                .await;
         });
     }
 
