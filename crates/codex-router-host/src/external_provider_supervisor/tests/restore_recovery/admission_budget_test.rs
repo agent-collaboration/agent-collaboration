@@ -500,6 +500,15 @@ async fn reconcile_leaves_a_dispatched_restore_alone_while_the_owner_waits() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn held_terminal_write_cannot_delay_an_explicit_restore_preflight_refusal() {
+    restore_refusal_with_terminal_held(false).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn shutdown_cancels_the_residue_read_after_a_failed_late_terminal_write() {
+    restore_refusal_with_terminal_held(true).await;
+}
+
+async fn restore_refusal_with_terminal_held(fail_terminal: bool) {
     let rig = RestoreRig::new();
     rig.seed_session().await;
     let host = rig.open_host("restored-in-auto").await;
@@ -551,8 +560,19 @@ async fn held_terminal_write_cannot_delay_an_explicit_restore_preflight_refusal(
     let expected = refusal.clone();
 
     let mut held = host.inner.store.lock().await;
-    let finish = host.inner.finish(operation.clone(), live, completion);
-    tokio::pin!(finish);
+    let residue_pause = fail_terminal.then(|| {
+        held.fail_next_terminal_write_of(&operation);
+        host.inner
+            .uncertainty
+            .slot(&rig.target.endpoint)
+            .fixture
+            .pause_residue_read(operation.clone())
+    });
+    let mut finish = Box::pin(host.inner.operation_tasks.track_future(host.inner.finish(
+        operation.clone(),
+        live.clone(),
+        completion,
+    )));
     assert!(futures_util::poll!(&mut finish).is_pending());
     rig.clock
         .advance(Duration::from_secs(10))
@@ -574,6 +594,42 @@ async fn held_terminal_write_cannot_delay_an_explicit_restore_preflight_refusal(
     assert_eq!(marked.stage, ProviderOperationStage::MayHaveDispatched);
     assert_eq!(marked.effect, ProviderOperationEffect::Unknown);
     drop(held);
+    if let Some((residue_reached, release_residue)) = residue_pause {
+        tokio::select! {
+            reached = residue_reached => reached.expect("late failure reached its second inspection"),
+            () = &mut finish => panic!("late writer settled before the inspection was held"),
+        }
+        assert!(
+            host.inner.store.try_lock().is_err(),
+            "the inspection owns the store"
+        );
+        assert!(live.holds_custody());
+        host.runtime_for(&rig.target.endpoint)
+            .unwrap()
+            .shutdown()
+            .await;
+        let shutdown = host.shutdown();
+        tokio::pin!(shutdown);
+        assert!(futures_util::poll!(&mut shutdown).is_pending());
+        rig.clock
+            .advance(super::super::OPERATION_DRAIN_BUDGET)
+            .expect("expire the one drain budget");
+        assert_eq!(
+            shutdown.await,
+            Err("external provider operation drain timed out")
+        );
+        let finish_at_expiry = futures_util::poll!(&mut finish);
+        assert!(
+            finish_at_expiry.is_ready(),
+            "the second inspection must obey cleanup cancellation"
+        );
+        assert!(!live.holds_custody());
+        assert!(host.inner.store.try_lock().is_ok());
+        assert!(release_residue.is_closed());
+        drop(finish);
+        assert!(host.inner.operation_tasks.is_empty());
+        return;
+    }
     finish.await;
 
     let terminal = rig

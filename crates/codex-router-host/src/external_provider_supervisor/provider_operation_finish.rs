@@ -55,10 +55,11 @@ impl SupervisorInner {
         live: &LiveOperation,
     ) {
         if let Some(endpoint) = live.binding() {
+            let cell = self.uncertainty.slot(endpoint);
+            #[cfg(test)]
+            cell.fixture.hold_residue_read(operation).await;
             let observed = store.inspect(operation).await;
-            self.uncertainty
-                .slot(endpoint)
-                .preserve_residual(operation, live.target(), observed);
+            cell.preserve_residual(operation, live.target(), observed);
         }
     }
 
@@ -228,14 +229,22 @@ impl SupervisorInner {
                         .await
                     {
                         Ok(settled) => settled,
-                        Err(late_end) => {
+                        Err(mut late_end) => {
                             if late_end == CustodyEnd::Failed {
-                                self.preserve_operation_residue(
-                                    &mut *self.store.lock().await,
-                                    &operation_id,
-                                    &live,
-                                )
-                                .await;
+                                let preserve = async {
+                                    let mut store = self.store.lock().await;
+                                    self.preserve_operation_residue(
+                                        &mut store,
+                                        &operation_id,
+                                        &live,
+                                    )
+                                    .await;
+                                };
+                                late_end = tokio::select! {
+                                    biased;
+                                    () = self.operation_cleanup_cancel.cancelled() => CustodyEnd::Released,
+                                    () = preserve => CustodyEnd::Failed,
+                                };
                             }
                             self.finish_late_write(&live, late_end);
                             return;
