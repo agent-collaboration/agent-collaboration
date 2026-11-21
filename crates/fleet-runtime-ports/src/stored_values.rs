@@ -1,6 +1,7 @@
 //! Statement transport rows are decoded by column name before domain construction.
 use central_storage::{CorruptReason, ReadOutcome, SqlValue, StoreFailure};
-use serde::de::DeserializeOwned;
+use chrono::{DateTime, SecondsFormat, Utc};
+use serde::{Serialize, de::DeserializeOwned};
 
 use crate::workspace_decode_error::corrupt;
 pub fn column<'a>(
@@ -32,3 +33,19 @@ pub fn string<'a>(
 pub fn json<T: DeserializeOwned>(value: &str, field: &str) -> Result<T, StoreFailure> {
     serde_json::from_str(value).map_err(|_| corrupt(field))
 }
+
+/// Render the UTC millisecond text used by Central's stored timestamps.
+pub fn format_utc_millis(value: DateTime<Utc>) -> String {
+    value.to_rfc3339_opts(SecondsFormat::Millis, true)
+}
+
+/// Encode a stored JSON bind and report the caller's field on failure.
+pub fn encode_json(value: &impl Serialize, field: &str) -> Result<SqlValue, StoreFailure> {
+    serde_json::to_string(value)
+        .map(SqlValue::Text)
+        .map_err(|_| corrupt(field))
+}
+
+#[cfg(test)]
+#[path = "stored_values_test.rs"]
+mod tests;

@@ -31,7 +31,7 @@ impl<Host: fleet_runtime_ports::CentralStore, Stores: fleet_runtime_ports::Works
         &self,
         seed: SeedProbe,
     ) -> Result<central_storage::BatchOutcome, central_storage::StoreFailure> {
-        use crate::central_statement_values::timestamp;
+        use fleet_runtime_ports::stored_values::format_utc_millis;
         use fleet_runtime_ports::{
             guarded_statements::{any, exact, text},
             workspace_decode_error::corrupt,
@@ -49,12 +49,12 @@ impl<Host: fleet_runtime_ports::CentralStore, Stores: fleet_runtime_ports::Works
         {
             return Err(corrupt("engine_probe_items.seed"));
         }
-        let now = timestamp(self.execution.now()?);
+        let now = format_utc_millis(self.execution.now()?);
         self.execution.statement_host().run_batch(central_storage::StatementBatch {
             statements:vec![
                 any("INSERT INTO engine_probe_groups(group_id,effect_count,created_at,updated_at) VALUES (?,0,?,?) ON CONFLICT(group_id) DO NOTHING",vec![text(seed.group),text(&now),text(&now)]),
                 exact("INSERT INTO engine_probe_items(item_id,machine_kind,group_id,due_at,claim,state,completed_claim,send_id,connection_id,created_at,updated_at) VALUES (?,'engine_probe',?,?,?,'waiting',NULL,NULL,NULL,?,?)",
-                    vec![text(seed.key),text(seed.group),seed.due.map_or(central_storage::SqlValue::Null,|due|text(timestamp(due))),text(seed.claim),text(&now),text(&now)]),
+                    vec![text(seed.key),text(seed.group),seed.due.map_or(central_storage::SqlValue::Null,|due|text(format_utc_millis(due))),text(seed.claim),text(&now),text(&now)]),
             ],alarm:central_storage::AlarmUpdate::Unchanged,
         }).await
     }

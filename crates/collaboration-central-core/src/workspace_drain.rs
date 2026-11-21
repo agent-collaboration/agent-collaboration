@@ -1,11 +1,10 @@
 //! Workspace turn precedes central commit; durable deadlines precede workspace writes.
 use crate::{
-    WorkspaceRuntime,
-    central_statement_values::{applied, timestamp},
-    engine::query_registry::alarm_update,
+    WorkspaceRuntime, central_statement_values::applied, engine::query_registry::alarm_update,
 };
 use central_storage::{SqlValue, Statement, StatementBatch, StoreFailure};
 use fleet_contracts::LegacyUnitOutcome;
+use fleet_runtime_ports::stored_values::format_utc_millis;
 use fleet_runtime_ports::{CentralStore, WorkspaceStores};
 use fleet_runtime_ports::{
     guarded_statements::{exact, text},
@@ -32,7 +31,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         let due = now
             .checked_add_signed(chrono::Duration::seconds(5))
             .ok_or_else(|| corrupt("drain_due_at"))?;
-        applied(self.execution.statement_host().run_batch(StatementBatch{statements:vec![exact("INSERT INTO mail_workspace_drains(workspace_id,drained_through_position,drain_due_at,created_at,updated_at) VALUES (?,0,?,?,?) ON CONFLICT(workspace_id) DO UPDATE SET drain_due_at=COALESCE(mail_workspace_drains.drain_due_at,excluded.drain_due_at),updated_at=excluded.updated_at",vec![text(workspace),text(timestamp(due)),text(timestamp(now)),text(timestamp(now))])],alarm:alarm_update()}).await?)
+        applied(self.execution.statement_host().run_batch(StatementBatch{statements:vec![exact("INSERT INTO mail_workspace_drains(workspace_id,drained_through_position,drain_due_at,created_at,updated_at) VALUES (?,0,?,?,?) ON CONFLICT(workspace_id) DO UPDATE SET drain_due_at=COALESCE(mail_workspace_drains.drain_due_at,excluded.drain_due_at),updated_at=excluded.updated_at",vec![text(workspace),text(format_utc_millis(due)),text(format_utc_millis(now)),text(format_utc_millis(now))])],alarm:alarm_update()}).await?)
     }
     pub async fn drain_workspace(
         &self,
@@ -57,8 +56,8 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
         workspace: &WorkspaceId,
     ) -> Result<(), StoreFailure> {
         use central_engine_model::{InstanceKey, MachineKind, RetirementThreshold};
-        use fleet_contracts::{ControlGate, EngineSubject, FailureOutcome, SubjectVersion};
-        use fleet_engine::{CONTROL_WRITE, Engine};
+        use fleet_contracts::{EngineSubject, SubjectVersion};
+        use fleet_engine::{CONTROL_WRITE, ControlGate, Engine, FailureOutcome};
         let subject = EngineSubject {
             kind: MachineKind("legacy_workspace_drains"),
             key: InstanceKey("all".into()),
@@ -168,7 +167,7 @@ impl<Host: CentralStore, Stores: WorkspaceStores> WorkspaceRuntime<Host, Stores>
             skipped_recipients,
             ..DrainResult::default()
         };
-        statements.push(exact("UPDATE mail_workspace_drains SET drained_through_position=?,drain_due_at=NULL,updated_at=? WHERE workspace_id=? AND drained_through_position=?",vec![position_value(rows.high_water)?,text(timestamp(now)),text(workspace),position_value(through)?]));
+        statements.push(exact("UPDATE mail_workspace_drains SET drained_through_position=?,drain_due_at=NULL,updated_at=? WHERE workspace_id=? AND drained_through_position=?",vec![position_value(rows.high_water)?,text(format_utc_millis(now)),text(workspace),position_value(through)?]));
         #[cfg(feature = "test-support")]
         self.execution
             .pause_points()

@@ -1,6 +1,6 @@
-use crate::stored_rows::timestamp;
-use central_storage::{GuardedStatement, ReadOutcome, SqlValue, Statement, StoreFailure};
+use central_storage::{GuardedStatement, ReadOutcome, Statement, StoreFailure};
 use fleet_runtime_ports::stored_values::string;
+use fleet_runtime_ports::stored_values::{encode_json, format_utc_millis};
 use fleet_runtime_ports::{
     guarded_statements::{exact, text},
     workspace_decode_error::corrupt,
@@ -15,12 +15,6 @@ type WakePlan = Result<
     StoreFailure,
 >;
 
-fn encode<T: serde::Serialize>(value: &T) -> Result<SqlValue, StoreFailure> {
-    serde_json::to_string(value)
-        .map(text)
-        .map_err(|_| corrupt("mail JSON"))
-}
-
 pub fn plan_set_wake(
     target: &SessionRef,
     due_at: Timestamp,
@@ -28,15 +22,15 @@ pub fn plan_set_wake(
     now: Timestamp,
     mint: impl FnOnce() -> Result<WakeId, StoreFailure>,
 ) -> WakePlan {
-    let at = || text(timestamp(now));
+    let at = || text(format_utc_millis(now));
     let id: WakeId = mint()?;
     Ok(Ok((
         vec![exact(
             "INSERT INTO automation_wakes(wake_id,target,due_at,text,state,created_at,updated_at) VALUES (?,?,?,?,'active',?,?)",
             vec![
                 text(&id),
-                encode(target)?,
-                text(timestamp(due_at)),
+                encode_json(target, "mail JSON")?,
+                text(format_utc_millis(due_at)),
                 text(body.as_str()),
                 at(),
                 at(),
@@ -57,7 +51,7 @@ pub fn cancel_wake_read(wake_id: &WakeId) -> Statement {
 }
 
 pub fn plan_cancel_wake(wake_id: &WakeId, now: Timestamp, rows: &ReadOutcome) -> WakePlan {
-    let at = || text(timestamp(now));
+    let at = || text(format_utc_millis(now));
     let Some(row) = rows.rows.first() else {
         return Ok(Err(Refusal::WakeNotFound {
             wake_id: wake_id.clone(),

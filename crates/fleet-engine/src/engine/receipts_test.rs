@@ -20,7 +20,7 @@ async fn a_live_receipt_cannot_be_overwritten_and_expiry_is_one_millisecond_excl
         .unwrap();
     let claim = claim();
     sqlx::query("INSERT INTO runtime_request_log VALUES (?,'original caller','original digest','original answer',?,?)")
-        .bind(claim.request.as_str()).bind(timestamp(claim.cutoff)).bind(timestamp(claim.cutoff))
+        .bind(claim.request.as_str()).bind(format_utc_millis(claim.cutoff)).bind(format_utc_millis(claim.cutoff))
         .execute(&mut connection).await.unwrap();
     let answer = EngineReceipt::<String, String>::Applied {
         state: "new".into(),
@@ -28,7 +28,9 @@ async fn a_live_receipt_cannot_be_overwritten_and_expiry_is_one_millisecond_excl
     for expired in [false, true] {
         if expired {
             sqlx::query("UPDATE runtime_request_log SET created_at=?")
-                .bind(timestamp(claim.cutoff - chrono::Duration::milliseconds(1)))
+                .bind(format_utc_millis(
+                    claim.cutoff - chrono::Duration::milliseconds(1),
+                ))
                 .execute(&mut connection)
                 .await
                 .unwrap();
@@ -72,7 +74,10 @@ async fn a_live_receipt_cannot_be_overwritten_and_expiry_is_one_millisecond_excl
         } else {
             assert_eq!(row.get::<String, _>("caller"), "original caller");
             assert_eq!(row.get::<String, _>("answer"), "original answer");
-            assert_eq!(row.get::<String, _>("created_at"), timestamp(claim.cutoff));
+            assert_eq!(
+                row.get::<String, _>("created_at"),
+                format_utc_millis(claim.cutoff)
+            );
         }
     }
 }

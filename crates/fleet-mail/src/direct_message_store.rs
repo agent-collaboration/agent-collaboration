@@ -8,7 +8,6 @@ use crate::{
         failure_text,
     },
     message_insert::insert_message,
-    message_values::timestamp,
 };
 use central_engine_model::{InstanceKey, StateTag};
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
@@ -17,6 +16,7 @@ use fleet_engine::{
     load_store_failure, raw_version,
 };
 use fleet_runtime_ports::CentralStore as _;
+use fleet_runtime_ports::stored_values::format_utc_millis;
 use fleet_runtime_ports::{
     guarded_statements::{exact, text},
     workspace_decode_error::corrupt,
@@ -98,7 +98,7 @@ impl<R: EngineHost> StoreAdapter<DirectMessage> for DirectMessageStore<'_, R> {
         let mut args = vec![
             text(next.state_tag()),
             failure,
-            text(timestamp(self.0.now()?)),
+            text(format_utc_millis(self.0.now()?)),
         ];
         args.extend(prior.version.0.clone());
         if args.len() != 12 {

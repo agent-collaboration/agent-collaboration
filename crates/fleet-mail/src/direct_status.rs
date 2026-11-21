@@ -1,9 +1,7 @@
 //! Read the validated status of an actor's direct message.
-use crate::{
-    direct_message_rows::{DirectMessageStatus, decode_direct_message},
-    message_values::encode,
-};
+use crate::direct_message_rows::{DirectMessageStatus, decode_direct_message};
 use central_storage::{Statement, StoreFailure};
+use fleet_runtime_ports::stored_values::encode_json;
 use fleet_runtime_ports::{
     CentralStore, guarded_statements::text, workspace_decode_error::corrupt,
 };
@@ -21,7 +19,7 @@ pub async fn direct_message_status_held(
 ) -> Result<MessageStatus, StoreFailure> {
     let rows = host.read(Statement {
         sql: "SELECT message_id,sender,message_kind,state,failure_reason,cancel_due_at,sender_request_id,created_at,updated_at FROM mail_messages WHERE message_id=? AND sender=? AND message_kind='direct'",
-        args: vec![text(message_id), encode(&MessageSender::Actor(actor.clone()))?],
+        args: vec![text(message_id), encode_json(&MessageSender::Actor(actor.clone()), "mail JSON")?],
     }).await?;
     let row = match rows.rows.as_slice() {
         [] => return Ok(MessageStatus::NotFound {}),

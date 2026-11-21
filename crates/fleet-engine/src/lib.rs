@@ -12,6 +12,8 @@ pub use engine::alarm_source::{
     DueCutoff, TimedRowOutcome, TimedRows, TimedSource, WholeUnit, WholeUnitOutcome,
 };
 pub use engine::attempt_statements::{CONTROL_WRITE, delete_attempt, delete_observed_attempt};
+pub use engine::control_gate::ControlGate;
+pub use engine::failures::FailureOutcome;
 pub use engine::handle::HandleOutcome;
 pub use engine::port::{Engine, EngineHost};
 #[cfg(feature = "test-support")]

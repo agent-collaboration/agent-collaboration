@@ -1,3 +1,4 @@
+use super::failures::FailureOutcome;
 use super::port::{Engine, EngineHost};
 use super::{
     effects::{ApplyFailure, EffectHandler, ObjectHostEffects},
@@ -8,7 +9,6 @@ use central_engine_model::{
     Context, InstanceKey, ItemFailureClass, Machine, RefusalTag, TransitionError,
 };
 use central_storage::StoreFailure;
-use fleet_contracts::FailureOutcome;
 
 pub enum HandleOutcome<State, Error> {
     Done(State),

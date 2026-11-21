@@ -1,8 +1,7 @@
-//! Construct queued mail records and plan the insert, answer and delivery hint
-//! for a direct send.
+//! Plan direct sends and sourced notices for their applying batches.
 use crate::{
     message_deadline::{cancel_due_at, delivery_window_ends_at},
-    message_insert::{DirectMessageTerms, insert_message_due},
+    message_insert::{DirectMessageTerms, insert_message, insert_message_due},
 };
 use central_storage::{GuardedStatement, StoreFailure};
 use fleet_contracts::MailDeliveryReady;
@@ -10,13 +9,12 @@ use workspace_ids::{MessageId, RequestId, SessionRef};
 use workspace_model::{
     ActorIdentityId, Timestamp,
     central_mail::{
-        CentralMailAnswer, MessageBody, MessageRecord, MessageSender, MessageState, NoticeSource,
-        SendMessageRequest,
+        CentralMailAnswer, MessageBody, MessageRecord, MessageSender, MessageState, NoticeItem,
+        NoticeSource, SendMessageRequest,
     },
 };
 
-/// Build a queued record for the caller to insert.
-pub fn prepare_message_record(
+fn prepare_message_record(
     sender: MessageSender,
     target: SessionRef,
     body: MessageBody,
@@ -83,3 +81,27 @@ pub fn plan_direct_send(
         delivery_ready,
     })
 }
+
+/// Plan a queued notice with its source and matching readiness hint.
+pub fn plan_sourced_notice(
+    target: SessionRef,
+    items: Vec<NoticeItem>,
+    source: NoticeSource,
+    now: Timestamp,
+    mint: impl FnOnce() -> Result<MessageId, StoreFailure>,
+) -> Result<(GuardedStatement, MailDeliveryReady), StoreFailure> {
+    let message = prepare_message_record(
+        MessageSender::Central,
+        target,
+        MessageBody::Notice { items },
+        Some(source),
+        now,
+        mint,
+    )?;
+    let insert = insert_message(&message)?;
+    Ok((insert, (&message).into()))
+}
+
+#[cfg(test)]
+#[path = "request_plan_test.rs"]
+mod tests;
