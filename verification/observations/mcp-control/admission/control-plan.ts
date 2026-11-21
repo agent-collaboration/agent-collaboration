@@ -51,6 +51,10 @@ const sessionControlCases = z.enum([
   "refusedSteer",
   "inFolderAllowance",
   "hostAdmissionSmoke",
+  "liveQueue",
+  "liveSteer",
+  "liveOtherSession",
+  "liveQueueClose",
 ]);
 export const controlCaseSchema = z.enum([
   "lifecycle",
@@ -183,6 +187,10 @@ const CASE_EFFECTS: Readonly<
   refusedSteer: { sessions: 1, prompts: 2 },
   inFolderAllowance: { sessions: 1, prompts: 2 },
   hostAdmissionSmoke: { sessions: 2, prompts: 4 },
+  liveQueue: { sessions: 1, prompts: 3 },
+  liveSteer: { sessions: 1, prompts: 2 },
+  liveOtherSession: { sessions: 2, prompts: 2 },
+  liveQueueClose: { sessions: 1, prompts: 2 },
 };
 const CONTINUATION_CASE = { retain: "continuationRetain", reload: "continuationReload" } as const;
 const OWNER_LOOKUP_COMMAND = "/usr/bin/id"; // collaboration-client owner_identity_resolution.rs:8
@@ -593,6 +601,7 @@ function checkActor(plan: ControlPlan): void {
 
 function casePromptBudget(plan: ControlPlan, name: ControlCase): number {
   if (name === "hostAdmissionSmoke" && plan.sessionControl?.restart?.phase === "reopen") return 1;
+  if (name === "liveQueue" && plan.endpointId === "cursor-local") return 2;
   if (
     name === "inFolderAllowance" &&
     plan.sessionControl?.observeRestoredDelete &&

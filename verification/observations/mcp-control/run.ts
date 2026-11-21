@@ -41,6 +41,12 @@ import { unansweredReopenCase } from "./journeys/unanswered-reopen.ts";
 import { unansweredCloseCase } from "./journeys/unanswered-close.ts";
 import { cancelRestartCase, unconfirmedCancelCase } from "./journeys/unconfirmed-cancel.ts";
 import { cancelQueuedCase, refusedSteerCase } from "./journeys/held-turn-controls.ts";
+import {
+  liveQueueCase,
+  liveSteerCase,
+  liveOtherSessionCase,
+  liveQueueCloseCase,
+} from "./journeys/live-admission-placement.ts";
 
 const CASES: Readonly<Record<ControlCase, (inputs: CaseInputs) => Promise<CaseResult>>> = {
   lifecycle: lifecycleCase,
@@ -60,6 +66,10 @@ const CASES: Readonly<Record<ControlCase, (inputs: CaseInputs) => Promise<CaseRe
   cancelRestart: cancelRestartCase,
   cancelQueued: cancelQueuedCase,
   refusedSteer: refusedSteerCase,
+  liveQueue: liveQueueCase,
+  liveSteer: liveSteerCase,
+  liveOtherSession: liveOtherSessionCase,
+  liveQueueClose: liveQueueCloseCase,
 };
 
 async function discover(context: JourneyContext, plan: ControlPlan): Promise<readonly string[]> {
@@ -99,6 +109,13 @@ function sessionControlTools(plan: ControlPlan): string[] {
       ? [...common, "events_observe", "conversation_cancel", "conversation_close"]
       : [...common, "conversation_load", "conversation_settings_set"];
   }
+  if (
+    plan.cases.includes("liveQueue") ||
+    plan.cases.includes("liveSteer") ||
+    plan.cases.includes("liveOtherSession")
+  )
+    return common;
+  if (plan.cases.includes("liveQueueClose")) return [...common, "conversation_close"];
   if (plan.cases.includes("cancelQueued"))
     return [...common, "events_observe", "conversation_cancel"];
   if (plan.cases.includes("refusedSteer")) return [...common, "events_observe"];

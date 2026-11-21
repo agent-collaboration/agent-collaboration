@@ -93,6 +93,9 @@ const routePlanSchema = z.strictObject({
     z.strictObject({ kind: z.literal("cancelRestartReopen"), record: pathSchema }),
     z.strictObject({ kind: z.literal("hostAdmissionSeed") }),
     z.strictObject({ kind: z.literal("hostAdmissionReopen"), record: pathSchema }),
+    z.strictObject({
+      kind: z.enum(["liveQueue", "liveSteer", "liveOtherSession", "liveQueueClose"]),
+    }),
     z.strictObject({ kind: z.enum(["allowanceAutoProbe", "allowanceDefault"]) }),
     z.strictObject({
       kind: z.literal("allowanceAutoSeed"),
@@ -205,6 +208,12 @@ function prepareProvider(plan: RoutePlan) {
   )
     throw new Error("the steer and queue controls require Cursor and Claude respectively");
   if (plan.cursor !== undefined) {
+    if (
+      plan.journey.kind === "liveSteer" ||
+      plan.journey.kind === "liveOtherSession" ||
+      plan.journey.kind === "liveQueueClose"
+    )
+      throw new Error("this commissioned live route requires Claude");
     if (plan.journey.kind !== "preflight" && plan.cursor.selection === undefined)
       throw new Error("Cursor input requires a separately qualified Grok catalog choice");
     if (plan.journey.kind === "cancelRestartSeed" || plan.journey.kind === "cancelRestartReopen")
@@ -393,6 +402,7 @@ function routeCase(
 function routePromptBudget(plan: RoutePlan): number {
   if (plan.journey.kind === "hostAdmissionSeed") return 4;
   if (plan.journey.kind === "hostAdmissionReopen") return 1;
+  if (plan.journey.kind === "liveQueue") return plan.cursor === undefined ? 3 : 2;
   if (plan.journey.kind === "unconfirmedCancel") {
     if (plan.journey.cursorCancelLoad === "afterPrimer" || plan.journey.primedCancelGuidance)
       return 4;
